@@ -2,6 +2,96 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { leaveRequestSchema } from "@/lib/validators";
+import type { Prisma } from "@prisma/client";
+
+// ─── GET: list user's leave requests (server-side filtering + pagination) ───
+
+export async function GET(request: NextRequest) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
+  }
+
+  const userId = session.user.id;
+  const { searchParams } = new URL(request.url);
+
+  const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));
+  const limit = Math.min(50, Math.max(1, parseInt(searchParams.get("limit") ?? "10", 10)));
+  const skip = (page - 1) * limit;
+
+  // Filters
+  const statusFilter = searchParams.get("status"); // comma-separated
+  const typeFilter = searchParams.get("type"); // leaveTypeConfigId
+  const from = searchParams.get("from"); // ISO date
+  const to = searchParams.get("to"); // ISO date
+  const sortBy = searchParams.get("sortBy") ?? "createdAt";
+  const sortOrder = searchParams.get("sortOrder") === "asc" ? "asc" : "desc";
+
+  const where: Prisma.LeaveRequestWhereInput = { userId };
+
+  if (statusFilter) {
+    const statuses = statusFilter.split(",").filter(Boolean);
+    if (statuses.length > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      where.status = { in: statuses as any };
+    }
+  }
+
+  if (typeFilter) {
+    where.leaveTypeConfigId = typeFilter;
+  }
+
+  if (from || to) {
+    where.startDate = {};
+    if (from) (where.startDate as Prisma.DateTimeFilter).gte = new Date(from);
+    if (to) (where.startDate as Prisma.DateTimeFilter).lte = new Date(to);
+  }
+
+  const orderBy: Prisma.LeaveRequestOrderByWithRelationInput = {};
+  if (sortBy === "startDate" || sortBy === "createdAt" || sortBy === "totalDays" || sortBy === "status") {
+    orderBy[sortBy] = sortOrder;
+  } else {
+    orderBy.createdAt = "desc";
+  }
+
+  const [items, total] = await Promise.all([
+    prisma.leaveRequest.findMany({
+      where,
+      include: {
+        leaveTypeConfig: {
+          select: { id: true, code: true, label_fr: true, label_en: true, color: true },
+        },
+      },
+      orderBy,
+      skip,
+      take: limit,
+    }),
+    prisma.leaveRequest.count({ where }),
+  ]);
+
+  return NextResponse.json({
+    items: items.map((r) => ({
+      id: r.id,
+      startDate: r.startDate,
+      endDate: r.endDate,
+      startHalfDay: r.startHalfDay,
+      endHalfDay: r.endHalfDay,
+      totalDays: r.totalDays,
+      status: r.status,
+      reason: r.reason,
+      createdAt: r.createdAt,
+      leaveType: r.leaveTypeConfig,
+    })),
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    },
+  });
+}
+
+// ─── POST: create leave request ───
 
 const DAY_MAP: Record<string, number> = {
   SUN: 0,
