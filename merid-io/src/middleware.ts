@@ -1,23 +1,15 @@
 import { auth } from "@/lib/auth";
-import createMiddleware from "next-intl/middleware";
 import { NextRequest, NextResponse } from "next/server";
-import { locales, defaultLocale } from "@/lib/i18n";
 
-const intlMiddleware = createMiddleware({
-  locales,
-  defaultLocale,
-  localePrefix: "as-needed",
-});
-
-const publicPaths = ["/login", "/forgot-password", "/api/auth"];
+const publicPaths = ["/login", "/forgot-password", "/reset-password", "/api/auth"];
 
 export default async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Allow public paths
+  // Allow static files, api/auth, and public paths
   const isPublicPath = publicPaths.some((path) => pathname.startsWith(path));
   if (isPublicPath) {
-    return intlMiddleware(request);
+    return NextResponse.next();
   }
 
   // Check authentication
@@ -28,9 +20,14 @@ export default async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  return intlMiddleware(request);
+  // Check 2FA: if not verified, redirect to verify page
+  if (!session.user.twoFactorVerified && pathname !== "/login/verify") {
+    return NextResponse.redirect(new URL("/login/verify", request.url));
+  }
+
+  return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/((?!api/auth|_next|.*\\..*).*)"],
+  matcher: ["/((?!_next|.*\\..*|favicon.ico).*)"],
 };

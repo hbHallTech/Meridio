@@ -1,16 +1,61 @@
 import { z } from "zod";
 
+export const PASSWORD_REGEX =
+  /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+
+export const PASSWORD_RULES =
+  "Min. 8 caractères, 1 majuscule, 1 minuscule, 1 chiffre, 1 caractère spécial (@$!%*?&)";
+
 export const loginSchema = z.object({
-  email: z.string().email("Adresse email invalide"),
-  password: z.string().min(8, "Le mot de passe doit contenir au moins 8 caractères"),
+  email: z
+    .string()
+    .email("Adresse email invalide")
+    .refine((email) => email.endsWith("@halley-technologies.ch"), {
+      message: "L'email doit être @halley-technologies.ch",
+    }),
+  password: z.string().min(1, "Le mot de passe est requis"),
 });
 
 export const forgotPasswordSchema = z.object({
-  email: z.string().email("Adresse email invalide"),
+  email: z
+    .string()
+    .email("Adresse email invalide")
+    .refine((email) => email.endsWith("@halley-technologies.ch"), {
+      message: "L'email doit être @halley-technologies.ch",
+    }),
 });
 
+export const resetPasswordSchema = z
+  .object({
+    token: z.string().min(1),
+    password: z
+      .string()
+      .regex(PASSWORD_REGEX, PASSWORD_RULES),
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Les mots de passe ne correspondent pas",
+    path: ["confirmPassword"],
+  });
+
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, "Le mot de passe actuel est requis"),
+    newPassword: z
+      .string()
+      .regex(PASSWORD_REGEX, PASSWORD_RULES),
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: "Les mots de passe ne correspondent pas",
+    path: ["confirmPassword"],
+  });
+
 export const verify2FASchema = z.object({
-  code: z.string().length(6, "Le code doit contenir 6 chiffres"),
+  code: z
+    .string()
+    .length(6, "Le code doit contenir 6 chiffres")
+    .regex(/^\d{6}$/, "Le code doit être composé uniquement de chiffres"),
 });
 
 export const leaveRequestSchema = z.object({
@@ -28,7 +73,9 @@ export const userSchema = z.object({
   firstName: z.string().min(1, "Le prénom est requis"),
   lastName: z.string().min(1, "Le nom est requis"),
   email: z.string().email("Adresse email invalide"),
-  roles: z.array(z.enum(["EMPLOYEE", "MANAGER", "HR", "ADMIN"])).min(1, "Au moins un rôle est requis"),
+  roles: z
+    .array(z.enum(["EMPLOYEE", "MANAGER", "HR", "ADMIN"]))
+    .min(1, "Au moins un rôle est requis"),
   teamId: z.string().optional(),
   officeId: z.string().min(1, "Le bureau est requis"),
   hireDate: z.string().min(1, "La date d'embauche est requise"),
@@ -80,6 +127,8 @@ export const approvalSchema = z.object({
 
 export type LoginInput = z.infer<typeof loginSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 export type Verify2FAInput = z.infer<typeof verify2FASchema>;
 export type LeaveRequestInput = z.infer<typeof leaveRequestSchema>;
 export type UserInput = z.infer<typeof userSchema>;
