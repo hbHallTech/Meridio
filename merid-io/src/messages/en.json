@@ -27,6 +27,7 @@
     "password": "Password",
     "forgotPassword": "Forgot password?",
     "resetPassword": "Reset password",
+    "changePassword": "Change password",
     "signIn": "Sign in",
     "twoFactor": "Two-factor verification",
     "enterCode": "Enter verification code",

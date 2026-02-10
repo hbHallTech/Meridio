@@ -27,6 +27,7 @@
     "password": "Mot de passe",
     "forgotPassword": "Mot de passe oublié ?",
     "resetPassword": "Réinitialiser le mot de passe",
+    "changePassword": "Changer le mot de passe",
     "signIn": "Se connecter",
     "twoFactor": "Vérification en deux étapes",
     "enterCode": "Entrez le code de vérification",
