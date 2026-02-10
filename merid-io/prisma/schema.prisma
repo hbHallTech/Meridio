@@ -1,0 +1,305 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  EMPLOYEE
+  MANAGER
+  HR
+  ADMIN
+}
+
+enum LeaveStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum DayPeriod {
+  FULL_DAY
+  MORNING
+  AFTERNOON
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  password      String?
+  firstName     String
+  lastName      String
+  role          Role      @default(EMPLOYEE)
+  hireDate      DateTime?
+  isActive      Boolean   @default(true)
+  locale        String    @default("fr")
+  emailVerified DateTime?
+  image         String?
+  twoFactorEnabled Boolean @default(false)
+  twoFactorSecret  String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  team          Team?     @relation("TeamMembers", fields: [teamId], references: [id])
+  teamId        String?
+  office        Office?   @relation(fields: [officeId], references: [id])
+  officeId      String?
+  manager       User?     @relation("ManagerSubordinates", fields: [managerId], references: [id])
+  managerId     String?
+  subordinates  User[]    @relation("ManagerSubordinates")
+
+  managedTeams  Team[]    @relation("TeamManager")
+  leaveRequests LeaveRequest[]
+  approvals     Approval[]
+  leaveBalances LeaveBalance[]
+  delegationsFrom Delegation[] @relation("DelegationFrom")
+  delegationsTo   Delegation[] @relation("DelegationTo")
+  auditLogs     AuditLog[]
+
+  accounts      Account[]
+  sessions      Session[]
+
+  @@map("users")
+}
+
+model Account {
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@id([identifier, token])
+  @@map("verification_tokens")
+}
+
+model Team {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  manager     User?    @relation("TeamManager", fields: [managerId], references: [id])
+  managerId   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members     User[]   @relation("TeamMembers")
+
+  @@map("teams")
+}
+
+model Office {
+  id        String   @id @default(cuid())
+  name      String
+  country   String
+  timezone  String   @default("Europe/Paris")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users     User[]
+  holidays  Holiday[]
+  closures  Closure[]
+
+  @@map("offices")
+}
+
+model LeaveType {
+  id                String   @id @default(cuid())
+  name              String
+  code              String   @unique
+  description       String?
+  defaultDays       Float    @default(0)
+  requiresApproval  Boolean  @default(true)
+  requiresAttachment Boolean @default(false)
+  isActive          Boolean  @default(true)
+  color             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  leaveRequests     LeaveRequest[]
+  leaveBalances     LeaveBalance[]
+
+  @@map("leave_types")
+}
+
+model LeaveRequest {
+  id           String      @id @default(cuid())
+  user         User        @relation(fields: [userId], references: [id])
+  userId       String
+  leaveType    LeaveType   @relation(fields: [leaveTypeId], references: [id])
+  leaveTypeId  String
+  startDate    DateTime
+  endDate      DateTime
+  startPeriod  DayPeriod   @default(FULL_DAY)
+  endPeriod    DayPeriod   @default(FULL_DAY)
+  totalDays    Float
+  reason       String?
+  status       LeaveStatus @default(PENDING)
+  attachmentUrl String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  approvals    Approval[]
+
+  @@map("leave_requests")
+}
+
+model Approval {
+  id             String      @id @default(cuid())
+  leaveRequest   LeaveRequest @relation(fields: [leaveRequestId], references: [id])
+  leaveRequestId String
+  approver       User        @relation(fields: [approverId], references: [id])
+  approverId     String
+  status         LeaveStatus
+  comment        String?
+  decidedAt      DateTime?
+  createdAt      DateTime    @default(now())
+
+  @@map("approvals")
+}
+
+model LeaveBalance {
+  id          String    @id @default(cuid())
+  user        User      @relation(fields: [userId], references: [id])
+  userId      String
+  leaveType   LeaveType @relation(fields: [leaveTypeId], references: [id])
+  leaveTypeId String
+  year        Int
+  entitled    Float     @default(0)
+  taken       Float     @default(0)
+  pending     Float     @default(0)
+  remaining   Float     @default(0)
+  carriedOver Float     @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([userId, leaveTypeId, year])
+  @@map("leave_balances")
+}
+
+model Holiday {
+  id       String   @id @default(cuid())
+  name     String
+  date     DateTime
+  office   Office?  @relation(fields: [officeId], references: [id])
+  officeId String?
+  isRecurring Boolean @default(false)
+  createdAt DateTime @default(now())
+
+  @@map("holidays")
+}
+
+model Closure {
+  id        String   @id @default(cuid())
+  name      String
+  startDate DateTime
+  endDate   DateTime
+  office    Office?  @relation(fields: [officeId], references: [id])
+  officeId  String?
+  createdAt DateTime @default(now())
+
+  @@map("closures")
+}
+
+model Delegation {
+  id          String   @id @default(cuid())
+  fromUser    User     @relation("DelegationFrom", fields: [fromUserId], references: [id])
+  fromUserId  String
+  toUser      User     @relation("DelegationTo", fields: [toUserId], references: [id])
+  toUserId    String
+  startDate   DateTime
+  endDate     DateTime
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  @@map("delegations")
+}
+
+model Workflow {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  steps       Json
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("workflows")
+}
+
+model ExceptionalRule {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  rule        Json
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("exceptional_rules")
+}
+
+model CompanySettings {
+  id                  String   @id @default(cuid())
+  companyName         String
+  logo                String?
+  defaultLocale       String   @default("fr")
+  fiscalYearStartMonth Int     @default(1)
+  maxCarryOverDays    Float    @default(5)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@map("company_settings")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  user       User?    @relation(fields: [userId], references: [id])
+  userId     String?
+  action     String
+  entity     String
+  entityId   String?
+  oldValues  Json?
+  newValues  Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@map("audit_logs")
+}
