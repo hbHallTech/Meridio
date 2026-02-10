@@ -1,6 +1,6 @@
-import { Role, LeaveStatus, DayPeriod } from "@prisma/client";
+import { UserRole, LeaveStatus, HalfDay, ApprovalAction, WorkflowStepType, WorkflowMode } from "@prisma/client";
 
-export type { Role, LeaveStatus, DayPeriod };
+export type { UserRole, LeaveStatus, HalfDay, ApprovalAction, WorkflowStepType, WorkflowMode };
 
 declare module "next-auth" {
   interface Session {
@@ -8,7 +8,7 @@ declare module "next-auth" {
       id: string;
       email: string;
       name: string;
-      role: string;
+      roles: UserRole[];
       image?: string | null;
     };
   }
@@ -17,15 +17,17 @@ declare module "next-auth" {
 export interface LeaveRequestWithRelations {
   id: string;
   userId: string;
-  leaveTypeId: string;
+  leaveTypeConfigId: string;
   startDate: Date;
   endDate: Date;
-  startPeriod: DayPeriod;
-  endPeriod: DayPeriod;
+  startHalfDay: HalfDay;
+  endHalfDay: HalfDay;
   totalDays: number;
   reason: string | null;
+  exceptionalReason: string | null;
   status: LeaveStatus;
-  attachmentUrl: string | null;
+  attachmentUrls: string[];
+  isCompanyClosure: boolean;
   createdAt: Date;
   updatedAt: Date;
   user: {
@@ -34,22 +36,31 @@ export interface LeaveRequestWithRelations {
     lastName: string;
     email: string;
   };
-  leaveType: {
+  leaveTypeConfig: {
     id: string;
-    name: string;
     code: string;
-    color: string | null;
+    label_fr: string;
+    label_en: string;
+    color: string;
   };
+  approvalSteps: {
+    id: string;
+    approverId: string;
+    stepType: WorkflowStepType;
+    stepOrder: number;
+    action: ApprovalAction | null;
+    comment: string | null;
+    decidedAt: Date | null;
+  }[];
 }
 
 export interface LeaveBalanceSummary {
-  leaveType: string;
-  code: string;
-  entitled: number;
-  taken: number;
-  pending: number;
+  balanceType: string;
+  totalDays: number;
+  usedDays: number;
+  pendingDays: number;
   remaining: number;
-  color: string | null;
+  carriedOverDays: number;
 }
 
 export interface TeamCalendarEvent {

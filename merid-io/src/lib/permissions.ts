@@ -1,4 +1,6 @@
-export type Role = "EMPLOYEE" | "MANAGER" | "HR" | "ADMIN";
+import { UserRole } from "@prisma/client";
+
+export type Role = UserRole;
 
 const roleHierarchy: Record<Role, number> = {
   EMPLOYEE: 0,
@@ -7,12 +9,16 @@ const roleHierarchy: Record<Role, number> = {
   ADMIN: 3,
 };
 
-export function hasRole(userRole: Role, requiredRole: Role): boolean {
-  return roleHierarchy[userRole] >= roleHierarchy[requiredRole];
+export function hasRole(userRoles: Role[], requiredRole: Role): boolean {
+  return userRoles.some((role) => roleHierarchy[role] >= roleHierarchy[requiredRole]);
 }
 
-export function hasAnyRole(userRole: Role, roles: Role[]): boolean {
-  return roles.some((role) => userRole === role);
+export function hasAnyRole(userRoles: Role[], roles: Role[]): boolean {
+  return userRoles.some((userRole) => roles.includes(userRole));
+}
+
+export function hasExactRole(userRoles: Role[], role: Role): boolean {
+  return userRoles.includes(role);
 }
 
 export type Permission =
@@ -72,10 +78,16 @@ const rolePermissions: Record<Role, Permission[]> = {
   ],
 };
 
-export function hasPermission(role: Role, permission: Permission): boolean {
-  return rolePermissions[role]?.includes(permission) ?? false;
+export function hasPermission(roles: Role[], permission: Permission): boolean {
+  return roles.some((role) => rolePermissions[role]?.includes(permission) ?? false);
 }
 
-export function getPermissions(role: Role): Permission[] {
-  return rolePermissions[role] ?? [];
+export function getPermissions(roles: Role[]): Permission[] {
+  const perms = new Set<Permission>();
+  for (const role of roles) {
+    for (const p of rolePermissions[role] ?? []) {
+      perms.add(p);
+    }
+  }
+  return Array.from(perms);
 }
