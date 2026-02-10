@@ -97,6 +97,21 @@ export async function sendPasswordResetEmail(
   });
 }
 
+export async function sendPasswordChangedEmail(to: string, firstName: string) {
+  await sendEmail({
+    to,
+    subject: "Meridio - Mot de passe modifié",
+    html: emailWrapper(`
+      <h2 style="color: #1B3A5C; margin-top: 0;">Bonjour ${firstName},</h2>
+      <p>Votre mot de passe Meridio a été modifié avec succès.</p>
+      <p style="color: #6b7280;">Si vous n'êtes pas à l'origine de cette modification, contactez immédiatement votre administrateur.</p>
+      <div style="text-align: center; margin: 24px 0;">
+        <a href="${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/login" style="display: inline-block; background-color: #1B3A5C; color: white; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: 600;">Se connecter</a>
+      </div>
+    `),
+  });
+}
+
 export async function sendLeaveRequestNotification(
   managerEmail: string,
   employeeName: string,
