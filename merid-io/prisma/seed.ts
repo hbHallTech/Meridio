@@ -4,21 +4,22 @@ import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
 
 async function main() {
-  // Create company
+  // 1. Create Company
   const company = await prisma.company.create({
     data: {
-      name: "Halley Technologies",
+      name: "Halley-Technologies SA",
     },
   });
+  console.log("✓ Company created:", company.name);
 
-  // Create offices
+  // 2. Create Offices
   const geneva = await prisma.office.create({
     data: {
       name: "Bureau de Genève",
       country: "CH",
       city: "Genève",
       defaultAnnualLeave: 25,
-      defaultOfferedDays: 0,
+      defaultOfferedDays: 3,
       minNoticeDays: 2,
       maxCarryOverDays: 10,
       carryOverDeadline: "03-31",
@@ -34,54 +35,130 @@ async function main() {
       name: "Bureau de Tunis",
       country: "TN",
       city: "Tunis",
-      defaultAnnualLeave: 22,
-      defaultOfferedDays: 3,
+      defaultAnnualLeave: 25,
+      defaultOfferedDays: 2,
       minNoticeDays: 2,
-      maxCarryOverDays: 5,
+      maxCarryOverDays: 10,
       carryOverDeadline: "03-31",
-      probationMonths: 6,
+      probationMonths: 3,
       sickLeaveJustifFromDay: 2,
       workingDays: ["MON", "TUE", "WED", "THU", "FRI"],
       companyId: company.id,
     },
   });
+  console.log("✓ Offices created: Genève, Tunis");
 
-  // Create leave type configs for Geneva
-  const leaveTypeConfigs = [
-    { officeId: geneva.id, code: "ANNUAL", label_fr: "Congé annuel", label_en: "Annual leave", deductsFromBalance: true, balanceType: "ANNUAL", color: "#3B82F6" },
-    { officeId: geneva.id, code: "OFFERED", label_fr: "Congé offert", label_en: "Offered leave", deductsFromBalance: true, balanceType: "OFFERED", color: "#10B981" },
-    { officeId: geneva.id, code: "SICK", label_fr: "Maladie", label_en: "Sick leave", requiresAttachment: true, attachmentFromDay: 2, deductsFromBalance: false, color: "#EF4444" },
-    { officeId: geneva.id, code: "UNPAID", label_fr: "Congé sans solde", label_en: "Unpaid leave", deductsFromBalance: false, color: "#F59E0B" },
-    { officeId: geneva.id, code: "MATERNITY", label_fr: "Congé maternité", label_en: "Maternity leave", requiresAttachment: true, deductsFromBalance: false, color: "#EC4899" },
-    { officeId: geneva.id, code: "PATERNITY", label_fr: "Congé paternité", label_en: "Paternity leave", requiresAttachment: true, deductsFromBalance: false, color: "#8B5CF6" },
-    { officeId: geneva.id, code: "EXCEPTIONAL", label_fr: "Congé exceptionnel", label_en: "Exceptional leave", deductsFromBalance: false, color: "#F97316" },
+  // 3. Create Leave Type Configs for each office
+  const leaveTypeDefinitions = [
+    {
+      code: "ANNUAL",
+      label_fr: "Congé annuel",
+      label_en: "Annual leave",
+      deductsFromBalance: true,
+      balanceType: "ANNUAL",
+      requiresAttachment: false,
+      attachmentFromDay: null,
+      color: "#3B82F6",
+    },
+    {
+      code: "OFFERED",
+      label_fr: "Congé offert",
+      label_en: "Offered leave",
+      deductsFromBalance: true,
+      balanceType: "OFFERED",
+      requiresAttachment: false,
+      attachmentFromDay: null,
+      color: "#10B981",
+    },
+    {
+      code: "SICK",
+      label_fr: "Congé maladie",
+      label_en: "Sick leave",
+      deductsFromBalance: false,
+      balanceType: null,
+      requiresAttachment: true,
+      attachmentFromDay: 2,
+      color: "#EF4444",
+    },
+    {
+      code: "UNPAID",
+      label_fr: "Congé sans solde",
+      label_en: "Unpaid leave",
+      deductsFromBalance: false,
+      balanceType: null,
+      requiresAttachment: false,
+      attachmentFromDay: null,
+      color: "#F59E0B",
+    },
+    {
+      code: "MATERNITY",
+      label_fr: "Congé maternité",
+      label_en: "Maternity leave",
+      deductsFromBalance: false,
+      balanceType: null,
+      requiresAttachment: false,
+      attachmentFromDay: null,
+      color: "#EC4899",
+    },
+    {
+      code: "PATERNITY",
+      label_fr: "Congé paternité",
+      label_en: "Paternity leave",
+      deductsFromBalance: false,
+      balanceType: null,
+      requiresAttachment: false,
+      attachmentFromDay: null,
+      color: "#8B5CF6",
+    },
+    {
+      code: "EXCEPTIONAL",
+      label_fr: "Congé exceptionnel",
+      label_en: "Exceptional leave",
+      deductsFromBalance: true,
+      balanceType: "ANNUAL",
+      requiresAttachment: false,
+      attachmentFromDay: null,
+      color: "#F97316",
+    },
+    {
+      code: "TELEWORK",
+      label_fr: "Télétravail",
+      label_en: "Telework",
+      deductsFromBalance: false,
+      balanceType: null,
+      requiresAttachment: false,
+      attachmentFromDay: null,
+      color: "#6366F1",
+    },
   ];
 
-  for (const config of leaveTypeConfigs) {
-    await prisma.leaveTypeConfig.create({ data: config });
+  for (const office of [geneva, tunis]) {
+    for (const lt of leaveTypeDefinitions) {
+      await prisma.leaveTypeConfig.create({
+        data: {
+          officeId: office.id,
+          ...lt,
+        },
+      });
+    }
   }
+  console.log("✓ Leave type configs created for both offices (8 types each)");
 
-  // Create leave type configs for Tunis (same types)
-  const tunisConfigs = leaveTypeConfigs.map((c) => ({ ...c, officeId: tunis.id }));
-  for (const config of tunisConfigs) {
-    await prisma.leaveTypeConfig.create({ data: config });
-  }
-
-  // Create workflow for Geneva: Manager → HR (sequential)
-  const genevaWorkflow = await prisma.workflowConfig.create({
+  // 4. Create Workflows
+  // Genève : SEQUENTIAL, 1 step (MANAGER)
+  await prisma.workflowConfig.create({
     data: {
       officeId: geneva.id,
       mode: "SEQUENTIAL",
       steps: {
         create: [
           { stepOrder: 1, stepType: "MANAGER", isRequired: true },
-          { stepOrder: 2, stepType: "HR", isRequired: true },
         ],
       },
     },
   });
 
-  // Create workflow for Tunis: same
+  // Tunis : SEQUENTIAL, 2 steps (MANAGER order 1, HR order 2)
   await prisma.workflowConfig.create({
     data: {
       officeId: tunis.id,
@@ -94,55 +171,70 @@ async function main() {
       },
     },
   });
+  console.log("✓ Workflows created: Genève (1 step), Tunis (2 steps)");
 
-  // Create exceptional leave rules for Geneva
+  // 5. Create Exceptional Leave Rules for each office
   const exceptionalRules = [
-    { officeId: geneva.id, reason_fr: "Mariage", reason_en: "Wedding", maxDays: 3 },
-    { officeId: geneva.id, reason_fr: "Naissance / Adoption", reason_en: "Birth / Adoption", maxDays: 2 },
-    { officeId: geneva.id, reason_fr: "Décès conjoint/enfant", reason_en: "Death of spouse/child", maxDays: 5 },
-    { officeId: geneva.id, reason_fr: "Décès parent/fratrie", reason_en: "Death of parent/sibling", maxDays: 3 },
-    { officeId: geneva.id, reason_fr: "Déménagement", reason_en: "Moving", maxDays: 1 },
+    { reason_fr: "Mariage", reason_en: "Wedding", maxDays: 3 },
+    { reason_fr: "Décès proche", reason_en: "Bereavement", maxDays: 3 },
+    { reason_fr: "Naissance", reason_en: "Birth", maxDays: 1 },
+    { reason_fr: "Déménagement", reason_en: "Moving", maxDays: 1 },
   ];
 
-  for (const rule of exceptionalRules) {
-    await prisma.exceptionalLeaveRule.create({ data: rule });
+  for (const office of [geneva, tunis]) {
+    for (const rule of exceptionalRules) {
+      await prisma.exceptionalLeaveRule.create({
+        data: {
+          officeId: office.id,
+          ...rule,
+        },
+      });
+    }
   }
+  console.log("✓ Exceptional leave rules created for both offices (4 rules each)");
 
-  // Create admin user
-  const hashedPassword = await bcrypt.hash("Admin@2026", 12);
-  await prisma.user.create({
+  // 6. Create Admin user
+  const hashedPassword = await bcrypt.hash("Admin123!", 12);
+  const admin = await prisma.user.create({
     data: {
       email: "admin@halley-technologies.ch",
       passwordHash: hashedPassword,
       firstName: "Admin",
       lastName: "Halley",
-      roles: [UserRole.ADMIN],
+      roles: [UserRole.ADMIN, UserRole.HR, UserRole.MANAGER, UserRole.EMPLOYEE],
       officeId: geneva.id,
       hireDate: new Date("2024-01-01"),
     },
   });
+  console.log("✓ Admin user created:", admin.email);
 
-  // Create public holidays for Geneva 2026
-  const genevaHolidays = [
-    { date: new Date("2026-01-01"), name_fr: "Nouvel An", name_en: "New Year" },
-    { date: new Date("2026-01-02"), name_fr: "Lendemain du Nouvel An", name_en: "Day after New Year" },
-    { date: new Date("2026-04-03"), name_fr: "Vendredi Saint", name_en: "Good Friday" },
-    { date: new Date("2026-04-06"), name_fr: "Lundi de Pâques", name_en: "Easter Monday" },
-    { date: new Date("2026-05-14"), name_fr: "Ascension", name_en: "Ascension Day" },
-    { date: new Date("2026-05-25"), name_fr: "Lundi de Pentecôte", name_en: "Whit Monday" },
-    { date: new Date("2026-08-01"), name_fr: "Fête nationale suisse", name_en: "Swiss National Day" },
-    { date: new Date("2026-09-10"), name_fr: "Jeûne genevois", name_en: "Geneva Fast" },
-    { date: new Date("2026-12-25"), name_fr: "Noël", name_en: "Christmas Day" },
-    { date: new Date("2026-12-31"), name_fr: "Restauration de la République", name_en: "Restoration of the Republic" },
-  ];
+  // 7. Create LeaveBalance for admin for 2026
+  await prisma.leaveBalance.create({
+    data: {
+      userId: admin.id,
+      year: 2026,
+      balanceType: "ANNUAL",
+      totalDays: geneva.defaultAnnualLeave,
+      usedDays: 0,
+      pendingDays: 0,
+      carriedOverDays: 0,
+    },
+  });
 
-  for (const holiday of genevaHolidays) {
-    await prisma.publicHoliday.create({
-      data: { officeId: geneva.id, ...holiday },
-    });
-  }
+  await prisma.leaveBalance.create({
+    data: {
+      userId: admin.id,
+      year: 2026,
+      balanceType: "OFFERED",
+      totalDays: geneva.defaultOfferedDays,
+      usedDays: 0,
+      pendingDays: 0,
+      carriedOverDays: 0,
+    },
+  });
+  console.log("✓ Leave balances created for admin (ANNUAL: 25j, OFFERED: 3j)");
 
-  console.log("Seed data created successfully");
+  console.log("\n🎉 Seed completed successfully!");
 }
 
 main()
