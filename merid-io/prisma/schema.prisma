@@ -1,0 +1,359 @@
+// schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum UserRole {
+  EMPLOYEE
+  MANAGER
+  HR
+  ADMIN
+}
+
+enum LeaveStatus {
+  DRAFT
+  PENDING_MANAGER
+  PENDING_HR
+  APPROVED
+  REFUSED
+  CANCELLED
+  RETURNED   // Renvoyé en brouillon pour clarification
+}
+
+enum HalfDay {
+  MORNING
+  AFTERNOON
+  FULL_DAY
+}
+
+enum WorkflowStepType {
+  MANAGER
+  HR
+}
+
+enum WorkflowMode {
+  SEQUENTIAL
+  PARALLEL
+}
+
+enum ApprovalAction {
+  APPROVED
+  REFUSED
+  RETURNED
+}
+
+// ============================================================
+// COMPANY & OFFICES
+// ============================================================
+
+model Company {
+  id          String   @id @default(cuid())
+  name        String
+  logoUrl     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  offices     Office[]
+}
+
+model Office {
+  id                    String   @id @default(cuid())
+  name                  String   // ex: "Bureau de Genève", "Bureau de Tunis"
+  country               String   // ex: "CH", "TN"
+  city                  String   // ex: "Genève", "Tunis"
+  defaultAnnualLeave    Int      @default(25) // Jours de congé annuel par défaut
+  defaultOfferedDays    Int      @default(0)  // Congés offerts (ex-RTT)
+  minNoticeDays         Int      @default(2)  // Délai minimum pour warning
+  maxCarryOverDays      Int      @default(10) // Max jours reportables
+  carryOverDeadline     String   @default("03-31") // Date limite report (MM-DD)
+  probationMonths       Int      @default(3)  // Période d'essai en mois
+  sickLeaveJustifFromDay Int     @default(2)  // Justificatif maladie à partir de X jours
+  workingDays           String[] @default(["MON", "TUE", "WED", "THU", "FRI"])
+  companyId             String
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  company               Company  @relation(fields: [companyId], references: [id])
+  users                 User[]
+  teams                 Team[]
+  publicHolidays        PublicHoliday[]
+  companyClosures       CompanyClosure[]
+  workflows             WorkflowConfig[]
+  leaveTypeConfigs      LeaveTypeConfig[]
+  exceptionalLeaveRules ExceptionalLeaveRule[]
+}
+
+// ============================================================
+// USERS & TEAMS
+// ============================================================
+
+model User {
+  id                String    @id @default(cuid())
+  email             String    @unique // doit être @halley-technologies.ch
+  passwordHash      String
+  firstName         String
+  lastName          String
+  roles             UserRole[]
+  officeId          String
+  teamId            String?
+  hireDate          DateTime
+  profilePictureUrl String?
+  language          String    @default("fr") // "fr" ou "en"
+  isActive          Boolean   @default(true)
+  twoFactorCode     String?
+  twoFactorExpiry   DateTime?
+  passwordChangedAt DateTime?
+  failedLoginAttempts Int     @default(0)
+  lockedUntil       DateTime?
+  resetPasswordToken String?
+  resetPasswordExpiry DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  office            Office    @relation(fields: [officeId], references: [id])
+  team              Team?     @relation("TeamMembers", fields: [teamId], references: [id])
+  managedTeam       Team?     @relation("TeamManager")
+  leaveRequests     LeaveRequest[]
+  leaveBalances     LeaveBalance[]
+  approvals         ApprovalStep[]
+  delegationsFrom   Delegation[] @relation("DelegationFrom")
+  delegationsTo     Delegation[] @relation("DelegationTo")
+  auditLogs         AuditLog[]
+  notifications     Notification[]
+}
+
+model Team {
+  id         String   @id @default(cuid())
+  name       String
+  managerId  String   @unique
+  officeId   String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  manager    User     @relation("TeamManager", fields: [managerId], references: [id])
+  office     Office   @relation(fields: [officeId], references: [id])
+  members    User[]   @relation("TeamMembers")
+}
+
+model Delegation {
+  id          String    @id @default(cuid())
+  fromUserId  String    // Manager qui délègue
+  toUserId    String    // Utilisateur qui reçoit la délégation
+  startDate   DateTime
+  endDate     DateTime
+  createdBy   String    // "MANAGER" ou "ADMIN"
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+
+  fromUser    User      @relation("DelegationFrom", fields: [fromUserId], references: [id])
+  toUser      User      @relation("DelegationTo", fields: [toUserId], references: [id])
+}
+
+// ============================================================
+// LEAVE TYPES & CONFIGURATION
+// ============================================================
+
+model LeaveTypeConfig {
+  id                  String   @id @default(cuid())
+  officeId            String
+  code                String   // ex: "ANNUAL", "OFFERED", "SICK", "UNPAID", "MATERNITY", "PATERNITY", "EXCEPTIONAL", "TELEWORK"
+  label_fr            String   // ex: "Congé annuel"
+  label_en            String   // ex: "Annual leave"
+  requiresAttachment  Boolean  @default(false)
+  attachmentFromDay   Int?     // Justificatif à partir de X jours (pour maladie)
+  deductsFromBalance  Boolean  @default(true)
+  balanceType         String?  // "ANNUAL", "OFFERED", null (pour types sans solde)
+  isActive            Boolean  @default(true)
+  color               String   @default("#3B82F6") // Couleur pour le calendrier
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  office              Office   @relation(fields: [officeId], references: [id])
+  leaveRequests       LeaveRequest[]
+
+  @@unique([officeId, code])
+}
+
+model ExceptionalLeaveRule {
+  id         String   @id @default(cuid())
+  officeId   String
+  reason_fr  String   // ex: "Mariage"
+  reason_en  String   // ex: "Wedding"
+  maxDays    Int      // ex: 3
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  office     Office   @relation(fields: [officeId], references: [id])
+}
+
+// ============================================================
+// WORKFLOW CONFIGURATION
+// ============================================================
+
+model WorkflowConfig {
+  id         String       @id @default(cuid())
+  officeId   String
+  mode       WorkflowMode @default(SEQUENTIAL)
+  isActive   Boolean      @default(true)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  office     Office       @relation(fields: [officeId], references: [id])
+  steps      WorkflowStep[]
+}
+
+model WorkflowStep {
+  id               String           @id @default(cuid())
+  workflowConfigId String
+  stepOrder        Int              // 1, 2, ...
+  stepType         WorkflowStepType // MANAGER ou HR
+  isRequired       Boolean          @default(true)
+  createdAt        DateTime         @default(now())
+
+  workflowConfig   WorkflowConfig   @relation(fields: [workflowConfigId], references: [id])
+
+  @@unique([workflowConfigId, stepOrder])
+}
+
+// ============================================================
+// LEAVE REQUESTS & APPROVALS
+// ============================================================
+
+model LeaveRequest {
+  id                  String      @id @default(cuid())
+  userId              String
+  leaveTypeConfigId   String
+  startDate           DateTime
+  endDate             DateTime
+  startHalfDay        HalfDay     @default(FULL_DAY)
+  endHalfDay          HalfDay     @default(FULL_DAY)
+  totalDays           Float       // Calculé: nombre de jours ouvrés
+  status              LeaveStatus @default(DRAFT)
+  reason              String?     // Motif (optionnel pour l'employé)
+  exceptionalReason   String?     // Raison du congé exceptionnel
+  attachmentUrls      String[]    // Chemins vers les justificatifs
+  isCompanyClosure    Boolean     @default(false) // Si c'est un congé imposé
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  user                User        @relation(fields: [userId], references: [id])
+  leaveTypeConfig     LeaveTypeConfig @relation(fields: [leaveTypeConfigId], references: [id])
+  approvalSteps       ApprovalStep[]
+}
+
+model ApprovalStep {
+  id              String         @id @default(cuid())
+  leaveRequestId  String
+  approverId      String
+  stepType        WorkflowStepType
+  stepOrder       Int
+  action          ApprovalAction?
+  comment         String?        // Motif obligatoire si REFUSED ou RETURNED
+  decidedAt       DateTime?
+  createdAt       DateTime       @default(now())
+
+  leaveRequest    LeaveRequest   @relation(fields: [leaveRequestId], references: [id])
+  approver        User           @relation(fields: [approverId], references: [id])
+}
+
+// ============================================================
+// LEAVE BALANCES
+// ============================================================
+
+model LeaveBalance {
+  id              String   @id @default(cuid())
+  userId          String
+  year            Int      // ex: 2026
+  balanceType     String   // "ANNUAL", "OFFERED"
+  totalDays       Float    // Total alloué (prorata inclus)
+  usedDays        Float    @default(0)
+  pendingDays     Float    @default(0) // Jours en attente de validation
+  carriedOverDays Float    @default(0) // Jours reportés de l'année précédente
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, year, balanceType])
+}
+
+// ============================================================
+// CALENDAR: HOLIDAYS & CLOSURES
+// ============================================================
+
+model PublicHoliday {
+  id        String   @id @default(cuid())
+  officeId  String
+  date      DateTime
+  name_fr   String
+  name_en   String?
+  type      String   @default("PUBLIC") // "PUBLIC", "RELIGIOUS", "NATIONAL"
+  createdAt DateTime @default(now())
+
+  office    Office   @relation(fields: [officeId], references: [id])
+
+  @@unique([officeId, date])
+}
+
+model CompanyClosure {
+  id        String   @id @default(cuid())
+  officeId  String
+  startDate DateTime
+  endDate   DateTime
+  reason_fr String
+  reason_en String?
+  year      Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  office    Office   @relation(fields: [officeId], references: [id])
+}
+
+// ============================================================
+// NOTIFICATIONS
+// ============================================================
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   // "NEW_REQUEST", "APPROVED", "REFUSED", "RETURNED", "REMINDER", "CLOSURE", "PASSWORD_CHANGED"
+  title_fr  String
+  title_en  String
+  body_fr   String
+  body_en   String
+  data      Json?    // Données supplémentaires (ex: leaveRequestId)
+  isRead    Boolean  @default(false)
+  sentByEmail Boolean @default(false)
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+// ============================================================
+// AUDIT LOG
+// ============================================================
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String
+  action     String   // ex: "USER_CREATED", "LEAVE_SUBMITTED", "LEAVE_APPROVED"
+  entityType String   // ex: "User", "LeaveRequest", "Office"
+  entityId   String
+  oldValue   Json?
+  newValue   Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  user       User     @relation(fields: [userId], references: [id])
+}

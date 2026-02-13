@@ -1,0 +1,90 @@
+{
+  "common": {
+    "appName": "Meridio",
+    "loading": "Loading...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "search": "Search",
+    "filter": "Filter",
+    "export": "Export",
+    "back": "Back",
+    "next": "Next",
+    "previous": "Previous",
+    "confirm": "Confirm",
+    "yes": "Yes",
+    "no": "No",
+    "actions": "Actions",
+    "status": "Status",
+    "noResults": "No results"
+  },
+  "auth": {
+    "login": "Login",
+    "logout": "Logout",
+    "email": "Email address",
+    "password": "Password",
+    "forgotPassword": "Forgot password?",
+    "resetPassword": "Reset password",
+    "changePassword": "Change password",
+    "signIn": "Sign in",
+    "twoFactor": "Two-factor verification",
+    "enterCode": "Enter verification code",
+    "invalidCredentials": "Invalid credentials"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "leaves": "My Leaves",
+    "newLeave": "New Request",
+    "profile": "My Profile",
+    "manager": "Manager Area",
+    "approvals": "Approvals",
+    "calendar": "Calendar",
+    "reports": "Reports",
+    "delegation": "Delegation",
+    "hr": "HR Area",
+    "balances": "Balances",
+    "admin": "Administration",
+    "users": "Users",
+    "teams": "Teams",
+    "offices": "Offices",
+    "workflows": "Workflows",
+    "leaveTypes": "Leave Types",
+    "holidays": "Holidays",
+    "closures": "Closures",
+    "company": "Company",
+    "audit": "Audit",
+    "delegations": "Delegations",
+    "exceptionalRules": "Exceptional Rules"
+  },
+  "leaves": {
+    "title": "My Leave Requests",
+    "newRequest": "New Request",
+    "type": "Leave Type",
+    "startDate": "Start Date",
+    "endDate": "End Date",
+    "days": "Days",
+    "reason": "Reason",
+    "attachment": "Attachment",
+    "status": {
+      "draft": "Draft",
+      "pending": "Pending",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "cancelled": "Cancelled"
+    },
+    "period": {
+      "fullDay": "Full Day",
+      "morning": "Morning",
+      "afternoon": "Afternoon"
+    }
+  },
+  "dashboard": {
+    "welcome": "Welcome",
+    "remainingLeaves": "Remaining Leaves",
+    "pendingRequests": "Pending Requests",
+    "upcomingLeaves": "Upcoming Leaves",
+    "teamAbsences": "Team Absences"
+  }
+}
