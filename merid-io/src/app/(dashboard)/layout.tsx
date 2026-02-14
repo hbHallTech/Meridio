@@ -21,10 +21,7 @@ export default function DashboardLayout({
         />
         <div className="flex flex-1 flex-col overflow-hidden">
           <Header onMenuClick={() => setMobileOpen(true)} />
-          <main
-            className="flex-1 overflow-y-auto p-6"
-            style={{ backgroundColor: "#F5F7FA" }}
-          >
+          <main className="flex-1 overflow-y-auto p-6 bg-[#F5F7FA] dark:bg-[#0d1117]">
             {children}
           </main>
         </div>
