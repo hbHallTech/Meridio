@@ -284,7 +284,7 @@ export default function HRDashboardPage() {
                   outerRadius={100}
                   innerRadius={50}
                   paddingAngle={2}
-                  label={({ name, percent }: { name: string; percent?: number }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
+                  label={(props: Record<string, unknown>) => `${String(props.name ?? "")} ${(((props.percent as number) ?? 0) * 100).toFixed(0)}%`}
                 >
                   {charts.byType.map((entry, idx) => (
                     <Cell key={idx} fill={entry.color} />
