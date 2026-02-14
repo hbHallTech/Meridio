@@ -354,7 +354,7 @@ export default function ManagerCalendarPage() {
             {tooltip.event.extendedProps.totalDays}{" "}
             {lang === "en" ? "day(s)" : "jour(s)"}
             {" — "}
-            {STATUS_LABELS[tooltip.event.extendedProps.status ?? ""]?.[lang] ?? tooltip.event.extendedProps.status}
+            {STATUS_LABELS[tooltip.event.extendedProps.status ?? ""]?.[lang as "fr" | "en"] ?? tooltip.event.extendedProps.status}
           </p>
         </div>
       )}
