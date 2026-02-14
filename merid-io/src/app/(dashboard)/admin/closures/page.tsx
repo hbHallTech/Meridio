@@ -17,12 +17,19 @@ interface ClosureData {
 export default function AdminClosuresPage() {
   const [closures, setClosures] = useState<ClosureData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/admin/closures")
-      .then((r) => (r.ok ? r.json() : []))
+      .then(async (r) => {
+        if (!r.ok) {
+          const text = await r.text().catch(() => "");
+          throw new Error(`HTTP ${r.status}: ${text}`);
+        }
+        return r.json();
+      })
       .then((d) => setClosures(d))
-      .catch(() => setClosures([]))
+      .catch((e) => setError(e instanceof Error ? e.message : "Erreur inconnue"))
       .finally(() => setLoading(false));
   }, []);
 
@@ -53,7 +60,14 @@ export default function AdminClosuresPage() {
       </div>
 
       {/* Table */}
-      {closures.length === 0 ? (
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-6 py-4 text-sm text-red-700 shadow-sm">
+          <p className="font-semibold">Erreur de chargement</p>
+          <p className="mt-1">{error}</p>
+        </div>
+      )}
+
+      {!error && closures.length === 0 ? (
         <div className="rounded-xl border border-gray-200 bg-white px-6 py-12 text-center text-sm text-gray-400 shadow-sm">
           Aucune fermeture enregistrée.
         </div>

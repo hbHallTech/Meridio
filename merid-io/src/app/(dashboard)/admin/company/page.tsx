@@ -21,12 +21,19 @@ interface CompanyData {
 export default function AdminCompanyPage() {
   const [company, setCompany] = useState<CompanyData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/admin/company")
-      .then((r) => (r.ok ? r.json() : null))
+      .then(async (r) => {
+        if (!r.ok) {
+          const text = await r.text().catch(() => "");
+          throw new Error(`HTTP ${r.status}: ${text}`);
+        }
+        return r.json();
+      })
       .then((d) => setCompany(d))
-      .catch(() => setCompany(null))
+      .catch((e) => setError(e instanceof Error ? e.message : "Erreur inconnue"))
       .finally(() => setLoading(false));
   }, []);
 
@@ -38,7 +45,7 @@ export default function AdminCompanyPage() {
     );
   }
 
-  if (!company) {
+  if (error || !company) {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
@@ -53,9 +60,16 @@ export default function AdminCompanyPage() {
             <Building className="h-5 w-5" style={{ color: "#1B3A5C" }} />
           </div>
         </div>
-        <div className="rounded-xl border border-gray-200 bg-white px-6 py-12 text-center text-sm text-gray-400 shadow-sm">
-          Aucune entreprise configurée.
-        </div>
+        {error ? (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-6 py-4 text-sm text-red-700 shadow-sm">
+            <p className="font-semibold">Erreur de chargement</p>
+            <p className="mt-1">{error}</p>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-gray-200 bg-white px-6 py-12 text-center text-sm text-gray-400 shadow-sm">
+            Aucune entreprise configurée.
+          </div>
+        )}
       </div>
     );
   }

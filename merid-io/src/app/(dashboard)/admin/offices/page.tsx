@@ -32,12 +32,19 @@ const dayLabels: Record<string, string> = {
 export default function AdminOfficesPage() {
   const [offices, setOffices] = useState<OfficeData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/admin/offices")
-      .then((r) => (r.ok ? r.json() : []))
+      .then(async (r) => {
+        if (!r.ok) {
+          const text = await r.text().catch(() => "");
+          throw new Error(`HTTP ${r.status}: ${text}`);
+        }
+        return r.json();
+      })
       .then((d) => setOffices(d))
-      .catch(() => setOffices([]))
+      .catch((e) => setError(e instanceof Error ? e.message : "Erreur inconnue"))
       .finally(() => setLoading(false));
   }, []);
 
@@ -68,7 +75,14 @@ export default function AdminOfficesPage() {
       </div>
 
       {/* Cards */}
-      {offices.length === 0 ? (
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-6 py-4 text-sm text-red-700 shadow-sm">
+          <p className="font-semibold">Erreur de chargement</p>
+          <p className="mt-1">{error}</p>
+        </div>
+      )}
+
+      {!error && offices.length === 0 ? (
         <div className="rounded-xl border border-gray-200 bg-white px-6 py-12 text-center text-sm text-gray-400 shadow-sm">
           Aucun bureau trouvé.
         </div>

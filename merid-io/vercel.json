@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "npx prisma generate && npx prisma db seed && next build",
+  "buildCommand": "npx prisma generate && (npx prisma db seed || true) && next build",
   "outputDirectory": ".next",
   "headers": [
     {
