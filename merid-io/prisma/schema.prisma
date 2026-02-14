@@ -109,6 +109,7 @@ model User {
   hireDate          DateTime
   profilePictureUrl String?
   language          String    @default("fr") // "fr" ou "en"
+  timezone          String    @default("Europe/Zurich") // IANA timezone
   isActive          Boolean   @default(true)
   twoFactorCode     String?
   twoFactorExpiry   DateTime?
@@ -244,6 +245,7 @@ model LeaveRequest {
   exceptionalReason   String?     // Raison du congé exceptionnel
   attachmentUrls      String[]    // Chemins vers les justificatifs
   isCompanyClosure    Boolean     @default(false) // Si c'est un congé imposé
+  lastReminderSentAt  DateTime?   // Dernier rappel email envoyé
   createdAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
 
@@ -333,6 +335,7 @@ model Notification {
   body_fr   String
   body_en   String
   data      Json?    // Données supplémentaires (ex: leaveRequestId)
+  link      String?  // Lien direct (ex: "/leaves/abc123")
   isRead    Boolean  @default(false)
   sentByEmail Boolean @default(false)
   createdAt DateTime @default(now())

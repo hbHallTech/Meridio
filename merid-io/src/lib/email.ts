@@ -137,6 +137,68 @@ export async function sendLeaveRequestNotification(
   });
 }
 
+export async function sendLeaveReminderEmail(
+  approverEmail: string,
+  approverFirstName: string,
+  employeeName: string,
+  leaveType: string,
+  startDate: string,
+  endDate: string,
+  leaveRequestId: string,
+  daysPending: number
+) {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  await sendEmail({
+    to: approverEmail,
+    subject: `[Merid.io] Rappel : demande de congé en attente de ${employeeName}`,
+    html: emailWrapper(`
+      <h2 style="color: #1B3A5C; margin-top: 0;">Bonjour ${approverFirstName},</h2>
+      <div style="text-align: center; margin: 16px 0;">
+        <span style="display: inline-block; width: 48px; height: 48px; line-height: 48px; border-radius: 50%; background-color: #F59E0B; color: white; font-size: 24px;">&#9200;</span>
+      </div>
+      <p>La demande de congé de <strong>${employeeName}</strong> est en attente depuis <strong>${daysPending} jour${daysPending > 1 ? "s" : ""}</strong>.</p>
+      <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+        <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">Type</td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600;">${leaveType}</td></tr>
+        <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">Du</td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600;">${startDate}</td></tr>
+        <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">Au</td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600;">${endDate}</td></tr>
+      </table>
+      <p style="color: #6b7280;">Merci de traiter cette demande dans les meilleurs délais.</p>
+      <div style="text-align: center; margin: 24px 0;">
+        <a href="${appUrl}/leaves/${leaveRequestId}" style="display: inline-block; background-color: #F59E0B; color: white; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: 600;">Traiter la demande</a>
+      </div>
+    `),
+  });
+}
+
+export async function sendAnnualClosureEmail(
+  employeeEmail: string,
+  employeeFirstName: string,
+  closureReason: string,
+  startDate: string,
+  endDate: string
+) {
+  await sendEmail({
+    to: employeeEmail,
+    subject: `[Merid.io] Fermeture annuelle : ${closureReason}`,
+    html: emailWrapper(`
+      <h2 style="color: #1B3A5C; margin-top: 0;">Bonjour ${employeeFirstName},</h2>
+      <div style="text-align: center; margin: 16px 0;">
+        <span style="display: inline-block; width: 48px; height: 48px; line-height: 48px; border-radius: 50%; background-color: #6366F1; color: white; font-size: 24px;">&#128197;</span>
+      </div>
+      <p>Une <strong>fermeture d'entreprise</strong> a été planifiée :</p>
+      <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+        <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">Raison</td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600;">${closureReason}</td></tr>
+        <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">Du</td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600;">${startDate}</td></tr>
+        <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">Au</td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600;">${endDate}</td></tr>
+      </table>
+      <p style="color: #6b7280;">Un congé imposé sera automatiquement créé pour cette période. Veuillez vérifier vos demandes de congé.</p>
+      <div style="text-align: center; margin: 24px 0;">
+        <a href="${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/leaves" style="display: inline-block; background-color: #1B3A5C; color: white; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: 600;">Voir mes congés</a>
+      </div>
+    `),
+  });
+}
+
 export async function sendLeaveApprovalEmail(
   employeeEmail: string,
   employeeName: string,

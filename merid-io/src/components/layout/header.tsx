@@ -12,6 +12,7 @@ import {
   KeyRound,
   LogOut,
 } from "lucide-react";
+import { NotificationBell } from "@/components/ui/NotificationBell";
 
 const breadcrumbMap: Record<string, string> = {
   dashboard: "nav.dashboard",
@@ -102,7 +103,9 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
         </nav>
       </div>
 
-      {/* Right: user dropdown */}
+      {/* Right: notifications + user dropdown */}
+      <div className="flex items-center gap-2">
+        <NotificationBell />
       <div className="relative" ref={dropdownRef}>
         <button
           onClick={() => setDropdownOpen(!dropdownOpen)}
@@ -155,6 +158,7 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
             </div>
           </div>
         )}
+      </div>
       </div>
     </header>
   );
