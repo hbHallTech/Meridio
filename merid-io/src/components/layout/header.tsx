@@ -63,7 +63,8 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
     fetch("/api/profile")
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (data?.profilePictureUrl) setAvatarUrl(data.profilePictureUrl);
+        if (data?.user?.profilePictureUrl) setAvatarUrl(data.user.profilePictureUrl);
+        else setAvatarUrl(null);
       })
       .catch(() => {});
   }, [session?.user?.id, pathname]);
