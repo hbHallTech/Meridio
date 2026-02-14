@@ -136,3 +136,67 @@ export async function sendLeaveRequestNotification(
     `),
   });
 }
+
+export async function sendLeaveApprovalEmail(
+  employeeEmail: string,
+  employeeName: string,
+  leaveType: string,
+  startDate: string,
+  endDate: string,
+  action: "approved" | "refused" | "returned",
+  comment?: string
+) {
+  const firstName = employeeName.split(" ")[0];
+  const config = {
+    approved: {
+      subject: `Meridio - Demande de congé approuvée`,
+      title: "Demande approuvée",
+      color: "#10B981",
+      icon: "&#10004;",
+      message: "Votre demande de congé a été <strong>approuvée</strong>.",
+    },
+    refused: {
+      subject: `Meridio - Demande de congé refusée`,
+      title: "Demande refusée",
+      color: "#EF4444",
+      icon: "&#10008;",
+      message: "Votre demande de congé a été <strong>refusée</strong>.",
+    },
+    returned: {
+      subject: `Meridio - Demande de congé renvoyée`,
+      title: "Demande renvoyée en brouillon",
+      color: "#F59E0B",
+      icon: "&#8635;",
+      message: "Votre demande de congé a été <strong>renvoyée en brouillon</strong> pour modification.",
+    },
+  }[action];
+
+  const commentSection = comment
+    ? `<div style="margin: 16px 0; padding: 12px 16px; background-color: #FEF3C7; border-left: 4px solid ${config.color}; border-radius: 4px;">
+        <p style="margin: 0; font-size: 13px; color: #6b7280;">Motif :</p>
+        <p style="margin: 4px 0 0; font-weight: 600; color: #1F2937;">${comment}</p>
+      </div>`
+    : "";
+
+  await sendEmail({
+    to: employeeEmail,
+    subject: config.subject,
+    html: emailWrapper(`
+      <h2 style="color: #1B3A5C; margin-top: 0;">Bonjour ${firstName},</h2>
+      <div style="text-align: center; margin: 16px 0;">
+        <span style="display: inline-block; width: 48px; height: 48px; line-height: 48px; border-radius: 50%; background-color: ${config.color}; color: white; font-size: 24px;">${config.icon}</span>
+      </div>
+      <h3 style="text-align: center; color: ${config.color}; margin: 8px 0 16px;">${config.title}</h3>
+      <p>${config.message}</p>
+      <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+        <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">Type</td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600;">${leaveType}</td></tr>
+        <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">Du</td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600;">${startDate}</td></tr>
+        <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">Au</td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600;">${endDate}</td></tr>
+      </table>
+      ${commentSection}
+      <div style="text-align: center; margin: 24px 0;">
+        <a href="${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/leaves" style="display: inline-block; background-color: #1B3A5C; color: white; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: 600;">Voir mes demandes</a>
+      </div>
+    `),
+  });
+}
