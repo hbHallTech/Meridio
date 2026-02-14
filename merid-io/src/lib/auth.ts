@@ -3,12 +3,50 @@ import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { authConfig } from "@/lib/auth.config";
+import type { UserRole } from "@prisma/client";
 
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCK_DURATION_MS = 15 * 60 * 1000; // 15 minutes
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
+  callbacks: {
+    authorized: authConfig.callbacks?.authorized,
+    async jwt({ token, user, trigger, session }) {
+      // 1. At login — fetch from DB once (authorize may not pass custom fields)
+      if (user && token.sub) {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: token.sub },
+          select: { roles: true, officeId: true, language: true },
+        });
+        if (dbUser) {
+          token.roles = dbUser.roles;
+          token.officeId = dbUser.officeId;
+          token.language = dbUser.language;
+        }
+        token.twoFactorVerified = !process.env.SMTP_USER;
+      }
+      // 2. Session updates (language switch, 2FA verify)
+      if (trigger === "update" && session) {
+        if (session.twoFactorVerified !== undefined) {
+          token.twoFactorVerified = session.twoFactorVerified;
+        }
+        if (session.language !== undefined) {
+          token.language = session.language;
+        }
+      }
+      return token;
+    },
+    async session({ session, token }) {
+      if (token.sub) session.user.id = token.sub;
+      if (token.roles) session.user.roles = token.roles as UserRole[];
+      if (token.officeId !== undefined) session.user.officeId = token.officeId as string;
+      if (token.language) session.user.language = token.language as string;
+      if (token.twoFactorVerified !== undefined)
+        session.user.twoFactorVerified = token.twoFactorVerified as boolean;
+      return session;
+    },
+  },
   providers: [
     Credentials({
       name: "credentials",
@@ -87,7 +125,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           roles: user.roles,
           officeId: user.officeId,
           language: user.language,
-          twoFactorVerified: false,
+          twoFactorVerified: !process.env.SMTP_USER,
         };
       },
     }),
