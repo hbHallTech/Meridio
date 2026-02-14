@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { Loader2, Building, MapPin, Save, Users } from "lucide-react";
+import { useEffect, useState, useCallback, useRef } from "react";
+import { Loader2, Building, MapPin, Save, Users, Upload, Trash2, Globe } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import Link from "next/link";
 
@@ -17,6 +17,7 @@ interface CompanyData {
   id: string;
   name: string;
   logoUrl: string | null;
+  websiteUrl: string | null;
   createdAt: string;
   updatedAt: string;
   _count: { offices: number };
@@ -28,10 +29,13 @@ export default function AdminCompanyPage() {
   const [company, setCompany] = useState<CompanyData | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Editable fields
   const [editName, setEditName] = useState("");
-  const [editLogoUrl, setEditLogoUrl] = useState("");
+  const [editWebsiteUrl, setEditWebsiteUrl] = useState("");
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
 
   const fetchCompany = useCallback(async () => {
     try {
@@ -44,7 +48,8 @@ export default function AdminCompanyPage() {
       setCompany(data);
       if (data) {
         setEditName(data.name);
-        setEditLogoUrl(data.logoUrl ?? "");
+        setEditWebsiteUrl(data.websiteUrl ?? "");
+        setLogoPreview(data.logoUrl);
       }
     } catch (e) {
       addToast({
@@ -58,6 +63,83 @@ export default function AdminCompanyPage() {
   useEffect(() => {
     fetchCompany().finally(() => setLoading(false));
   }, [fetchCompany]);
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !company) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      addToast({ type: "error", title: "Erreur", message: "Fichier trop volumineux (max 2Mo)" });
+      return;
+    }
+
+    const validTypes = ["image/jpeg", "image/png", "image/webp", "image/svg+xml"];
+    if (!validTypes.includes(file.type)) {
+      addToast({ type: "error", title: "Erreur", message: "Format invalide. Utilisez JPG, PNG, WebP ou SVG." });
+      return;
+    }
+
+    setUploadingLogo(true);
+    try {
+      const formData = new FormData();
+      formData.append("logo", file);
+      formData.append("companyId", company.id);
+
+      const res = await fetch("/api/admin/company/logo", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Erreur lors de l'upload");
+      }
+
+      const data = await res.json();
+      setLogoPreview(data.logoUrl);
+      setCompany((prev) => prev ? { ...prev, logoUrl: data.logoUrl } : prev);
+
+      addToast({
+        type: "success",
+        title: "Logo mis à jour",
+        message: "Le logo de l'entreprise a été mis à jour avec succès",
+      });
+    } catch (e) {
+      addToast({
+        type: "error",
+        title: "Erreur",
+        message: e instanceof Error ? e.message : "Erreur lors de l'upload",
+      });
+    } finally {
+      setUploadingLogo(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleRemoveLogo = async () => {
+    if (!company) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/admin/company", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: company.id, logoUrl: "" }),
+      });
+      if (!res.ok) throw new Error("Erreur lors de la suppression du logo");
+
+      setLogoPreview(null);
+      setCompany((prev) => prev ? { ...prev, logoUrl: null } : prev);
+      addToast({ type: "success", title: "Logo supprimé", message: "Le logo a été supprimé" });
+    } catch (e) {
+      addToast({
+        type: "error",
+        title: "Erreur",
+        message: e instanceof Error ? e.message : "Erreur",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!company) return;
@@ -74,7 +156,7 @@ export default function AdminCompanyPage() {
         body: JSON.stringify({
           id: company.id,
           name: editName.trim(),
-          logoUrl: editLogoUrl.trim(),
+          websiteUrl: editWebsiteUrl.trim(),
         }),
       });
 
@@ -150,18 +232,61 @@ export default function AdminCompanyPage() {
 
       {/* Company info card */}
       <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-        <div className="flex items-center gap-4 mb-6">
-          <div
-            className="flex h-14 w-14 items-center justify-center rounded-xl text-xl font-bold text-white"
-            style={{ backgroundColor: "#1B3A5C" }}
-          >
-            {company.name.charAt(0).toUpperCase()}
+        {/* Logo section */}
+        <div className="flex items-start gap-5 mb-6">
+          <div className="relative group">
+            {logoPreview ? (
+              <img
+                src={logoPreview}
+                alt={company.name}
+                className="h-20 w-20 rounded-xl object-contain border border-gray-200 bg-white p-1"
+              />
+            ) : (
+              <div
+                className="flex h-20 w-20 items-center justify-center rounded-xl text-2xl font-bold text-white"
+                style={{ backgroundColor: "#1B3A5C" }}
+              >
+                {company.name.charAt(0).toUpperCase()}
+              </div>
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/svg+xml"
+              onChange={handleLogoUpload}
+              className="hidden"
+            />
           </div>
-          <div>
+          <div className="flex-1">
             <h2 className="text-xl font-bold text-gray-900">Informations de l&apos;entreprise</h2>
             <p className="mt-0.5 text-sm text-gray-500">
               {company._count.offices} bureau{company._count.offices !== 1 ? "x" : ""}
             </p>
+            <div className="mt-3 flex items-center gap-2">
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingLogo}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                {uploadingLogo ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Upload className="h-3.5 w-3.5" />
+                )}
+                {logoPreview ? "Changer le logo" : "Ajouter un logo"}
+              </button>
+              {logoPreview && (
+                <button
+                  onClick={handleRemoveLogo}
+                  disabled={saving}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Supprimer
+                </button>
+              )}
+            </div>
+            <p className="mt-1.5 text-xs text-gray-400">JPG, PNG, WebP ou SVG. Max 2Mo.</p>
           </div>
         </div>
 
@@ -179,18 +304,21 @@ export default function AdminCompanyPage() {
             />
           </div>
 
-          {/* Logo URL */}
+          {/* Website URL */}
           <div>
             <label className="mb-1.5 block text-sm font-medium text-gray-700">
-              URL du logo
+              Site web
             </label>
-            <input
-              type="text"
-              value={editLogoUrl}
-              onChange={(e) => setEditLogoUrl(e.target.value)}
-              placeholder="https://example.com/logo.png"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#00BCD4] focus:outline-none focus:ring-1 focus:ring-[#00BCD4]"
-            />
+            <div className="relative">
+              <Globe className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <input
+                type="url"
+                value={editWebsiteUrl}
+                onChange={(e) => setEditWebsiteUrl(e.target.value)}
+                placeholder="https://www.halley-technologies.ch"
+                className="w-full rounded-lg border border-gray-300 pl-9 pr-3 py-2 text-sm focus:border-[#00BCD4] focus:outline-none focus:ring-1 focus:ring-[#00BCD4]"
+              />
+            </div>
           </div>
 
           {/* Dates */}

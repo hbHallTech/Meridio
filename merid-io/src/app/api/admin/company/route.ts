@@ -35,7 +35,7 @@ export async function PATCH(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { id, name, logoUrl } = body;
+    const { id, name, websiteUrl, logoUrl } = body;
 
     if (!id) {
       return NextResponse.json({ error: "L'identifiant de l'entreprise est requis" }, { status: 400 });
@@ -48,11 +48,13 @@ export async function PATCH(request: NextRequest) {
 
     const updateData: Record<string, unknown> = {};
     if (name !== undefined) updateData.name = name;
+    if (websiteUrl !== undefined) updateData.websiteUrl = websiteUrl || null;
     if (logoUrl !== undefined) updateData.logoUrl = logoUrl || null;
 
     const oldValue = {
       name: existing.name,
-      logoUrl: existing.logoUrl,
+      websiteUrl: existing.websiteUrl,
+      logoUrl: existing.logoUrl ? "(image)" : null,
     };
 
     const company = await prisma.company.update({
@@ -77,7 +79,7 @@ export async function PATCH(request: NextRequest) {
     await prisma.auditLog.create({
       data: {
         userId: session.user.id!,
-        action: "OFFICE_UPDATED",
+        action: "COMPANY_UPDATED",
         entityType: "Company",
         entityId: id,
         oldValue,
