@@ -2,26 +2,13 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
-import type { UserRole } from "@prisma/client";
-
-declare module "next-auth" {
-  interface User {
-    roles?: UserRole[];
-    officeId?: string;
-    language?: string;
-    twoFactorVerified?: boolean;
-  }
-}
+import { authConfig } from "@/lib/auth.config";
 
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCK_DURATION_MS = 15 * 60 * 1000; // 15 minutes
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  session: { strategy: "jwt" },
-  pages: {
-    signIn: "/login",
-    error: "/login",
-  },
+  ...authConfig,
   providers: [
     Credentials({
       name: "credentials",
@@ -105,33 +92,4 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
     }),
   ],
-  callbacks: {
-    async jwt({ token, user, trigger, session }) {
-      if (user) {
-        token.roles = user.roles;
-        token.officeId = user.officeId;
-        token.language = user.language;
-        token.twoFactorVerified = user.twoFactorVerified;
-      }
-      if (trigger === "update" && session) {
-        if (session.twoFactorVerified !== undefined) {
-          token.twoFactorVerified = session.twoFactorVerified;
-        }
-        if (session.language !== undefined) {
-          token.language = session.language;
-        }
-      }
-      return token;
-    },
-    async session({ session, token }) {
-      if (token.sub) {
-        session.user.id = token.sub;
-      }
-      session.user.roles = (token.roles as UserRole[]) ?? [];
-      session.user.officeId = (token.officeId as string) ?? "";
-      session.user.language = (token.language as string) ?? "fr";
-      session.user.twoFactorVerified = (token.twoFactorVerified as boolean) ?? false;
-      return session;
-    },
-  },
 });
