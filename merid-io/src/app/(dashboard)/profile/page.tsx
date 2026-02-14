@@ -82,7 +82,7 @@ function getPasswordChecks(password: string) {
     { key: "upper", label_fr: "1 majuscule", label_en: "1 uppercase letter", ok: /[A-Z]/.test(password) },
     { key: "lower", label_fr: "1 minuscule", label_en: "1 lowercase letter", ok: /[a-z]/.test(password) },
     { key: "digit", label_fr: "1 chiffre", label_en: "1 digit", ok: /\d/.test(password) },
-    { key: "special", label_fr: "1 caractère spécial (@$!%*?&)", label_en: "1 special character (@$!%*?&)", ok: /[@$!%*?&]/.test(password) },
+    { key: "special", label_fr: "1 caractère spécial", label_en: "1 special character", ok: /[^A-Za-z\d\s]/.test(password) },
   ];
 }
 

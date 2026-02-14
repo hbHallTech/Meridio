@@ -16,7 +16,7 @@ const createUserSchema = userSchema.extend({
   password: z
     .string()
     .regex(
-      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/,
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d\s]).{8,}$/,
       "Min. 8 car., 1 maj., 1 min., 1 chiffre, 1 spécial"
     ),
   isActive: z.boolean().optional(),
