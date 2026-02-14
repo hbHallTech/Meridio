@@ -1,10 +1,10 @@
 import { z } from "zod";
 
 export const PASSWORD_REGEX =
-  /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+  /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d\s]).{8,}$/;
 
 export const PASSWORD_RULES =
-  "Min. 8 caractères, 1 majuscule, 1 minuscule, 1 chiffre, 1 caractère spécial (@$!%*?&)";
+  "Min. 8 caractères, 1 majuscule, 1 minuscule, 1 chiffre, 1 caractère spécial";
 
 export const loginSchema = z.object({
   email: z

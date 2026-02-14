@@ -17,7 +17,7 @@ export default function ResetPasswordPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
 
-  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d\s]).{8,}$/;
   const isValidPassword = passwordRegex.test(password);
   const passwordsMatch = password === confirmPassword && confirmPassword.length > 0;
 
@@ -167,7 +167,7 @@ export default function ResetPasswordPage() {
                 <PasswordRule ok={/[A-Z]/.test(password)} text="1 majuscule" />
                 <PasswordRule ok={/[a-z]/.test(password)} text="1 minuscule" />
                 <PasswordRule ok={/\d/.test(password)} text="1 chiffre" />
-                <PasswordRule ok={/[@$!%*?&]/.test(password)} text="1 caractère spécial (@$!%*?&)" />
+                <PasswordRule ok={/[^A-Za-z\d\s]/.test(password)} text="1 caractère spécial" />
               </div>
             )}
           </div>
