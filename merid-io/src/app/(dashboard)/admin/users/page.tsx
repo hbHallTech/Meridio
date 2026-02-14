@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useForm, Controller, type UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Loader2, Users, Plus, Pencil, Trash2 } from "lucide-react";
+import { Loader2, Users, Plus, Pencil, Trash2, KeyRound, Copy, Check, Mail } from "lucide-react";
 import { Dialog, ConfirmDialog } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
 import { userSchema } from "@/lib/validators";
@@ -20,11 +20,15 @@ const createUserSchema = userSchema.extend({
       "Min. 8 car., 1 maj., 1 min., 1 chiffre, 1 spécial"
     ),
   isActive: z.boolean().optional(),
+  forcePasswordChange: z.boolean().optional(),
+  sendNotification: z.boolean().optional(),
 });
 
 const editUserSchema = userSchema.extend({
   isActive: z.boolean().optional(),
   password: z.string().optional(),
+  forcePasswordChange: z.boolean().optional(),
+  sendNotification: z.boolean().optional(),
 });
 
 type CreateUserForm = z.infer<typeof createUserSchema>;
@@ -42,6 +46,7 @@ interface UserData {
   isActive: boolean;
   hireDate: string;
   language: string;
+  forcePasswordChange: boolean;
   createdAt: string;
   office: { id: string; name: string } | null;
   team: { id: string; name: string } | null;
@@ -67,6 +72,34 @@ const roleConfig: Record<string, { bg: string; text: string }> = {
 };
 
 // ---------------------------------------------------------------------------
+// Password generator
+// ---------------------------------------------------------------------------
+function generateStrongPassword(): string {
+  const upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+  const lower = "abcdefghjkmnpqrstuvwxyz";
+  const digits = "23456789";
+  const special = "!@#$%&*+-=?";
+
+  const pick = (chars: string) => chars[Math.floor(Math.random() * chars.length)];
+
+  // Ensure at least one of each
+  const required = [pick(upper), pick(lower), pick(digits), pick(special)];
+
+  // Fill remaining 12 chars
+  const all = upper + lower + digits + special;
+  const extra = Array.from({ length: 12 }, () => pick(all));
+
+  // Shuffle
+  const password = [...required, ...extra];
+  for (let i = password.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [password[i], password[j]] = [password[j], password[i]];
+  }
+
+  return password.join("");
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 export default function AdminUsersPage() {
@@ -84,6 +117,10 @@ export default function AdminUsersPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserData | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Generated password display
+  const [generatedPwd, setGeneratedPwd] = useState("");
+  const [copiedPwd, setCopiedPwd] = useState(false);
 
   // -------------------------------------------------------------------------
   // Fetch helpers
@@ -138,6 +175,27 @@ export default function AdminUsersPage() {
   }, [fetchUsers, fetchOffices, fetchTeams]);
 
   // -------------------------------------------------------------------------
+  // Password helpers
+  // -------------------------------------------------------------------------
+  const handleGeneratePassword = (form: UseFormReturn<CreateUserForm> | UseFormReturn<EditUserForm>) => {
+    const pwd = generateStrongPassword();
+    setGeneratedPwd(pwd);
+    setCopiedPwd(false);
+    form.setValue("password" as never, pwd as never);
+  };
+
+  const handleCopyPassword = async () => {
+    try {
+      await navigator.clipboard.writeText(generatedPwd);
+      setCopiedPwd(true);
+      addToast({ type: "success", title: "Copié", message: "Mot de passe copié dans le presse-papier" });
+      setTimeout(() => setCopiedPwd(false), 2000);
+    } catch {
+      addToast({ type: "error", title: "Erreur", message: "Impossible de copier" });
+    }
+  };
+
+  // -------------------------------------------------------------------------
   // Create form
   // -------------------------------------------------------------------------
   const createForm = useForm<CreateUserForm>({
@@ -152,6 +210,8 @@ export default function AdminUsersPage() {
       teamId: "",
       hireDate: "",
       isActive: true,
+      forcePasswordChange: true,
+      sendNotification: true,
     },
   });
 
@@ -170,6 +230,7 @@ export default function AdminUsersPage() {
       addToast({ type: "success", title: "Succès", message: "Utilisateur créé avec succès" });
       setCreateOpen(false);
       createForm.reset();
+      setGeneratedPwd("");
       await fetchUsers();
     } catch (err) {
       addToast({
@@ -197,11 +258,15 @@ export default function AdminUsersPage() {
       teamId: "",
       hireDate: "",
       isActive: true,
+      forcePasswordChange: false,
+      sendNotification: false,
     },
   });
 
   const openEdit = (user: UserData) => {
     setSelectedUser(user);
+    setGeneratedPwd("");
+    setCopiedPwd(false);
     editForm.reset({
       firstName: user.firstName,
       lastName: user.lastName,
@@ -212,6 +277,8 @@ export default function AdminUsersPage() {
       teamId: user.team?.id || "",
       hireDate: user.hireDate ? new Date(user.hireDate).toISOString().split("T")[0] : "",
       isActive: user.isActive,
+      forcePasswordChange: user.forcePasswordChange,
+      sendNotification: false,
     });
     setEditOpen(true);
   };
@@ -230,8 +297,9 @@ export default function AdminUsersPage() {
         teamId: data.teamId || null,
         hireDate: data.hireDate,
         isActive: data.isActive,
+        forcePasswordChange: data.forcePasswordChange,
+        sendNotification: data.sendNotification,
       };
-      // Only send password if provided
       if (data.password && data.password.trim().length > 0) {
         payload.password = data.password;
       }
@@ -247,6 +315,7 @@ export default function AdminUsersPage() {
       addToast({ type: "success", title: "Succès", message: "Utilisateur mis à jour avec succès" });
       setEditOpen(false);
       setSelectedUser(null);
+      setGeneratedPwd("");
       await fetchUsers();
     } catch (err) {
       addToast({
@@ -345,19 +414,54 @@ export default function AdminUsersPage() {
           )}
         </div>
 
-        {/* Password */}
+        {/* Password + Generate */}
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">
             Mot de passe{!isCreate && " (laisser vide pour ne pas changer)"}
           </label>
-          <input
-            type="password"
-            {...form.register("password")}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#1B3A5C] focus:outline-none focus:ring-1 focus:ring-[#1B3A5C]"
-            placeholder={isCreate ? "" : "Laisser vide pour ne pas changer"}
-          />
+          <div className="flex gap-2">
+            <input
+              type="text"
+              {...form.register("password")}
+              className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:border-[#1B3A5C] focus:outline-none focus:ring-1 focus:ring-[#1B3A5C]"
+              placeholder={isCreate ? "" : "Laisser vide pour ne pas changer"}
+            />
+            <button
+              type="button"
+              onClick={() => handleGeneratePassword(form)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 whitespace-nowrap"
+              title="Générer un mot de passe"
+            >
+              <KeyRound className="h-3.5 w-3.5" />
+              Générer
+            </button>
+          </div>
           {form.formState.errors.password && (
             <p className="mt-1 text-xs text-red-600">{form.formState.errors.password.message as string}</p>
+          )}
+
+          {/* Generated password display + copy */}
+          {generatedPwd && (
+            <div className="mt-2 flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2">
+              <code className="flex-1 text-sm font-mono text-green-800">{generatedPwd}</code>
+              <button
+                type="button"
+                onClick={handleCopyPassword}
+                className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-green-700 hover:bg-green-100"
+              >
+                {copiedPwd ? (
+                  <>
+                    <Check className="h-3.5 w-3.5" />
+                    Copié
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-3.5 w-3.5" />
+                    Copier
+                  </>
+                )}
+              </button>
+            </div>
           )}
         </div>
 
@@ -446,8 +550,9 @@ export default function AdminUsersPage() {
           )}
         </div>
 
-        {/* Statut toggle */}
-        <div>
+        {/* Toggles row */}
+        <div className="flex flex-wrap items-center gap-6">
+          {/* Statut */}
           <Controller
             control={form.control}
             name="isActive"
@@ -471,6 +576,41 @@ export default function AdminUsersPage() {
                 <span className="text-sm font-medium text-gray-700">
                   {field.value ? "Actif" : "Inactif"}
                 </span>
+              </label>
+            )}
+          />
+
+          {/* Force password change */}
+          <Controller
+            control={form.control}
+            name="forcePasswordChange"
+            render={({ field }) => (
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={field.value ?? false}
+                  onChange={(e) => field.onChange(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-[#1B3A5C] focus:ring-[#1B3A5C]"
+                />
+                <span className="font-medium text-gray-700">Forcer changement mot de passe</span>
+              </label>
+            )}
+          />
+
+          {/* Send notification */}
+          <Controller
+            control={form.control}
+            name="sendNotification"
+            render={({ field }) => (
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={field.value ?? false}
+                  onChange={(e) => field.onChange(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-[#1B3A5C] focus:ring-[#1B3A5C]"
+                />
+                <Mail className="h-3.5 w-3.5 text-gray-500" />
+                <span className="font-medium text-gray-700">Notifier par email</span>
               </label>
             )}
           />
@@ -505,6 +645,8 @@ export default function AdminUsersPage() {
           <button
             onClick={() => {
               createForm.reset();
+              setGeneratedPwd("");
+              setCopiedPwd(false);
               setCreateOpen(true);
             }}
             className="inline-flex items-center gap-2 rounded-lg bg-[#1B3A5C] px-4 py-2 text-sm font-medium text-white hover:bg-[#15304d] transition-colors"
@@ -551,6 +693,11 @@ export default function AdminUsersPage() {
                   >
                     <td className="whitespace-nowrap px-6 py-4 font-medium text-gray-900">
                       {user.firstName} {user.lastName}
+                      {user.forcePasswordChange && (
+                        <span className="ml-2 inline-flex rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700" title="Doit changer son mot de passe">
+                          MDP
+                        </span>
+                      )}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-gray-600">{user.email}</td>
                     <td className="whitespace-nowrap px-6 py-4">
@@ -626,7 +773,7 @@ export default function AdminUsersPage() {
       {/* Create Dialog */}
       <Dialog
         open={createOpen}
-        onClose={() => setCreateOpen(false)}
+        onClose={() => { setCreateOpen(false); setGeneratedPwd(""); }}
         title="Nouvel utilisateur"
         description="Remplissez les informations du nouvel utilisateur"
         maxWidth="lg"
@@ -636,7 +783,7 @@ export default function AdminUsersPage() {
           <div className="mt-6 flex justify-end gap-3">
             <button
               type="button"
-              onClick={() => setCreateOpen(false)}
+              onClick={() => { setCreateOpen(false); setGeneratedPwd(""); }}
               disabled={submitting}
               className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
             >
@@ -660,6 +807,7 @@ export default function AdminUsersPage() {
         onClose={() => {
           setEditOpen(false);
           setSelectedUser(null);
+          setGeneratedPwd("");
         }}
         title="Modifier l'utilisateur"
         description={
@@ -677,6 +825,7 @@ export default function AdminUsersPage() {
               onClick={() => {
                 setEditOpen(false);
                 setSelectedUser(null);
+                setGeneratedPwd("");
               }}
               disabled={submitting}
               className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"

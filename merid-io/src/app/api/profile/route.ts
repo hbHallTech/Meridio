@@ -63,7 +63,7 @@ export async function GET() {
   });
 }
 
-// ─── PATCH: update language preference ───
+// ─── PATCH: update language or theme preference ───
 
 export async function PATCH(request: NextRequest) {
   const session = await auth();
@@ -72,16 +72,32 @@ export async function PATCH(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { language } = body;
+  const { language, theme } = body;
 
-  if (!language || !["fr", "en"].includes(language)) {
-    return NextResponse.json({ error: "Langue invalide" }, { status: 400 });
+  const updateData: Record<string, string> = {};
+
+  if (language) {
+    if (!["fr", "en"].includes(language)) {
+      return NextResponse.json({ error: "Langue invalide" }, { status: 400 });
+    }
+    updateData.language = language;
+  }
+
+  if (theme) {
+    if (!["light", "dark", "system"].includes(theme)) {
+      return NextResponse.json({ error: "Thème invalide" }, { status: 400 });
+    }
+    updateData.theme = theme;
+  }
+
+  if (Object.keys(updateData).length === 0) {
+    return NextResponse.json({ error: "Aucune donnée à mettre à jour" }, { status: 400 });
   }
 
   await prisma.user.update({
     where: { id: session.user.id },
-    data: { language },
+    data: updateData,
   });
 
-  return NextResponse.json({ language });
+  return NextResponse.json(updateData);
 }

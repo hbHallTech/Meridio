@@ -2,10 +2,12 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useSession } from "next-auth/react";
+import { usePathname } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { changePasswordSchema, type ChangePasswordInput } from "@/lib/validators";
 import { useToast } from "@/components/ui/toast";
+import { useTheme } from "next-themes";
 import {
   Loader2,
   Camera,
@@ -21,6 +23,9 @@ import {
   Check,
   X,
   Shield,
+  Sun,
+  Moon,
+  Monitor,
 } from "lucide-react";
 
 // ─── Types ───
@@ -99,6 +104,8 @@ function formatDate(dateStr: string, lang: string): string {
 export default function ProfilePage() {
   const { data: session, update: updateSession } = useSession();
   const { addToast } = useToast();
+  const pathname = usePathname();
+  const { theme, setTheme } = useTheme();
   const lang = session?.user?.language ?? "fr";
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -109,6 +116,7 @@ export default function ProfilePage() {
   const [pwdSubmitting, setPwdSubmitting] = useState(false);
   const [showCurrentPwd, setShowCurrentPwd] = useState(false);
   const [showNewPwd, setShowNewPwd] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -126,9 +134,14 @@ export default function ProfilePage() {
   const watchNewPwd = watch("newPassword");
   const pwdChecks = getPasswordChecks(watchNewPwd || "");
 
-  // Fetch profile
+  // Wait for client mount (for next-themes)
   useEffect(() => {
-    fetch("/api/profile")
+    setMounted(true);
+  }, []);
+
+  // Fetch profile - refetch on pathname change
+  useEffect(() => {
+    fetch("/api/profile", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (d) {
@@ -138,7 +151,7 @@ export default function ProfilePage() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [pathname]);
 
   // Avatar upload
   const handleAvatarUpload = async (file: File) => {
@@ -179,6 +192,20 @@ export default function ProfilePage() {
       addToast({ type: "error", title: lang === "en" ? "Error" : "Erreur" });
     } finally {
       setLangSaving(false);
+    }
+  };
+
+  // Theme change
+  const handleThemeChange = async (newTheme: string) => {
+    setTheme(newTheme);
+    try {
+      await fetch("/api/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ theme: newTheme }),
+      });
+    } catch {
+      // Theme still applied locally via next-themes
     }
   };
 
@@ -228,6 +255,12 @@ export default function ProfilePage() {
       </div>
     );
   }
+
+  const themeOptions = [
+    { value: "light", label_fr: "Clair", label_en: "Light", icon: Sun },
+    { value: "dark", label_fr: "Sombre", label_en: "Dark", icon: Moon },
+    { value: "system", label_fr: "Système", label_en: "System", icon: Monitor },
+  ];
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -360,6 +393,38 @@ export default function ProfilePage() {
               {langSaving && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
             </div>
           </div>
+
+          {/* Theme selector */}
+          {mounted && (
+            <div className="flex items-center justify-between px-6 py-4">
+              <div className="flex items-center gap-3">
+                <Sun className="h-4 w-4 text-gray-400" />
+                <span className="text-sm text-gray-500">
+                  {lang === "en" ? "Theme" : "Thème"}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                {themeOptions.map((opt) => {
+                  const Icon = opt.icon;
+                  const active = theme === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      onClick={() => handleThemeChange(opt.value)}
+                      className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-all ${
+                        active
+                          ? "bg-[#1B3A5C] text-white"
+                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      }`}
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                      {lang === "en" ? opt.label_en : opt.label_fr}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

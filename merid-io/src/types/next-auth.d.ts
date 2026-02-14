@@ -8,6 +8,7 @@ declare module "next-auth" {
       officeId?: string | null;
       language: "fr" | "en";
       twoFactorVerified?: boolean;
+      forcePasswordChange?: boolean;
     } & DefaultSession["user"];
   }
 }
@@ -19,5 +20,6 @@ declare module "next-auth/jwt" {
     officeId?: string | null;
     language?: "fr" | "en";
     twoFactorVerified?: boolean;
+    forcePasswordChange?: boolean;
   }
 }
