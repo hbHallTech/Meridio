@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import type { Prisma } from "@prisma/client";
+import type { Prisma, NotificationSettings } from "@prisma/client";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import {
@@ -14,6 +14,27 @@ import {
 
 function formatDate(date: Date): string {
   return format(date, "dd/MM/yyyy", { locale: fr });
+}
+
+type ToggleKey = keyof Pick<
+  NotificationSettings,
+  | "notifyNewLeaveRequest"
+  | "notifyLeaveApproved"
+  | "notifyLeaveRejected"
+  | "notifyLeaveNeedsRevision"
+  | "notifyLeaveReminder"
+  | "notifyAnnualClosure"
+  | "notifyPasswordChanged"
+>;
+
+async function isToggleEnabled(toggleName: ToggleKey): Promise<boolean> {
+  try {
+    const settings = await prisma.notificationSettings.findUnique({ where: { id: 1 } });
+    if (!settings) return true; // No settings row → default enabled
+    return settings[toggleName];
+  } catch {
+    return true; // DB error → default enabled
+  }
 }
 
 async function createNotification(params: {
@@ -45,6 +66,8 @@ async function createNotification(params: {
 // ─── notifyNewLeaveRequest ───────────────────────────────────────
 
 export async function notifyNewLeaveRequest(leaveRequestId: string) {
+  if (!(await isToggleEnabled("notifyNewLeaveRequest"))) return;
+
   const leave = await prisma.leaveRequest.findUnique({
     where: { id: leaveRequestId },
     include: {
@@ -99,6 +122,8 @@ export async function notifyNewLeaveRequest(leaveRequestId: string) {
 // ─── notifyLeaveApproved ────────────────────────────────────────
 
 export async function notifyLeaveApproved(leaveRequestId: string) {
+  if (!(await isToggleEnabled("notifyLeaveApproved"))) return;
+
   const leave = await prisma.leaveRequest.findUnique({
     where: { id: leaveRequestId },
     include: {
@@ -148,6 +173,8 @@ export async function notifyLeaveRejected(
   leaveRequestId: string,
   comment?: string
 ) {
+  if (!(await isToggleEnabled("notifyLeaveRejected"))) return;
+
   const leave = await prisma.leaveRequest.findUnique({
     where: { id: leaveRequestId },
     include: {
@@ -198,6 +225,8 @@ export async function notifyLeaveNeedsRevision(
   leaveRequestId: string,
   comment?: string
 ) {
+  if (!(await isToggleEnabled("notifyLeaveNeedsRevision"))) return;
+
   const leave = await prisma.leaveRequest.findUnique({
     where: { id: leaveRequestId },
     include: {
@@ -245,6 +274,8 @@ export async function notifyLeaveNeedsRevision(
 // ─── notifyLeaveReminder ────────────────────────────────────────
 
 export async function notifyLeaveReminder(leaveRequestId: string) {
+  if (!(await isToggleEnabled("notifyLeaveReminder"))) return;
+
   const leave = await prisma.leaveRequest.findUnique({
     where: { id: leaveRequestId },
     include: {
@@ -322,6 +353,8 @@ export async function notifyAnnualClosure(
   startDate: Date,
   endDate: Date
 ) {
+  if (!(await isToggleEnabled("notifyAnnualClosure"))) return;
+
   const users = await prisma.user.findMany({
     where: { id: { in: userIds }, isActive: true },
     select: { id: true, email: true, firstName: true, language: true },
@@ -361,6 +394,8 @@ export async function notifyAnnualClosure(
 // ─── notifyPasswordChanged ──────────────────────────────────────
 
 export async function notifyPasswordChanged(userId: string) {
+  if (!(await isToggleEnabled("notifyPasswordChanged"))) return;
+
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { id: true, email: true, firstName: true },

@@ -131,6 +131,7 @@ model User {
   delegationsTo     Delegation[] @relation("DelegationTo")
   auditLogs         AuditLog[]
   notifications     Notification[]
+  notificationSettingsUpdated NotificationSettings[]
 }
 
 model Team {
@@ -341,6 +342,32 @@ model Notification {
   createdAt DateTime @default(now())
 
   user      User     @relation(fields: [userId], references: [id])
+}
+
+// ============================================================
+// NOTIFICATION SETTINGS (singleton)
+// ============================================================
+
+model NotificationSettings {
+  id                         Int      @id @default(1)
+  smtpHost                   String?
+  smtpPort                   Int?     @default(587)
+  smtpSecure                 Boolean  @default(false)
+  smtpUser                   String?
+  smtpPassEncrypted          String?
+  smtpFrom                   String?  @default("no-reply@meridio.fr")
+  notifyNewLeaveRequest      Boolean  @default(true)
+  notifyLeaveApproved        Boolean  @default(true)
+  notifyLeaveRejected        Boolean  @default(true)
+  notifyLeaveNeedsRevision   Boolean  @default(true)
+  notifyLeaveReminder        Boolean  @default(true)
+  notifyAnnualClosure        Boolean  @default(true)
+  notifyPasswordChanged      Boolean  @default(true)
+  updatedAt                  DateTime @updatedAt
+  updatedById                String?
+  updatedBy                  User?    @relation(fields: [updatedById], references: [id])
+
+  @@map("notification_settings")
 }
 
 // ============================================================

@@ -38,6 +38,7 @@ const breadcrumbMap: Record<string, string> = {
   company: "nav.company",
   audit: "nav.audit",
   delegations: "nav.delegations",
+  "notification-settings": "nav.notificationSettings",
 };
 
 export function Header({ onMenuClick }: { onMenuClick?: () => void }) {

@@ -56,7 +56,8 @@
     "company": "Company",
     "audit": "Audit",
     "delegations": "Delegations",
-    "exceptionalRules": "Exceptional Rules"
+    "exceptionalRules": "Exceptional Rules",
+    "notificationSettings": "Notifications"
   },
   "leaves": {
     "title": "My Leave Requests",

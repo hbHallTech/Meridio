@@ -1,18 +1,64 @@
 import nodemailer from "nodemailer";
+import type { Transporter } from "nodemailer";
+import { prisma } from "@/lib/prisma";
+import { decrypt } from "@/lib/crypto";
 
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || "smtp.office365.com",
-  port: Number(process.env.SMTP_PORT) || 587,
-  secure: false,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASSWORD,
-  },
-  tls: {
-    ciphers: "SSLv3",
-    rejectUnauthorized: false,
-  },
-});
+// ─── Dynamic transporter (DB settings → .env fallback) ──────────
+
+let cachedTransporter: Transporter | null = null;
+let cacheTimestamp = 0;
+const CACHE_TTL = 60_000; // 1 minute
+
+async function getTransporter(): Promise<Transporter> {
+  const now = Date.now();
+  if (cachedTransporter && now - cacheTimestamp < CACHE_TTL) {
+    return cachedTransporter;
+  }
+
+  let host = process.env.SMTP_HOST || "smtp.office365.com";
+  let port = Number(process.env.SMTP_PORT) || 587;
+  let secure = false;
+  let user = process.env.SMTP_USER;
+  let pass = process.env.SMTP_PASSWORD;
+
+  try {
+    const settings = await prisma.notificationSettings.findUnique({ where: { id: 1 } });
+    if (settings) {
+      if (settings.smtpHost) host = settings.smtpHost;
+      if (settings.smtpPort) port = settings.smtpPort;
+      secure = settings.smtpSecure;
+      if (settings.smtpUser) user = settings.smtpUser;
+      if (settings.smtpPassEncrypted) {
+        try {
+          pass = decrypt(settings.smtpPassEncrypted);
+        } catch {
+          console.error("[EMAIL] Failed to decrypt SMTP password, falling back to .env");
+        }
+      }
+    }
+  } catch {
+    // DB not available, use .env defaults
+  }
+
+  cachedTransporter = nodemailer.createTransport({
+    host,
+    port,
+    secure,
+    auth: { user, pass },
+    tls: { ciphers: "SSLv3", rejectUnauthorized: false },
+  });
+
+  cacheTimestamp = now;
+  return cachedTransporter;
+}
+
+/** Reset cache so next sendEmail picks up new settings */
+export function resetEmailTransportCache() {
+  cachedTransporter = null;
+  cacheTimestamp = 0;
+}
+
+// ─── Core send ──────────────────────────────────────────────────
 
 interface SendEmailOptions {
   to: string;
@@ -21,18 +67,30 @@ interface SendEmailOptions {
 }
 
 export async function sendEmail({ to, subject, html }: SendEmailOptions) {
-  if (!process.env.SMTP_USER) {
+  const transport = await getTransporter();
+  const authUser = (transport.options as { auth?: { user?: string } })?.auth?.user;
+
+  if (!authUser) {
     console.log(`[EMAIL SKIP] No SMTP configured. To: ${to}, Subject: ${subject}`);
     return;
   }
 
-  await transporter.sendMail({
-    from: process.env.SMTP_FROM || process.env.SMTP_USER,
-    to,
-    subject,
-    html,
-  });
+  // Resolve "from" dynamically
+  let fromAddr = process.env.SMTP_FROM || process.env.SMTP_USER || "";
+  try {
+    const settings = await prisma.notificationSettings.findUnique({
+      where: { id: 1 },
+      select: { smtpFrom: true },
+    });
+    if (settings?.smtpFrom) fromAddr = settings.smtpFrom;
+  } catch {
+    // fallback
+  }
+
+  await transport.sendMail({ from: fromAddr, to, subject, html });
 }
+
+// ─── HTML wrapper ───────────────────────────────────────────────
 
 function emailWrapper(content: string): string {
   return `
@@ -57,6 +115,8 @@ function emailWrapper(content: string): string {
     </html>
   `;
 }
+
+// ─── Template functions ─────────────────────────────────────────
 
 export async function send2FACode(to: string, code: string, firstName: string) {
   await sendEmail({
@@ -121,7 +181,7 @@ export async function sendLeaveRequestNotification(
 ) {
   await sendEmail({
     to: managerEmail,
-    subject: `Meridio - Nouvelle demande de congé de ${employeeName}`,
+    subject: `[Merid.io] Nouvelle demande de congé de ${employeeName}`,
     html: emailWrapper(`
       <h2 style="color: #1B3A5C; margin-top: 0;">Nouvelle demande de congé</h2>
       <p><strong>${employeeName}</strong> a soumis une demande de congé :</p>

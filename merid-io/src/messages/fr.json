@@ -56,7 +56,8 @@
     "company": "Entreprise",
     "audit": "Audit",
     "delegations": "Délégations",
-    "exceptionalRules": "Règles exceptionnelles"
+    "exceptionalRules": "Règles exceptionnelles",
+    "notificationSettings": "Notifications"
   },
   "leaves": {
     "title": "Mes demandes de congé",
