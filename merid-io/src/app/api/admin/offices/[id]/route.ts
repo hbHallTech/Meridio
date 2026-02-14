@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/permissions";
-import type { UserRole } from "@prisma/client";
+import type { UserRole, Prisma } from "@prisma/client";
 
 // GET — Office detail with exceptional rules
 export async function GET(
@@ -119,7 +119,7 @@ export async function PATCH(
         sickLeaveJustifFromDay: existing.sickLeaveJustifFromDay,
         workingDays: existing.workingDays,
       },
-      newValue: updateData,
+      newValue: updateData as Prisma.InputJsonValue,
     },
   });
 

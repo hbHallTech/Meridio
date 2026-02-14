@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/permissions";
-import type { UserRole } from "@prisma/client";
+import type { UserRole, Prisma } from "@prisma/client";
 
 // GET — List exceptional rules for an office
 export async function GET(
@@ -125,7 +125,7 @@ export async function PATCH(
         maxDays: existing.maxDays,
         isActive: existing.isActive,
       },
-      newValue: updateData,
+      newValue: updateData as Prisma.InputJsonValue,
     },
   });
 

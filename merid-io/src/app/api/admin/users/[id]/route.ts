@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/permissions";
 import bcrypt from "bcryptjs";
-import type { UserRole } from "@prisma/client";
+import type { UserRole, Prisma } from "@prisma/client";
 
 // GET — User profile detail (info, balances, leave history, audit)
 export async function GET(
@@ -160,7 +160,7 @@ export async function PATCH(
         officeId: existing.officeId,
         teamId: existing.teamId,
       },
-      newValue: updateData,
+      newValue: updateData as Prisma.InputJsonValue,
     },
   });
 
