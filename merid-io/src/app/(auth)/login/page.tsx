@@ -53,7 +53,12 @@ export default function LoginPage() {
       } else {
         // Login succeeded — send 2FA code and redirect to verify
         try {
-          await fetch("/api/auth/2fa/send", { method: "POST" });
+          const res = await fetch("/api/auth/2fa/send", { method: "POST" });
+          const data = await res.json();
+          if (data.skipped) {
+            router.push(callbackUrl);
+            return;
+          }
         } catch {
           // Continue even if 2FA send fails (dev mode without SMTP)
         }

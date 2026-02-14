@@ -5,6 +5,10 @@ import { send2FACode } from "@/lib/email";
 import crypto from "crypto";
 
 export async function POST() {
+  if (!process.env.SMTP_USER) {
+    return NextResponse.json({ skipped: true });
+  }
+
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Non authentifié" }, { status: 401 });

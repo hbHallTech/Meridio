@@ -87,7 +87,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           roles: user.roles,
           officeId: user.officeId,
           language: user.language,
-          twoFactorVerified: false,
+          twoFactorVerified: !process.env.SMTP_USER,
         };
       },
     }),
