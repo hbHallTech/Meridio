@@ -116,6 +116,57 @@ export async function sendPasswordChangedEmail(to: string, firstName: string) {
   });
 }
 
+export async function sendNewAccountEmail(
+  to: string,
+  firstName: string,
+  tempPassword: string
+) {
+  const loginUrl = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/login`;
+
+  await sendEmail({
+    to,
+    subject: "Meridio - Votre compte a été créé",
+    html: emailWrapper(`
+      <h2 style="color: #1B3A5C; margin-top: 0;">Bienvenue ${firstName},</h2>
+      <p>Votre compte Meridio a été créé par un administrateur.</p>
+      <p>Voici vos identifiants de connexion :</p>
+      <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+        <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">Email</td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600;">${to}</td></tr>
+        <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">Mot de passe</td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600; font-family: monospace;">${tempPassword}</td></tr>
+      </table>
+      <p style="color: #EF4444; font-weight: 600;">Vous devrez changer votre mot de passe lors de votre première connexion.</p>
+      <div style="text-align: center; margin: 24px 0;">
+        <a href="${loginUrl}" style="display: inline-block; background-color: #1B3A5C; color: white; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: 600;">Se connecter</a>
+      </div>
+    `),
+  });
+}
+
+export async function sendAdminPasswordChangedEmail(
+  to: string,
+  firstName: string,
+  tempPassword: string
+) {
+  const loginUrl = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/login`;
+
+  await sendEmail({
+    to,
+    subject: "Meridio - Votre mot de passe a été réinitialisé",
+    html: emailWrapper(`
+      <h2 style="color: #1B3A5C; margin-top: 0;">Bonjour ${firstName},</h2>
+      <p>Votre mot de passe Meridio a été réinitialisé par un administrateur.</p>
+      <p>Voici votre nouveau mot de passe temporaire :</p>
+      <div style="text-align: center; margin: 24px 0;">
+        <span style="display: inline-block; background-color: #f0f4f8; border: 2px solid #1B3A5C; border-radius: 8px; padding: 12px 24px; font-size: 18px; font-weight: bold; font-family: monospace; color: #1B3A5C;">${tempPassword}</span>
+      </div>
+      <p style="color: #EF4444; font-weight: 600;">Vous devrez changer votre mot de passe lors de votre prochaine connexion.</p>
+      <div style="text-align: center; margin: 24px 0;">
+        <a href="${loginUrl}" style="display: inline-block; background-color: #1B3A5C; color: white; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: 600;">Se connecter</a>
+      </div>
+    `),
+  });
+}
+
 export async function sendLeaveRequestNotification(
   managerEmail: string,
   employeeName: string,

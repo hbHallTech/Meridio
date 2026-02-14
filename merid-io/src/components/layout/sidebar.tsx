@@ -180,22 +180,24 @@ export function Sidebar({
         {/* Logo */}
         <div className="flex h-16 items-center justify-between px-4">
           {!collapsed ? (
-            <Link href="/dashboard" className="flex items-center gap-2">
-              <div
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-sm font-bold text-white"
-                style={{ backgroundColor: "#00BCD4" }}
-              >
-                M
-              </div>
-              <span className="text-lg font-bold text-white">Meridio</span>
+            <div className="flex items-center gap-4">
+              <Link href="/dashboard" className="flex items-center gap-2">
+                <div
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-sm font-bold text-white"
+                  style={{ backgroundColor: "#00BCD4" }}
+                >
+                  M
+                </div>
+                <span className="text-lg font-bold text-white">Meridio</span>
+              </Link>
               {companyLogo && (
                 <img
                   src={companyLogo}
                   alt="Logo"
-                  className="h-8 w-8 rounded object-contain"
+                  className="h-8 w-auto max-h-8 rounded object-contain"
                 />
               )}
-            </Link>
+            </div>
           ) : (
             <Link href="/dashboard" className="mx-auto">
               {companyLogo ? (

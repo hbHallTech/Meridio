@@ -17,12 +17,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (user && token.sub) {
         const dbUser = await prisma.user.findUnique({
           where: { id: token.sub },
-          select: { roles: true, officeId: true, language: true },
+          select: { roles: true, officeId: true, language: true, forcePasswordChange: true },
         });
         if (dbUser) {
           token.roles = dbUser.roles;
           token.officeId = dbUser.officeId;
           token.language = dbUser.language;
+          token.forcePasswordChange = dbUser.forcePasswordChange;
         }
         token.twoFactorVerified = !process.env.SMTP_USER;
       }
@@ -34,6 +35,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (session.language !== undefined) {
           token.language = session.language;
         }
+        if (session.forcePasswordChange !== undefined) {
+          token.forcePasswordChange = session.forcePasswordChange;
+        }
       }
       return token;
     },
@@ -44,6 +48,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (token.language) session.user.language = token.language as string;
       if (token.twoFactorVerified !== undefined)
         session.user.twoFactorVerified = token.twoFactorVerified as boolean;
+      if (token.forcePasswordChange !== undefined)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (session.user as any).forcePasswordChange = token.forcePasswordChange;
       return session;
     },
   },

@@ -121,3 +121,58 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* ── Dark mode overrides for hardcoded Tailwind classes ── */
+.dark .bg-white {
+  background-color: oklch(0.205 0 0) !important;
+}
+.dark .bg-gray-50,
+.dark .bg-gray-50\/50 {
+  background-color: oklch(0.185 0 0) !important;
+}
+.dark .bg-gray-100 {
+  background-color: oklch(0.25 0 0) !important;
+}
+.dark .border-gray-200,
+.dark .border-gray-100,
+.dark .divide-gray-100 > :not(:first-child) {
+  border-color: oklch(0.3 0 0) !important;
+}
+.dark .text-gray-900 {
+  color: oklch(0.95 0 0) !important;
+}
+.dark .text-gray-700 {
+  color: oklch(0.8 0 0) !important;
+}
+.dark .text-gray-600 {
+  color: oklch(0.7 0 0) !important;
+}
+.dark .text-gray-500 {
+  color: oklch(0.6 0 0) !important;
+}
+.dark .text-gray-400 {
+  color: oklch(0.5 0 0) !important;
+}
+.dark .hover\:bg-gray-50:hover {
+  background-color: oklch(0.22 0 0) !important;
+}
+.dark .hover\:bg-gray-100:hover {
+  background-color: oklch(0.25 0 0) !important;
+}
+.dark input,
+.dark select,
+.dark textarea {
+  background-color: oklch(0.18 0 0) !important;
+  color: oklch(0.92 0 0) !important;
+  border-color: oklch(0.35 0 0) !important;
+}
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: oklch(0.5 0 0) !important;
+}
+.dark .shadow-sm {
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.2) !important;
+}
+.dark .shadow-lg {
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.3) !important;
+}
