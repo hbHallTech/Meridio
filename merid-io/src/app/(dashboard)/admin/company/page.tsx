@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
+import { usePathname } from "next/navigation";
 import { Loader2, Building, MapPin, Save, Users, Upload, Trash2, Globe } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import Link from "next/link";
@@ -26,6 +27,7 @@ interface CompanyData {
 
 export default function AdminCompanyPage() {
   const { addToast } = useToast();
+  const pathname = usePathname();
   const [company, setCompany] = useState<CompanyData | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -39,7 +41,7 @@ export default function AdminCompanyPage() {
 
   const fetchCompany = useCallback(async () => {
     try {
-      const res = await fetch("/api/admin/company");
+      const res = await fetch("/api/admin/company", { cache: "no-store" });
       if (!res.ok) {
         const text = await res.text().catch(() => "");
         throw new Error(`HTTP ${res.status}: ${text}`);
@@ -60,9 +62,10 @@ export default function AdminCompanyPage() {
     }
   }, [addToast]);
 
+  // Refetch when navigating back to this page
   useEffect(() => {
     fetchCompany().finally(() => setLoading(false));
-  }, [fetchCompany]);
+  }, [fetchCompany, pathname]);
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
