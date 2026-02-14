@@ -63,6 +63,7 @@ export function Sidebar({
 
   const userRoles = session?.user?.roles ?? [];
   const currentLang = session?.user?.language ?? "fr";
+  const [companyLogo, setCompanyLogo] = useState<string | null>(null);
 
   useEffect(() => {
     if (
@@ -76,6 +77,17 @@ export function Sidebar({
         .catch(() => setPendingCount(0));
     }
   }, [userRoles]);
+
+  // Fetch company logo
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    fetch("/api/company")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.logoUrl) setCompanyLogo(data.logoUrl);
+      })
+      .catch(() => {});
+  }, [session?.user?.id]);
 
   function hasAnyRole(roles?: UserRole[]): boolean {
     if (!roles || roles.length === 0) return true;
@@ -176,15 +188,30 @@ export function Sidebar({
                 M
               </div>
               <span className="text-lg font-bold text-white">Meridio</span>
+              {companyLogo && (
+                <img
+                  src={companyLogo}
+                  alt="Logo"
+                  className="h-8 w-8 rounded object-contain"
+                />
+              )}
             </Link>
           ) : (
             <Link href="/dashboard" className="mx-auto">
-              <div
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-sm font-bold text-white"
-                style={{ backgroundColor: "#00BCD4" }}
-              >
-                M
-              </div>
+              {companyLogo ? (
+                <img
+                  src={companyLogo}
+                  alt="Logo"
+                  className="h-8 w-8 rounded object-contain"
+                />
+              ) : (
+                <div
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-sm font-bold text-white"
+                  style={{ backgroundColor: "#00BCD4" }}
+                >
+                  M
+                </div>
+              )}
             </Link>
           )}
           <button
