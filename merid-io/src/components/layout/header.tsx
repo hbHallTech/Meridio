@@ -2,9 +2,8 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useSession, signOut } from "next-auth/react";
-import { usePathname } from "next/navigation";
-import { useTranslations } from "next-intl";
-import Link from "next/link";
+import { usePathname, Link } from "@/i18n/navigation";
+import { useTranslations, useLocale } from "next-intl";
 import {
   Menu,
   ChevronRight,
@@ -43,7 +42,8 @@ const breadcrumbMap: Record<string, string> = {
 
 export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const { data: session } = useSession();
-  const pathname = usePathname();
+  const pathname = usePathname(); // already locale-stripped by next-intl
+  const locale = useLocale();
   const t = useTranslations();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -58,12 +58,11 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Build breadcrumb from pathname
+  // Build breadcrumb from pathname (already without locale prefix)
   const segments = pathname.split("/").filter(Boolean);
   const breadcrumbs = segments.map((seg, idx) => {
     const href = "/" + segments.slice(0, idx + 1).join("/");
     const key = breadcrumbMap[seg];
-    // Access nested translations safely
     const label = key ? t(key) : seg.charAt(0).toUpperCase() + seg.slice(1);
     return { label, href, isLast: idx === segments.length - 1 };
   });
@@ -150,7 +149,7 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
             </div>
             <div className="border-t border-gray-100 py-1">
               <button
-                onClick={() => signOut({ callbackUrl: "/login" })}
+                onClick={() => signOut({ callbackUrl: `/${locale}/login` })}
                 className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50"
               >
                 <LogOut className="h-4 w-4" />

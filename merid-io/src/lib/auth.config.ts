@@ -10,6 +10,17 @@ declare module "next-auth" {
   }
 }
 
+/** Strip /fr or /en prefix to normalise path checks */
+function stripLocale(pathname: string): string {
+  return pathname.replace(/^\/(fr|en)/, "") || "/";
+}
+
+/** Extract locale prefix from pathname */
+function extractLocale(pathname: string): string {
+  const match = pathname.match(/^\/(fr|en)/);
+  return match ? match[1] : "fr";
+}
+
 export const authConfig: NextAuthConfig = {
   session: { strategy: "jwt" },
   pages: {
@@ -49,22 +60,23 @@ export const authConfig: NextAuthConfig = {
     authorized({ auth, request: { nextUrl } }) {
       const isLoggedIn = !!auth?.user;
       const { pathname } = nextUrl;
+      const path = stripLocale(pathname);
+      const locale = extractLocale(pathname);
+
       const publicPaths = [
         "/login",
         "/forgot-password",
         "/reset-password",
         "/api/auth",
       ];
-      const isPublicPath = publicPaths.some((path) =>
-        pathname.startsWith(path)
-      );
+      const isPublicPath = publicPaths.some((p) => path.startsWith(p));
 
       if (isPublicPath) return true;
 
       if (!isLoggedIn) {
         return Response.redirect(
           new URL(
-            `/login?callbackUrl=${encodeURIComponent(pathname)}`,
+            `/${locale}/login?callbackUrl=${encodeURIComponent(pathname)}`,
             nextUrl.origin
           )
         );
@@ -72,8 +84,10 @@ export const authConfig: NextAuthConfig = {
 
       // Check 2FA
       const twoFactorVerified = auth?.user?.twoFactorVerified;
-      if (!twoFactorVerified && pathname !== "/login/verify") {
-        return Response.redirect(new URL("/login/verify", nextUrl.origin));
+      if (!twoFactorVerified && path !== "/login/verify") {
+        return Response.redirect(
+          new URL(`/${locale}/login/verify`, nextUrl.origin)
+        );
       }
 
       return true;

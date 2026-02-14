@@ -1,13 +1,17 @@
 {
   "common": {
     "appName": "Meridio",
+    "companyName": "Halley-Technologies",
+    "tagline": "Meridio - Gestion des congés",
     "loading": "Chargement...",
     "save": "Enregistrer",
+    "saveChanges": "Enregistrer les modifications",
     "cancel": "Annuler",
     "delete": "Supprimer",
     "edit": "Modifier",
     "create": "Créer",
     "search": "Rechercher",
+    "searchPlaceholder": "Rechercher nom, email…",
     "filter": "Filtrer",
     "export": "Exporter",
     "back": "Retour",
@@ -18,20 +22,101 @@
     "no": "Non",
     "actions": "Actions",
     "status": "Statut",
-    "noResults": "Aucun résultat"
+    "noResults": "Aucun résultat",
+    "close": "Fermer",
+    "submit": "Soumettre",
+    "send": "Envoyer",
+    "download": "Télécharger",
+    "upload": "Envoyer",
+    "select": "Sélectionner…",
+    "all": "Tous",
+    "none": "Aucun",
+    "error": "Erreur",
+    "success": "Succès",
+    "warning": "Attention",
+    "info": "Information",
+    "required": "Obligatoire",
+    "optional": "Optionnel",
+    "page": "Page {current} sur {total}",
+    "allRights": "Tous droits réservés.",
+    "language": "Langue",
+    "french": "Français",
+    "english": "English",
+    "type": "Type",
+    "dates": "Dates",
+    "date": "Date",
+    "name": "Nom",
+    "email": "Email",
+    "active": "Actif",
+    "inactive": "Inactif",
+    "details": "Détails",
+    "description": "Description",
+    "comment": "Commentaire",
+    "reason": "Motif",
+    "amount": "Montant",
+    "total": "Total",
+    "day": "jour",
+    "days": "jours",
+    "used": "pris",
+    "pending": "en attente",
+    "carriedOver": "reportés",
+    "remaining": "restants",
+    "year": "Année",
+    "copy": "Copier",
+    "copied": "Copié",
+    "generate": "Générer",
+    "view": "Voir",
+    "add": "Ajouter",
+    "remove": "Supprimer",
+    "reset": "Réinitialiser",
+    "apply": "Appliquer",
+    "networkError": "Erreur réseau",
+    "loadingError": "Erreur de chargement"
   },
   "auth": {
     "login": "Connexion",
     "logout": "Déconnexion",
     "email": "Adresse email",
+    "emailPlaceholder": "prenom.nom@halley-technologies.ch",
     "password": "Mot de passe",
     "forgotPassword": "Mot de passe oublié ?",
     "resetPassword": "Réinitialiser le mot de passe",
     "changePassword": "Changer le mot de passe",
+    "currentPassword": "Mot de passe actuel",
+    "newPassword": "Nouveau mot de passe",
+    "confirmPassword": "Confirmer le nouveau mot de passe",
     "signIn": "Se connecter",
+    "signInSubtitle": "Accédez à votre espace de gestion des congés",
     "twoFactor": "Vérification en deux étapes",
     "enterCode": "Entrez le code de vérification",
-    "invalidCredentials": "Identifiants invalides"
+    "twoFactorDescription": "Un code de vérification a été envoyé à votre adresse email.",
+    "verify": "Vérifier",
+    "resendCode": "Renvoyer le code",
+    "invalidCredentials": "Identifiants invalides",
+    "accountLocked": "Compte verrouillé pour {minutes} minutes",
+    "attemptsRemaining": "{count} tentatives restantes",
+    "sendResetLink": "Envoyer le lien de réinitialisation",
+    "resetDescription": "Entrez votre adresse email pour recevoir un lien de réinitialisation.",
+    "resetSent": "Un email de réinitialisation a été envoyé.",
+    "backToLogin": "Retour à la connexion",
+    "newPasswordDescription": "Choisissez un nouveau mot de passe pour votre compte.",
+    "passwordChanged": "Mot de passe modifié",
+    "passwordChangedMessage": "Un email de confirmation a été envoyé.",
+    "passwordRequirements": {
+      "length": "8 caractères minimum",
+      "uppercase": "1 majuscule",
+      "lowercase": "1 minuscule",
+      "digit": "1 chiffre",
+      "special": "1 caractère spécial (@$!%*?&)"
+    },
+    "features": {
+      "simplified": "Demandes simplifiées",
+      "simplifiedDesc": "Posez vos congés en quelques clics",
+      "teamView": "Vision d'équipe",
+      "teamViewDesc": "Consultez le calendrier de votre équipe en temps réel",
+      "tracking": "Suivi intelligent",
+      "trackingDesc": "Suivez vos soldes et l'historique de vos congés"
+    }
   },
   "nav": {
     "dashboard": "Tableau de bord",
@@ -68,24 +153,320 @@
     "days": "Jours",
     "reason": "Motif",
     "attachment": "Justificatif",
+    "attachments": "Justificatifs",
+    "attachmentNum": "Pièce jointe {num}",
+    "duration": "Durée",
+    "period": "Période",
+    "created": "Créée le",
+    "submitted": "Soumis le",
+    "request": "Demande",
+    "requestNotFound": "Demande introuvable.",
+    "companyClosure": "Fermeture entreprise",
+    "exceptionalReason": "Motif exceptionnel",
+    "cancelRequest": "Annuler la demande",
+    "requestCancelled": "Demande annulée",
+    "requestSubmitted": "Demande soumise",
+    "editRequest": "Modifier la demande",
+    "noReasonProvided": "Aucun",
     "status": {
       "draft": "Brouillon",
       "pending": "En attente",
+      "pendingManager": "En attente (Manager)",
+      "pendingHr": "En attente (RH)",
       "approved": "Approuvé",
+      "refused": "Refusé",
       "rejected": "Refusé",
-      "cancelled": "Annulé"
+      "cancelled": "Annulé",
+      "returned": "Renvoyé"
     },
     "period": {
       "fullDay": "Journée complète",
       "morning": "Matin",
       "afternoon": "Après-midi"
+    },
+    "form": {
+      "selectType": "Sélectionnez un type de congé",
+      "selectPeriod": "Sélectionnez la période",
+      "addReason": "Ajoutez un motif (optionnel)",
+      "addAttachment": "Ajouter un justificatif",
+      "saveDraft": "Enregistrer comme brouillon",
+      "submitRequest": "Soumettre la demande",
+      "balance": "Solde disponible",
+      "daysRequested": "Jours demandés",
+      "daysRemaining": "Jours restants après cette demande"
+    },
+    "validation": {
+      "validationTimeline": "Chronologie de validation",
+      "awaitingDecision": "En attente de décision",
+      "notSubmitted": "Cette demande n'a pas encore été soumise.",
+      "noStepsRecorded": "Aucune étape de validation enregistrée.",
+      "step": "Étape {order}",
+      "stepManager": "Manager",
+      "stepHr": "Ressources Humaines"
+    },
+    "table": {
+      "allTypes": "Tous les types",
+      "allStatuses": "Tous les statuts",
+      "noRequests": "Aucune demande de congé",
+      "noRequestsDescription": "Vous n'avez pas encore de demande. Créez votre première demande."
+    },
+    "balanceTypes": {
+      "annual": "Congé annuel",
+      "offered": "Congés offerts"
     }
   },
   "dashboard": {
     "welcome": "Bienvenue",
+    "welcomeMessage": "Bonjour {name}, voici un résumé de vos congés.",
     "remainingLeaves": "Congés restants",
     "pendingRequests": "Demandes en attente",
     "upcomingLeaves": "Prochains congés",
-    "teamAbsences": "Absences de l'équipe"
+    "teamAbsences": "Absences de l'équipe",
+    "quickActions": "Actions rapides",
+    "newRequest": "Nouvelle demande",
+    "viewCalendar": "Voir le calendrier",
+    "noUpcoming": "Aucun congé à venir",
+    "noTeamAbsences": "Aucune absence dans l'équipe",
+    "today": "Aujourd'hui",
+    "thisWeek": "Cette semaine",
+    "thisMonth": "Ce mois-ci"
+  },
+  "admin": {
+    "title": "Administration",
+    "users": {
+      "title": "Gestion des utilisateurs",
+      "count": "{count} utilisateur(s)",
+      "createUser": "Créer un utilisateur",
+      "editUser": "Modifier l'utilisateur",
+      "firstName": "Prénom",
+      "lastName": "Nom",
+      "office": "Bureau",
+      "team": "Équipe",
+      "noTeam": "Aucune équipe",
+      "roles": "Rôles",
+      "hireDate": "Date d'embauche",
+      "initialPassword": "Mot de passe initial",
+      "newPasswordKeepEmpty": "Nouveau mot de passe (vide = inchangé)",
+      "passwordCopied": "Mot de passe copié",
+      "copyFailed": "Copie échouée",
+      "userCreated": "Utilisateur créé",
+      "userUpdated": "Utilisateur modifié",
+      "deactivateUser": "Désactiver l'utilisateur ?",
+      "reactivateUser": "Réactiver l'utilisateur ?",
+      "deactivateMessage": "Cet utilisateur ne pourra plus se connecter.",
+      "reactivateMessage": "Cet utilisateur pourra se reconnecter.",
+      "deactivate": "Désactiver",
+      "reactivate": "Réactiver",
+      "userDeactivated": "Utilisateur désactivé",
+      "userReactivated": "Utilisateur réactivé",
+      "viewProfile": "Voir le profil",
+      "fillAllFields": "Veuillez remplir tous les champs obligatoires",
+      "passwordRequired": "Le mot de passe est requis",
+      "allOffices": "Tous les bureaux",
+      "allTeams": "Toutes les équipes",
+      "allRoles": "Tous les rôles",
+      "allStatuses": "Tous les statuts",
+      "noUsersFound": "Aucun utilisateur trouvé"
+    },
+    "teams": {
+      "title": "Gestion des équipes",
+      "createTeam": "Créer une équipe",
+      "editTeam": "Modifier l'équipe",
+      "teamName": "Nom de l'équipe",
+      "members": "Membres",
+      "manager": "Manager"
+    },
+    "offices": {
+      "title": "Gestion des bureaux",
+      "createOffice": "Créer un bureau",
+      "editOffice": "Modifier le bureau",
+      "officeName": "Nom du bureau",
+      "city": "Ville",
+      "country": "Pays",
+      "timezone": "Fuseau horaire"
+    },
+    "workflows": {
+      "title": "Workflows d'approbation",
+      "description": "Configurez les étapes de validation des demandes de congé."
+    },
+    "leaveTypes": {
+      "title": "Types de congé",
+      "createType": "Créer un type",
+      "code": "Code",
+      "labelFr": "Libellé FR",
+      "labelEn": "Libellé EN",
+      "color": "Couleur",
+      "requiresAttachment": "Justificatif obligatoire",
+      "isActive": "Actif"
+    },
+    "holidays": {
+      "title": "Jours fériés",
+      "createHoliday": "Ajouter un jour férié",
+      "holidayName": "Nom du jour férié",
+      "year": "Année"
+    },
+    "closures": {
+      "title": "Fermetures annuelles",
+      "createClosure": "Ajouter une fermeture",
+      "closureReason": "Motif de fermeture"
+    },
+    "company": {
+      "title": "Paramètres entreprise",
+      "description": "Configurez les paramètres généraux de l'entreprise."
+    },
+    "audit": {
+      "title": "Journal d'audit",
+      "description": "Consultez l'historique des actions effectuées."
+    },
+    "delegations": {
+      "title": "Délégations",
+      "description": "Gérez les délégations de pouvoir d'approbation."
+    },
+    "notificationSettings": {
+      "title": "Paramètres de notification",
+      "description": "Configurez les notifications email."
+    },
+    "exceptionalRules": {
+      "title": "Règles exceptionnelles",
+      "description": "Gérez les règles de congé exceptionnelles."
+    }
+  },
+  "notifications": {
+    "title": "Notifications",
+    "noNotifications": "Aucune notification",
+    "markAllRead": "Tout marquer comme lu",
+    "leaveRequestReceived": "Nouvelle demande de congé",
+    "leaveRequestApproved": "Demande approuvée",
+    "leaveRequestRefused": "Demande refusée",
+    "leaveRequestReturned": "Demande renvoyée",
+    "reminderPending": "Rappel : demande en attente"
+  },
+  "errors": {
+    "generic": "Une erreur est survenue. Veuillez réessayer.",
+    "notFound": "Page non trouvée",
+    "unauthorized": "Vous n'êtes pas autorisé à accéder à cette page.",
+    "forbidden": "Accès interdit",
+    "serverError": "Erreur serveur. Veuillez réessayer plus tard.",
+    "networkError": "Erreur réseau. Vérifiez votre connexion.",
+    "validationError": "Veuillez corriger les erreurs dans le formulaire.",
+    "sessionExpired": "Votre session a expiré. Veuillez vous reconnecter.",
+    "fileTooBig": "Le fichier est trop volumineux.",
+    "invalidFileType": "Type de fichier non supporté.",
+    "loadProfile": "Impossible de charger le profil.",
+    "uploadFailed": "Échec de l'envoi",
+    "motifRequired": "Le motif est obligatoire"
+  },
+  "emails": {
+    "greeting": "Bonjour {name},",
+    "footer": "Cordialement,\nL'équipe Meridio",
+    "noReplyNotice": "Ceci est un email automatique, merci de ne pas y répondre.",
+    "goToApp": "Accéder à Meridio",
+    "twoFactor": {
+      "subject": "Meridio - Code de vérification",
+      "body": "Votre code de vérification est :",
+      "expiresIn": "Ce code expire dans 10 minutes."
+    },
+    "passwordReset": {
+      "subject": "Meridio - Réinitialisation du mot de passe",
+      "body": "Vous avez demandé la réinitialisation de votre mot de passe. Cliquez sur le lien ci-dessous :",
+      "linkLabel": "Réinitialiser mon mot de passe",
+      "expiresIn": "Ce lien expire dans 1 heure.",
+      "ignoreNotice": "Si vous n'avez pas fait cette demande, ignorez cet email."
+    },
+    "passwordChanged": {
+      "subject": "Meridio - Mot de passe modifié",
+      "body": "Votre mot de passe a été modifié avec succès.",
+      "securityNotice": "Si vous n'êtes pas à l'origine de cette modification, contactez immédiatement votre administrateur."
+    },
+    "leaveRequest": {
+      "subject": "Nouvelle demande de congé de {name}",
+      "body": "{name} a soumis une demande de congé :",
+      "type": "Type : {type}",
+      "dates": "Du {start} au {end}",
+      "action": "Veuillez traiter cette demande dans Meridio."
+    },
+    "leaveReminder": {
+      "subject": "Rappel : demande de congé en attente de {name}",
+      "body": "Une demande de congé de {name} est en attente depuis {days} jours :",
+      "action": "Veuillez traiter cette demande dès que possible."
+    },
+    "leaveApproval": {
+      "subjectApproved": "Votre demande de congé a été approuvée",
+      "subjectRefused": "Votre demande de congé a été refusée",
+      "subjectReturned": "Votre demande de congé a été renvoyée",
+      "bodyApproved": "Votre demande de congé ({type}, du {start} au {end}) a été approuvée.",
+      "bodyRefused": "Votre demande de congé ({type}, du {start} au {end}) a été refusée.",
+      "bodyReturned": "Votre demande de congé ({type}, du {start} au {end}) a été renvoyée pour modification.",
+      "commentLabel": "Commentaire"
+    },
+    "annualClosure": {
+      "subject": "Fermeture annuelle : {reason}",
+      "body": "Une fermeture annuelle a été programmée :",
+      "dates": "Du {start} au {end}"
+    }
+  },
+  "profile": {
+    "title": "Mon profil",
+    "photoUpdated": "Photo mise à jour",
+    "languageUpdated": "Langue mise à jour",
+    "office": "Bureau",
+    "team": "Équipe",
+    "noTeam": "Aucune équipe",
+    "hireDate": "Date d'embauche",
+    "balances": "Mes soldes",
+    "noBalance": "Aucun solde configuré.",
+    "roles": {
+      "EMPLOYEE": "Employé",
+      "MANAGER": "Manager",
+      "HR": "Ressources Humaines",
+      "ADMIN": "Administrateur"
+    }
+  },
+  "manager": {
+    "approvals": {
+      "title": "Approbations",
+      "description": "Gérez les demandes de congé de votre équipe",
+      "pending": "En attente",
+      "history": "Historique",
+      "approve": "Approuver",
+      "refuse": "Refuser",
+      "returnToDraft": "Renvoyer en brouillon",
+      "requestApproved": "Demande approuvée",
+      "requestRefused": "Demande refusée",
+      "requestReturned": "Demande renvoyée en brouillon",
+      "refuseTitle": "Refuser la demande",
+      "refuseDescription": "Veuillez indiquer le motif du refus.",
+      "returnTitle": "Renvoyer en brouillon",
+      "returnDescription": "Veuillez indiquer le motif du renvoi en brouillon.",
+      "noPending": "Aucune demande en attente. Tout est à jour !",
+      "noHistory": "Aucune demande traitée pour le moment.",
+      "approvalSteps": "Étapes de validation",
+      "delegateNotice": "Vous agissez en tant que délégué de {name}",
+      "failedToLoad": "Impossible de charger les approbations"
+    },
+    "calendar": {
+      "title": "Calendrier de l'équipe"
+    },
+    "delegation": {
+      "title": "Délégation de pouvoir"
+    },
+    "reports": {
+      "title": "Rapports manager"
+    }
+  },
+  "hr": {
+    "title": "Espace RH",
+    "approvals": {
+      "title": "Approbations RH"
+    },
+    "balances": {
+      "title": "Gestion des soldes"
+    },
+    "dashboard": {
+      "title": "Tableau de bord RH"
+    },
+    "reports": {
+      "title": "Rapports RH"
+    }
   }
 }

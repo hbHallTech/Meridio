@@ -2,7 +2,8 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/i18n/navigation";
+import { useLocale } from "next-intl";
 import { useNotifications } from "@/hooks/useNotifications";
 import { Bell, Check, CheckCheck, X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
@@ -21,7 +22,7 @@ const TYPE_ICONS: Record<string, { bg: string; icon: string }> = {
 export function NotificationBell() {
   const { data: session } = useSession();
   const router = useRouter();
-  const lang = (session?.user?.language ?? "fr") as "fr" | "en";
+  const lang = useLocale() as "fr" | "en";
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
 

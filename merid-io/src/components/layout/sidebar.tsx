@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { useSession, signOut } from "next-auth/react";
-import { usePathname } from "next/navigation";
-import { useTranslations } from "next-intl";
-import Link from "next/link";
+import { usePathname, Link } from "@/i18n/navigation";
+import { useTranslations, useLocale } from "next-intl";
 import type { UserRole } from "@prisma/client";
+import { LanguageSwitcher } from "@/components/ui/LanguageSwitcher";
 import {
   LayoutDashboard,
   CalendarDays,
@@ -28,7 +28,6 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
-  Globe,
   X,
   ClipboardList,
   Wallet,
@@ -55,15 +54,15 @@ export function Sidebar({
   mobileOpen?: boolean;
   onMobileClose?: () => void;
 }) {
-  const { data: session, update } = useSession();
+  const { data: session } = useSession();
   const pathname = usePathname();
+  const locale = useLocale();
   const t = useTranslations("nav");
   const tAuth = useTranslations("auth");
   const [collapsed, setCollapsed] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
 
   const userRoles = session?.user?.roles ?? [];
-  const currentLang = session?.user?.language ?? "fr";
 
   useEffect(() => {
     if (
@@ -81,12 +80,6 @@ export function Sidebar({
   function hasAnyRole(roles?: UserRole[]): boolean {
     if (!roles || roles.length === 0) return true;
     return roles.some((role) => userRoles.includes(role));
-  }
-
-  async function toggleLanguage() {
-    const newLang = currentLang === "fr" ? "en" : "fr";
-    await update({ language: newLang });
-    window.location.reload();
   }
 
   const sections: NavSection[] = [
@@ -257,24 +250,14 @@ export function Sidebar({
 
         {/* Bottom */}
         <div className="border-t border-white/10 p-3">
-          <button
-            onClick={toggleLanguage}
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-white/70 transition-colors hover:bg-white/10 hover:text-white"
-            title={collapsed ? (currentLang === "fr" ? "English" : "Français") : undefined}
-          >
-            <Globe className="h-5 w-5 shrink-0" />
-            {!collapsed && (
-              <span>{currentLang === "fr" ? "English" : "Français"}</span>
-            )}
-            {!collapsed && (
-              <span className="ml-auto rounded bg-white/10 px-1.5 py-0.5 text-[11px] font-bold uppercase text-white/50">
-                {currentLang}
-              </span>
-            )}
-          </button>
+          {!collapsed && (
+            <div className="rounded-lg px-3 py-2.5">
+              <LanguageSwitcher />
+            </div>
+          )}
 
           <button
-            onClick={() => signOut({ callbackUrl: "/login" })}
+            onClick={() => signOut({ callbackUrl: `/${locale}/login` })}
             className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-white/70 transition-colors hover:bg-red-500/20 hover:text-red-300"
             title={collapsed ? tAuth("logout") : undefined}
           >
