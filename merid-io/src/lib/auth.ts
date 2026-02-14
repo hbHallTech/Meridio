@@ -9,6 +9,33 @@ const LOCK_DURATION_MS = 15 * 60 * 1000; // 15 minutes
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
+  callbacks: {
+    ...authConfig.callbacks,
+    async jwt({ token, user, trigger, session }) {
+      if (user && token.sub) {
+        // Fetch roles from DB — authorize may not pass custom fields in NextAuth v5
+        const dbUser = await prisma.user.findUnique({
+          where: { id: token.sub },
+          select: { roles: true, officeId: true, language: true },
+        });
+        if (dbUser) {
+          token.roles = dbUser.roles;
+          token.officeId = dbUser.officeId;
+          token.language = dbUser.language;
+        }
+        token.twoFactorVerified = user.twoFactorVerified ?? !process.env.SMTP_USER;
+      }
+      if (trigger === "update" && session) {
+        if (session.twoFactorVerified !== undefined) {
+          token.twoFactorVerified = session.twoFactorVerified;
+        }
+        if (session.language !== undefined) {
+          token.language = session.language;
+        }
+      }
+      return token;
+    },
+  },
   providers: [
     Credentials({
       name: "credentials",
