@@ -32,6 +32,7 @@ import {
   ClipboardList,
   Wallet,
 } from "lucide-react";
+import { MeridioLogo, MeridioIcon } from "@/components/MeridioLogo";
 
 interface NavItem {
   href: string;
@@ -180,21 +181,15 @@ export function Sidebar({
         {/* Logo */}
         <div className="flex h-16 items-center justify-between px-4">
           {!collapsed ? (
-            <div className="flex items-center gap-4">
-              <Link href="/dashboard" className="flex items-center gap-2">
-                <div
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-sm font-bold text-white"
-                  style={{ backgroundColor: "#00BCD4" }}
-                >
-                  M
-                </div>
-                <span className="text-lg font-bold text-white">Meridio</span>
+            <div className="flex items-center gap-3">
+              <Link href="/dashboard" className="flex items-center">
+                <MeridioLogo height={24} />
               </Link>
               {companyLogo && (
                 <img
                   src={companyLogo}
                   alt="Logo"
-                  className="h-8 w-auto max-h-8 rounded object-contain"
+                  className="h-7 w-auto max-h-7 rounded object-contain"
                 />
               )}
             </div>
@@ -207,12 +202,7 @@ export function Sidebar({
                   className="h-8 w-8 rounded object-contain"
                 />
               ) : (
-                <div
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-sm font-bold text-white"
-                  style={{ backgroundColor: "#00BCD4" }}
-                >
-                  M
-                </div>
+                <MeridioIcon size={28} />
               )}
             </Link>
           )}

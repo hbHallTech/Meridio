@@ -105,6 +105,9 @@ export async function sendEmail({ to, subject, html }: SendEmailOptions) {
   });
 }
 
+// Meridio logo as base64 data URI (works in all email clients)
+const MERIDIO_LOGO_DATA_URI = `data:image/svg+xml;base64,${Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 32" fill="none"><path d="M3 20C7 20 10 8 18 8C26 8 26 26 34 26C39 26 41 18 41 18" stroke="url(#eg)" stroke-width="2.8" stroke-linecap="round" fill="none"/><circle cx="18" cy="16" r="5" fill="#00d3a7" opacity=".15"/><circle cx="18" cy="16" r="3" fill="#00d3a7"/><circle cx="18" cy="16" r="1" fill="#fff"/><text x="52" y="23" font-family="Inter,system-ui,-apple-system,sans-serif" font-size="21" font-weight="700" fill="#ffffff" letter-spacing="-.3">Meridio</text><defs><linearGradient id="eg" x1="3" y1="16" x2="41" y2="16" gradientUnits="userSpaceOnUse"><stop stop-color="#2c90ff"/><stop offset="1" stop-color="#00d3a7"/></linearGradient></defs></svg>`).toString("base64")}`;
+
 function emailWrapper(content: string): string {
   return `
     <!DOCTYPE html>
@@ -112,9 +115,9 @@ function emailWrapper(content: string): string {
     <head><meta charset="utf-8"></head>
     <body style="font-family: 'Segoe UI', Arial, sans-serif; background-color: #f4f6f8; margin: 0; padding: 20px;">
       <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-        <div style="background-color: #1B3A5C; padding: 24px; text-align: center;">
-          <h1 style="color: white; margin: 0; font-size: 24px;">Halley-Technologies</h1>
-          <p style="color: #00BCD4; margin: 4px 0 0; font-size: 14px;">Meridio - Gestion des congés</p>
+        <div style="background-color: #0b2540; padding: 28px 24px; text-align: center;">
+          <img src="${MERIDIO_LOGO_DATA_URI}" alt="Meridio" width="180" height="24" style="display: inline-block;" />
+          <p style="color: rgba(255,255,255,0.5); margin: 8px 0 0; font-size: 12px;">Gestion des congés &amp; notes de frais</p>
         </div>
         <div style="padding: 32px 24px;">
           ${content}
