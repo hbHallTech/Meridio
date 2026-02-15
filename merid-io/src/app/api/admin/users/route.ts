@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { sendNewAccountEmail, sendAdminPasswordChangedEmail } from "@/lib/email";
+import {
+  buildPasswordHistory,
+  calculatePasswordExpiresAt,
+} from "@/lib/password";
 
 export async function GET() {
   const session = await auth();
@@ -19,6 +24,7 @@ export async function GET() {
       isActive: true,
       hireDate: true,
       language: true,
+      forcePasswordChange: true,
       createdAt: true,
       office: { select: { id: true, name: true } },
       team: { select: { id: true, name: true } },
@@ -37,19 +43,32 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { firstName, lastName, email, password, roles, officeId, teamId, hireDate, isActive } = body;
+    const {
+      firstName,
+      lastName,
+      email,
+      password,
+      roles,
+      officeId,
+      teamId,
+      hireDate,
+      isActive,
+      forcePasswordChange,
+      sendNotification,
+    } = body;
 
     if (!firstName || !lastName || !email || !password || !roles || !officeId || !hireDate) {
       return NextResponse.json({ error: "Champs obligatoires manquants" }, { status: 400 });
     }
 
-    // Check if email already exists
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
       return NextResponse.json({ error: "Un utilisateur avec cet email existe déjà" }, { status: 409 });
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
+    const passwordHistory = await buildPasswordHistory(passwordHash, null);
+    const passwordExpiresAt = await calculatePasswordExpiresAt();
 
     const user = await prisma.user.create({
       data: {
@@ -62,6 +81,10 @@ export async function POST(request: Request) {
         teamId: teamId || null,
         hireDate: new Date(hireDate),
         isActive: isActive ?? true,
+        forcePasswordChange: forcePasswordChange ?? true,
+        passwordExpiresAt,
+        lastPasswordChangeAt: new Date(),
+        passwordHistory,
       },
       select: {
         id: true,
@@ -72,13 +95,13 @@ export async function POST(request: Request) {
         isActive: true,
         hireDate: true,
         language: true,
+        forcePasswordChange: true,
         createdAt: true,
         office: { select: { id: true, name: true } },
         team: { select: { id: true, name: true } },
       },
     });
 
-    // Audit log
     await prisma.auditLog.create({
       data: {
         userId: session.user.id!,
@@ -88,6 +111,14 @@ export async function POST(request: Request) {
         newValue: { firstName, lastName, email, roles, officeId, teamId, hireDate, isActive: isActive ?? true },
       },
     });
+
+    if (sendNotification) {
+      try {
+        await sendNewAccountEmail(email, firstName, password);
+      } catch (e) {
+        console.error("Failed to send new account email:", e);
+      }
+    }
 
     return NextResponse.json(user, { status: 201 });
   } catch (error) {
@@ -104,7 +135,20 @@ export async function PATCH(request: Request) {
 
   try {
     const body = await request.json();
-    const { id, firstName, lastName, email, password, roles, officeId, teamId, hireDate, isActive } = body;
+    const {
+      id,
+      firstName,
+      lastName,
+      email,
+      password,
+      roles,
+      officeId,
+      teamId,
+      hireDate,
+      isActive,
+      forcePasswordChange,
+      sendNotification,
+    } = body;
 
     if (!id) {
       return NextResponse.json({ error: "L'identifiant de l'utilisateur est requis" }, { status: 400 });
@@ -115,7 +159,6 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 404 });
     }
 
-    // Check email uniqueness if changing email
     if (email && email !== existingUser.email) {
       const emailTaken = await prisma.user.findUnique({ where: { email } });
       if (emailTaken) {
@@ -132,11 +175,23 @@ export async function PATCH(request: Request) {
     if (teamId !== undefined) updateData.teamId = teamId || null;
     if (hireDate !== undefined) updateData.hireDate = new Date(hireDate);
     if (isActive !== undefined) updateData.isActive = isActive;
+    if (forcePasswordChange !== undefined) updateData.forcePasswordChange = forcePasswordChange;
 
-    // Only hash and update password if provided and non-empty
+    let passwordChanged = false;
     if (password && password.trim().length > 0) {
-      updateData.passwordHash = await bcrypt.hash(password, 12);
+      const newHash = await bcrypt.hash(password, 12);
+      const existingHistory =
+        (existingUser.passwordHistory as string[] | null) ?? [];
+      updateData.passwordHash = newHash;
       updateData.passwordChangedAt = new Date();
+      updateData.lastPasswordChangeAt = new Date();
+      updateData.passwordExpiresAt = await calculatePasswordExpiresAt();
+      updateData.forcePasswordChange = forcePasswordChange ?? true;
+      updateData.passwordHistory = await buildPasswordHistory(
+        newHash,
+        existingHistory
+      );
+      passwordChanged = true;
     }
 
     const oldValue = {
@@ -162,13 +217,13 @@ export async function PATCH(request: Request) {
         isActive: true,
         hireDate: true,
         language: true,
+        forcePasswordChange: true,
         createdAt: true,
         office: { select: { id: true, name: true } },
         team: { select: { id: true, name: true } },
       },
     });
 
-    // Audit log
     await prisma.auditLog.create({
       data: {
         userId: session.user.id!,
@@ -179,6 +234,14 @@ export async function PATCH(request: Request) {
         newValue: JSON.parse(JSON.stringify(updateData)),
       },
     });
+
+    if (passwordChanged && sendNotification && password) {
+      try {
+        await sendAdminPasswordChangedEmail(user.email, user.firstName, password);
+      } catch (e) {
+        console.error("Failed to send password changed email:", e);
+      }
+    }
 
     return NextResponse.json(user);
   } catch (error) {
@@ -207,17 +270,14 @@ export async function DELETE(request: Request) {
     }
 
     if (hard) {
-      // Hard delete - remove the user entirely
       await prisma.user.delete({ where: { id } });
     } else {
-      // Soft delete - set isActive to false
       await prisma.user.update({
         where: { id },
         data: { isActive: false },
       });
     }
 
-    // Audit log
     await prisma.auditLog.create({
       data: {
         userId: session.user.id!,

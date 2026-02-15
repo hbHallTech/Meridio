@@ -2,10 +2,12 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useSession } from "next-auth/react";
+import { usePathname } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { changePasswordSchema, type ChangePasswordInput } from "@/lib/validators";
 import { useToast } from "@/components/ui/toast";
+import { useTheme } from "next-themes";
 import {
   Loader2,
   Camera,
@@ -21,6 +23,10 @@ import {
   Check,
   X,
   Shield,
+  Sun,
+  Moon,
+  Monitor,
+  Bell,
 } from "lucide-react";
 
 // ─── Types ───
@@ -67,6 +73,19 @@ const BALANCE_LABELS: Record<string, { fr: string; en: string; color: string }> 
   OFFERED: { fr: "Congés offerts", en: "Offered Days", color: "#00BCD4" },
 };
 
+const NOTIF_TYPES = [
+  { type: "NEW_REQUEST", fr: "Nouvelle demande de congé", en: "New leave request" },
+  { type: "APPROVED", fr: "Demande approuvée", en: "Request approved" },
+  { type: "REFUSED", fr: "Demande refusée", en: "Request refused" },
+  { type: "RETURNED", fr: "Demande renvoyée", en: "Request returned" },
+  { type: "REMINDER", fr: "Rappel de traitement", en: "Processing reminder" },
+  { type: "PASSWORD_EXPIRING", fr: "Expiration mot de passe", en: "Password expiring" },
+  { type: "PASSWORD_CHANGED", fr: "Mot de passe modifié", en: "Password changed" },
+  { type: "NEW_LOGIN", fr: "Nouvelle connexion", en: "New login detected" },
+  { type: "ACCOUNT_LOCKED", fr: "Compte verrouillé", en: "Account locked" },
+  { type: "CLOSURE", fr: "Fermeture entreprise", en: "Company closure" },
+];
+
 const ROLE_LABELS: Record<string, { fr: string; en: string }> = {
   EMPLOYEE: { fr: "Employé", en: "Employee" },
   MANAGER: { fr: "Manager", en: "Manager" },
@@ -82,7 +101,7 @@ function getPasswordChecks(password: string) {
     { key: "upper", label_fr: "1 majuscule", label_en: "1 uppercase letter", ok: /[A-Z]/.test(password) },
     { key: "lower", label_fr: "1 minuscule", label_en: "1 lowercase letter", ok: /[a-z]/.test(password) },
     { key: "digit", label_fr: "1 chiffre", label_en: "1 digit", ok: /\d/.test(password) },
-    { key: "special", label_fr: "1 caractère spécial (@$!%*?&)", label_en: "1 special character (@$!%*?&)", ok: /[@$!%*?&]/.test(password) },
+    { key: "special", label_fr: "1 caractère spécial", label_en: "1 special character", ok: /[^A-Za-z\d\s]/.test(password) },
   ];
 }
 
@@ -99,6 +118,8 @@ function formatDate(dateStr: string, lang: string): string {
 export default function ProfilePage() {
   const { data: session, update: updateSession } = useSession();
   const { addToast } = useToast();
+  const pathname = usePathname();
+  const { theme, setTheme } = useTheme();
   const lang = session?.user?.language ?? "fr";
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -109,6 +130,9 @@ export default function ProfilePage() {
   const [pwdSubmitting, setPwdSubmitting] = useState(false);
   const [showCurrentPwd, setShowCurrentPwd] = useState(false);
   const [showNewPwd, setShowNewPwd] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [notifPrefs, setNotifPrefs] = useState<Record<string, boolean>>({});
+  const [notifSaving, setNotifSaving] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -126,9 +150,14 @@ export default function ProfilePage() {
   const watchNewPwd = watch("newPassword");
   const pwdChecks = getPasswordChecks(watchNewPwd || "");
 
-  // Fetch profile
+  // Wait for client mount (for next-themes)
   useEffect(() => {
-    fetch("/api/profile")
+    setMounted(true);
+  }, []);
+
+  // Fetch profile - refetch on pathname change
+  useEffect(() => {
+    fetch("/api/profile", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (d) {
@@ -138,7 +167,20 @@ export default function ProfilePage() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+
+    // Fetch notification preferences
+    fetch("/api/profile/notifications", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((prefs: { type: string; enabled: boolean }[]) => {
+        const map: Record<string, boolean> = {};
+        for (const nt of NOTIF_TYPES) {
+          const found = prefs.find((p) => p.type === nt.type);
+          map[nt.type] = found ? found.enabled : true;
+        }
+        setNotifPrefs(map);
+      })
+      .catch(() => {});
+  }, [pathname]);
 
   // Avatar upload
   const handleAvatarUpload = async (file: File) => {
@@ -182,6 +224,20 @@ export default function ProfilePage() {
     }
   };
 
+  // Theme change
+  const handleThemeChange = async (newTheme: string) => {
+    setTheme(newTheme);
+    try {
+      await fetch("/api/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ theme: newTheme }),
+      });
+    } catch {
+      // Theme still applied locally via next-themes
+    }
+  };
+
   // Password change
   const onPasswordSubmit = async (values: ChangePasswordInput) => {
     setPwdSubmitting(true);
@@ -211,6 +267,26 @@ export default function ProfilePage() {
     }
   };
 
+  // Save notification preferences
+  const handleNotifToggle = async (type: string, enabled: boolean) => {
+    const updated = { ...notifPrefs, [type]: enabled };
+    setNotifPrefs(updated);
+    setNotifSaving(true);
+    try {
+      await fetch("/api/profile/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ settings: [{ type, enabled }] }),
+      });
+    } catch {
+      // Revert on error
+      setNotifPrefs(notifPrefs);
+      addToast({ type: "error", title: lang === "en" ? "Error" : "Erreur" });
+    } finally {
+      setNotifSaving(false);
+    }
+  };
+
   // ─── Render ───
 
   if (loading) {
@@ -228,6 +304,12 @@ export default function ProfilePage() {
       </div>
     );
   }
+
+  const themeOptions = [
+    { value: "light", label_fr: "Clair", label_en: "Light", icon: Sun },
+    { value: "dark", label_fr: "Sombre", label_en: "Dark", icon: Moon },
+    { value: "system", label_fr: "Système", label_en: "System", icon: Monitor },
+  ];
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -360,6 +442,38 @@ export default function ProfilePage() {
               {langSaving && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
             </div>
           </div>
+
+          {/* Theme selector */}
+          {mounted && (
+            <div className="flex items-center justify-between px-6 py-4">
+              <div className="flex items-center gap-3">
+                <Sun className="h-4 w-4 text-gray-400" />
+                <span className="text-sm text-gray-500">
+                  {lang === "en" ? "Theme" : "Thème"}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                {themeOptions.map((opt) => {
+                  const Icon = opt.icon;
+                  const active = theme === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      onClick={() => handleThemeChange(opt.value)}
+                      className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-all ${
+                        active
+                          ? "bg-[#1B3A5C] text-white"
+                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      }`}
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                      {lang === "en" ? opt.label_en : opt.label_fr}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -544,6 +658,40 @@ export default function ProfilePage() {
             })}
           </div>
         )}
+      </div>
+      {/* ─── Notification preferences section ─── */}
+      <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="flex items-center gap-2">
+          <Bell className="h-5 w-5 text-gray-500" />
+          <h2 className="text-lg font-semibold text-gray-900">
+            {lang === "en" ? "My Notifications" : "Mes notifications"}
+          </h2>
+          {notifSaving && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
+        </div>
+        <p className="mt-1 text-sm text-gray-500">
+          {lang === "en"
+            ? "Choose which notifications you want to receive."
+            : "Choisissez les notifications que vous souhaitez recevoir."}
+        </p>
+
+        <div className="mt-4 space-y-1">
+          {NOTIF_TYPES.map((nt) => (
+            <div key={nt.type} className="flex items-center justify-between py-2">
+              <span className="text-sm text-gray-700">
+                {lang === "en" ? nt.en : nt.fr}
+              </span>
+              <label className="relative inline-flex cursor-pointer items-center">
+                <input
+                  type="checkbox"
+                  checked={notifPrefs[nt.type] ?? true}
+                  onChange={(e) => handleNotifToggle(nt.type, e.target.checked)}
+                  className="peer sr-only"
+                />
+                <div className="peer h-6 w-11 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-[#00BCD4] peer-checked:after:translate-x-full peer-checked:after:border-white" />
+              </label>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

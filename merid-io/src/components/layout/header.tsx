@@ -44,6 +44,7 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const pathname = usePathname();
   const t = useTranslations();
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -55,6 +56,18 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  // Fetch profile picture
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    fetch("/api/profile")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.user?.profilePictureUrl) setAvatarUrl(data.user.profilePictureUrl);
+        else setAvatarUrl(null);
+      })
+      .catch(() => {});
+  }, [session?.user?.id, pathname]);
 
   // Build breadcrumb from pathname
   const segments = pathname.split("/").filter(Boolean);
@@ -112,12 +125,20 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
             <p className="text-sm font-medium text-gray-900">{userName}</p>
             <p className="text-xs text-gray-500">{userEmail}</p>
           </div>
-          <div
-            className="flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold text-white"
-            style={{ backgroundColor: "#1B3A5C" }}
-          >
-            {initials}
-          </div>
+          {avatarUrl ? (
+            <img
+              src={avatarUrl}
+              alt={userName}
+              className="h-9 w-9 rounded-full object-cover"
+            />
+          ) : (
+            <div
+              className="flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold text-white"
+              style={{ backgroundColor: "#1B3A5C" }}
+            >
+              {initials}
+            </div>
+          )}
         </button>
 
         {dropdownOpen && (

@@ -54,6 +54,7 @@ export const authConfig: NextAuthConfig = {
         "/forgot-password",
         "/reset-password",
         "/api/auth",
+        "/api/cron",
       ];
       const isPublicPath = publicPaths.some((path) =>
         pathname.startsWith(path)
@@ -74,6 +75,19 @@ export const authConfig: NextAuthConfig = {
       const twoFactorVerified = auth?.user?.twoFactorVerified;
       if (!twoFactorVerified && pathname !== "/login/verify") {
         return Response.redirect(new URL("/login/verify", nextUrl.origin));
+      }
+
+      // Check forcePasswordChange — redirect to change-password page
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const forcePasswordChange = (auth?.user as any)?.forcePasswordChange;
+      if (
+        forcePasswordChange &&
+        pathname !== "/auth/change-password" &&
+        pathname !== "/api/profile/password"
+      ) {
+        return Response.redirect(
+          new URL("/auth/change-password", nextUrl.origin)
+        );
       }
 
       return true;

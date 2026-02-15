@@ -1,18 +1,85 @@
 import nodemailer from "nodemailer";
+import type { Transporter } from "nodemailer";
+import { prisma } from "@/lib/prisma";
+import { decrypt } from "@/lib/crypto";
 
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || "smtp.office365.com",
-  port: Number(process.env.SMTP_PORT) || 587,
-  secure: false,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASSWORD,
-  },
-  tls: {
-    ciphers: "SSLv3",
-    rejectUnauthorized: false,
-  },
-});
+// Cached transporter (rebuilt when DB config changes)
+let _transporter: Transporter | null = null;
+let _lastConfigHash = "";
+
+async function getSmtpConfig() {
+  try {
+    const company = await prisma.company.findFirst({
+      select: {
+        smtpHost: true,
+        smtpPort: true,
+        smtpSecure: true,
+        smtpUser: true,
+        smtpPassEncrypted: true,
+        smtpFrom: true,
+      },
+    });
+
+    if (company?.smtpHost && company?.smtpUser) {
+      let smtpPass = "";
+      if (company.smtpPassEncrypted) {
+        try {
+          smtpPass = decrypt(company.smtpPassEncrypted);
+        } catch {
+          smtpPass = company.smtpPassEncrypted;
+        }
+      }
+      return {
+        host: company.smtpHost,
+        port: company.smtpPort || 587,
+        secure: company.smtpSecure,
+        user: company.smtpUser,
+        pass: smtpPass,
+        from: company.smtpFrom || company.smtpUser,
+      };
+    }
+  } catch {
+    // DB not available — fall through to env
+  }
+
+  // Fallback to .env
+  return {
+    host: process.env.SMTP_HOST || "smtp.office365.com",
+    port: Number(process.env.SMTP_PORT) || 587,
+    secure: (Number(process.env.SMTP_PORT) || 587) === 465,
+    user: process.env.SMTP_USER || "",
+    pass: process.env.SMTP_PASS || "",
+    from: process.env.SMTP_FROM || process.env.SMTP_USER || "",
+  };
+}
+
+async function getTransporter(): Promise<Transporter> {
+  const config = await getSmtpConfig();
+  const configHash = `${config.host}:${config.port}:${config.user}:${config.secure}`;
+
+  if (_transporter && configHash === _lastConfigHash) {
+    return _transporter;
+  }
+
+  _transporter = nodemailer.createTransport({
+    host: config.host,
+    port: config.port,
+    secure: config.secure || config.port === 465,
+    auth: {
+      user: config.user,
+      pass: config.pass,
+    },
+    ...(config.port !== 465 && {
+      tls: {
+        ciphers: "SSLv3",
+        rejectUnauthorized: false,
+      },
+    }),
+  });
+
+  _lastConfigHash = configHash;
+  return _transporter;
+}
 
 interface SendEmailOptions {
   to: string;
@@ -21,13 +88,17 @@ interface SendEmailOptions {
 }
 
 export async function sendEmail({ to, subject, html }: SendEmailOptions) {
-  if (!process.env.SMTP_USER) {
+  const config = await getSmtpConfig();
+
+  if (!config.user) {
     console.log(`[EMAIL SKIP] No SMTP configured. To: ${to}, Subject: ${subject}`);
     return;
   }
 
+  const transporter = await getTransporter();
+
   await transporter.sendMail({
-    from: process.env.SMTP_FROM || process.env.SMTP_USER,
+    from: config.from,
     to,
     subject,
     html,
@@ -112,6 +183,57 @@ export async function sendPasswordChangedEmail(to: string, firstName: string) {
   });
 }
 
+export async function sendNewAccountEmail(
+  to: string,
+  firstName: string,
+  tempPassword: string
+) {
+  const loginUrl = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/login`;
+
+  await sendEmail({
+    to,
+    subject: "Meridio - Votre compte a été créé",
+    html: emailWrapper(`
+      <h2 style="color: #1B3A5C; margin-top: 0;">Bienvenue ${firstName},</h2>
+      <p>Votre compte Meridio a été créé par un administrateur.</p>
+      <p>Voici vos identifiants de connexion :</p>
+      <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+        <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">Email</td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600;">${to}</td></tr>
+        <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">Mot de passe</td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600; font-family: monospace;">${tempPassword}</td></tr>
+      </table>
+      <p style="color: #EF4444; font-weight: 600;">Vous devrez changer votre mot de passe lors de votre première connexion.</p>
+      <div style="text-align: center; margin: 24px 0;">
+        <a href="${loginUrl}" style="display: inline-block; background-color: #1B3A5C; color: white; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: 600;">Se connecter</a>
+      </div>
+    `),
+  });
+}
+
+export async function sendAdminPasswordChangedEmail(
+  to: string,
+  firstName: string,
+  tempPassword: string
+) {
+  const loginUrl = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/login`;
+
+  await sendEmail({
+    to,
+    subject: "Meridio - Votre mot de passe a été réinitialisé",
+    html: emailWrapper(`
+      <h2 style="color: #1B3A5C; margin-top: 0;">Bonjour ${firstName},</h2>
+      <p>Votre mot de passe Meridio a été réinitialisé par un administrateur.</p>
+      <p>Voici votre nouveau mot de passe temporaire :</p>
+      <div style="text-align: center; margin: 24px 0;">
+        <span style="display: inline-block; background-color: #f0f4f8; border: 2px solid #1B3A5C; border-radius: 8px; padding: 12px 24px; font-size: 18px; font-weight: bold; font-family: monospace; color: #1B3A5C;">${tempPassword}</span>
+      </div>
+      <p style="color: #EF4444; font-weight: 600;">Vous devrez changer votre mot de passe lors de votre prochaine connexion.</p>
+      <div style="text-align: center; margin: 24px 0;">
+        <a href="${loginUrl}" style="display: inline-block; background-color: #1B3A5C; color: white; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: 600;">Se connecter</a>
+      </div>
+    `),
+  });
+}
+
 export async function sendLeaveRequestNotification(
   managerEmail: string,
   employeeName: string,
@@ -132,6 +254,94 @@ export async function sendLeaveRequestNotification(
       </table>
       <div style="text-align: center; margin: 24px 0;">
         <a href="${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/manager/approvals" style="display: inline-block; background-color: #00BCD4; color: white; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: 600;">Voir la demande</a>
+      </div>
+    `),
+  });
+}
+
+// ─── Security Email Templates ───────────────────────────────────────────────
+
+export async function sendNewDeviceLoginEmail(
+  to: string,
+  firstName: string,
+  ip: string,
+  userAgent: string
+) {
+  await sendEmail({
+    to,
+    subject: "Meridio - Nouvelle connexion detectee",
+    html: emailWrapper(`
+      <h2 style="color: #1B3A5C; margin-top: 0;">Bonjour ${firstName},</h2>
+      <p>Une connexion a votre compte Meridio a ete detectee depuis un nouvel appareil :</p>
+      <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+        <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">Adresse IP</td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600;">${ip}</td></tr>
+        <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">Navigateur</td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600; font-size: 12px;">${userAgent.substring(0, 100)}</td></tr>
+        <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">Date</td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600;">${new Date().toLocaleString("fr-CH")}</td></tr>
+      </table>
+      <p style="color: #EF4444; font-weight: 600;">Si vous n'etes pas a l'origine de cette connexion, changez immediatement votre mot de passe et contactez votre administrateur.</p>
+    `),
+  });
+}
+
+export async function sendAccountLockedEmail(
+  to: string,
+  adminFirstName: string,
+  userFullName: string,
+  userEmail: string
+) {
+  await sendEmail({
+    to,
+    subject: `Meridio - Compte verrouille : ${userFullName}`,
+    html: emailWrapper(`
+      <h2 style="color: #1B3A5C; margin-top: 0;">Bonjour ${adminFirstName},</h2>
+      <p>Le compte de <strong>${userFullName}</strong> (${userEmail}) a ete verrouille suite a 5 tentatives de connexion echouees.</p>
+      <p>Le compte sera automatiquement deverrouille dans <strong>15 minutes</strong>.</p>
+      <p style="color: #6b7280;">Si cette activite est suspecte, verifiez l'integrite du compte.</p>
+    `),
+  });
+}
+
+export async function sendPasswordExpiringSoonEmail(
+  to: string,
+  firstName: string,
+  daysLeft: number
+) {
+  const changeUrl = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/profile`;
+
+  await sendEmail({
+    to,
+    subject: "Meridio - Votre mot de passe expire bientot",
+    html: emailWrapper(`
+      <h2 style="color: #1B3A5C; margin-top: 0;">Bonjour ${firstName},</h2>
+      <p>Votre mot de passe Meridio expirera dans <strong>${daysLeft} jour(s)</strong>.</p>
+      <p>Veuillez le changer avant son expiration pour eviter une reinitialisation automatique.</p>
+      <div style="text-align: center; margin: 24px 0;">
+        <a href="${changeUrl}" style="display: inline-block; background-color: #1B3A5C; color: white; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: 600;">Changer mon mot de passe</a>
+      </div>
+    `),
+  });
+}
+
+export async function sendPasswordExpiredResetEmail(
+  to: string,
+  firstName: string,
+  tempPassword: string
+) {
+  const loginUrl = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/login`;
+
+  await sendEmail({
+    to,
+    subject: "Meridio - Mot de passe expire et reinitialise",
+    html: emailWrapper(`
+      <h2 style="color: #1B3A5C; margin-top: 0;">Bonjour ${firstName},</h2>
+      <p>Votre mot de passe Meridio a expire et a ete reinitialise automatiquement.</p>
+      <p>Voici votre nouveau mot de passe temporaire :</p>
+      <div style="text-align: center; margin: 24px 0;">
+        <span style="display: inline-block; background-color: #f0f4f8; border: 2px solid #1B3A5C; border-radius: 8px; padding: 12px 24px; font-size: 18px; font-weight: bold; font-family: monospace; color: #1B3A5C;">${tempPassword}</span>
+      </div>
+      <p style="color: #EF4444; font-weight: 600;">Vous devrez changer votre mot de passe lors de votre prochaine connexion.</p>
+      <div style="text-align: center; margin: 24px 0;">
+        <a href="${loginUrl}" style="display: inline-block; background-color: #1B3A5C; color: white; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: 600;">Se connecter</a>
       </div>
     `),
   });

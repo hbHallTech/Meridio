@@ -3,6 +3,12 @@ import createNextIntlPlugin from "next-intl/plugin";
 
 const withNextIntl = createNextIntlPlugin("./src/lib/i18n.ts");
 
+// CORS: Allow the main domain + Vercel preview deployments
+const allowedOrigins = [
+  process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+  "https://*.vercel.app",
+].join(", ");
+
 const nextConfig: NextConfig = {
   serverExternalPackages: ["bcryptjs"],
   async headers() {
@@ -34,6 +40,10 @@ const nextConfig: NextConfig = {
             key: "Permissions-Policy",
             value: "camera=(), microphone=(), geolocation=()",
           },
+          {
+            key: "X-DNS-Prefetch-Control",
+            value: "on",
+          },
         ],
       },
       {
@@ -42,6 +52,22 @@ const nextConfig: NextConfig = {
           {
             key: "Cache-Control",
             value: "no-store, max-age=0",
+          },
+          {
+            key: "Access-Control-Allow-Origin",
+            value: allowedOrigins,
+          },
+          {
+            key: "Access-Control-Allow-Methods",
+            value: "GET, POST, PATCH, DELETE, OPTIONS",
+          },
+          {
+            key: "Access-Control-Allow-Headers",
+            value: "Content-Type, Authorization",
+          },
+          {
+            key: "Access-Control-Max-Age",
+            value: "86400",
           },
         ],
       },

@@ -57,13 +57,88 @@ enum ApprovalAction {
 // ============================================================
 
 model Company {
-  id          String   @id @default(cuid())
-  name        String
-  logoUrl     String?
+  id                String   @id @default(cuid())
+  name              String
+  logoUrl           String?
+  websiteUrl        String?
+
+  // ── Informations enrichies ──
+  legalForm         String?  // SA, SARL, Sàrl, Association, etc.
+  contactLastName   String?
+  contactFirstName  String?
+  address           String?
+  addressComplement String?
+  postalCode        String?
+  city              String?
+  country           String   @default("CH")
+  email             String?
+  phone             String?
+  mobile            String?
+  fax               String?
+  facebook          String?
+  twitter           String?
+  skype             String?
+
+  // ── SMTP Configuration ──
+  smtpHost          String?
+  smtpPort          Int?
+  smtpSecure        Boolean  @default(false)
+  smtpUser          String?
+  smtpPassEncrypted String?  // AES-256-GCM encrypted
+  smtpFrom          String?
+
+  // ── Password Policy ──
+  pwdExpirationEnabled  Boolean @default(true)
+  pwdMaxAgeDays         Int     @default(90)
+  pwdExpiryAlertDays    Int     @default(5)
+  pwdMinLength          Int     @default(12)
+  pwdRequireLowercase   Boolean @default(true)
+  pwdRequireUppercase   Boolean @default(true)
+  pwdRequireDigit       Boolean @default(true)
+  pwdRequireSpecial     Boolean @default(true)
+  pwdHistoryCount       Int     @default(5)
+  pwdForceChangeOnFirst Boolean @default(true)
+  pwdCheckDictionary    Boolean @default(false)
+
+  // ── Advanced Settings ──
+  enforce2FA            Boolean @default(false)
+  inactivityTimeoutMin  Int     @default(30)
+  auditRetentionDays    Int     @default(365)
+  trialModeEnabled      Boolean @default(false)
+  emailLogoUrl          String?
+  privacyPolicyUrl      String?
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   offices     Office[]
+  notificationSettings CompanyNotificationSetting[]
+}
+
+model CompanyNotificationSetting {
+  id          String   @id @default(cuid())
+  companyId   String
+  type        String   // "NEW_REQUEST", "APPROVED", "REFUSED", "RETURNED", "REMINDER", "PASSWORD_EXPIRING", "NEW_LOGIN", "ACCOUNT_LOCKED", "PASSWORD_CHANGED", "CLOSURE"
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company     Company  @relation(fields: [companyId], references: [id])
+
+  @@unique([companyId, type])
+}
+
+model UserNotificationPref {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   // Same types as CompanyNotificationSetting
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, type])
 }
 
 model Office {
@@ -117,6 +192,12 @@ model User {
   lockedUntil       DateTime?
   resetPasswordToken String?
   resetPasswordExpiry DateTime?
+  forcePasswordChange Boolean  @default(false)
+  passwordExpiresAt   DateTime?
+  lastPasswordChangeAt DateTime @default(now())
+  passwordHistory     Json?    // Array of last 3 bcrypt hashes
+  lastLoginDevice     Json?    // { ip, userAgent, lastSeen }
+  theme             String    @default("system") // "light" | "dark" | "system"
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
@@ -130,6 +211,7 @@ model User {
   delegationsTo     Delegation[] @relation("DelegationTo")
   auditLogs         AuditLog[]
   notifications     Notification[]
+  notificationPrefs UserNotificationPref[]
 }
 
 model Team {
@@ -143,6 +225,7 @@ model Team {
   manager    User     @relation("TeamManager", fields: [managerId], references: [id])
   office     Office   @relation(fields: [officeId], references: [id])
   members    User[]   @relation("TeamMembers")
+  workflows  WorkflowConfig[] @relation("WorkflowTeams")
 }
 
 model Delegation {
@@ -203,14 +286,15 @@ model ExceptionalLeaveRule {
 
 model WorkflowConfig {
   id         String       @id @default(cuid())
-  officeId   String
+  officeId   String?
   mode       WorkflowMode @default(SEQUENTIAL)
   isActive   Boolean      @default(true)
   createdAt  DateTime     @default(now())
   updatedAt  DateTime     @updatedAt
 
-  office     Office       @relation(fields: [officeId], references: [id])
+  office     Office?      @relation(fields: [officeId], references: [id])
   steps      WorkflowStep[]
+  teams      Team[]       @relation("WorkflowTeams")
 }
 
 model WorkflowStep {
