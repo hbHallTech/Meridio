@@ -164,7 +164,7 @@ export async function POST(req: Request) {
   const stream = createUIMessageStream({
     execute: async ({ writer }) => {
       const result = streamText({
-        model: xai("grok-2-1212"),
+        model: xai("grok-3"),
         system: systemPrompt,
         messages: modelMessages,
         tools,
