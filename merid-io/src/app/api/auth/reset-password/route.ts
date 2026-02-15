@@ -7,9 +7,13 @@ import {
   calculatePasswordExpiresAt,
 } from "@/lib/password";
 import { createAuditLog } from "@/lib/notifications";
+import { getRequestIp } from "@/lib/rate-limit";
 import bcrypt from "bcryptjs";
 
 export async function POST(request: NextRequest) {
+  const ip = getRequestIp(request.headers);
+  const userAgent = request.headers.get("user-agent") ?? "unknown";
+
   const body = await request.json();
   const parsed = resetPasswordSchema.safeParse(body);
 
@@ -71,7 +75,8 @@ export async function POST(request: NextRequest) {
     action: "PASSWORD_RESET",
     entityType: "User",
     entityId: user.id,
-    newValue: { method: "reset_token" },
+    ipAddress: ip,
+    newValue: { method: "reset_token", userAgent },
   }).catch(() => {});
 
   return NextResponse.json({
