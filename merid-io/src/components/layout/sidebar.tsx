@@ -183,7 +183,7 @@ export function Sidebar({
           {!collapsed ? (
             <div className="flex items-center gap-3">
               <Link href="/dashboard" className="flex items-center">
-                <MeridioLogo height={24} />
+                <MeridioLogo height={26} />
               </Link>
               {companyLogo && (
                 <img

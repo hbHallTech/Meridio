@@ -141,10 +141,7 @@ export function MeridioLoginStory() {
         {/* Header: brand + chips */}
         <header className="mls-top">
           <div className="mls-brand">
-            <MeridioLogo height={30} />
-            <div className="mls-brand-sub">
-              Gestion des congés &amp; notes de frais
-            </div>
+            <MeridioLogo height={38} />
           </div>
           <div className="mls-chips" key={active}>
             <span className="mls-chip">{scene.roleChip}</span>
@@ -315,12 +312,7 @@ export function MeridioLoginStory() {
           gap: 18px;
         }
         .mls-brand {
-          display: flex; flex-direction: column; gap: 4px; min-width: 0;
-        }
-        .mls-brand-sub {
-          font-size: 12px; opacity: 0.55;
-          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-          max-width: 46vw; padding-left: 2px;
+          display: flex; align-items: center; min-width: 0;
         }
         .mls-chips {
           display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end;
