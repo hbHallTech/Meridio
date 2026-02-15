@@ -11,10 +11,17 @@ export default function LoginPage() {
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
 
+  const reason = searchParams.get("reason");
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [info, setInfo] = useState(
+    reason === "inactivity"
+      ? "Vous avez ete deconnecte pour inactivite."
+      : ""
+  );
   const [isLoading, setIsLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -37,6 +44,11 @@ export default function LoginPage() {
           const minutes = err.split(":")[1] || "15";
           setError(
             `Compte verrouillé suite à trop de tentatives. Réessayez dans ${minutes} min.`
+          );
+        } else if (err.includes("PASSWORD_EXPIRED_RESET")) {
+          setError("");
+          setInfo(
+            "Votre mot de passe a expire et a ete reinitialise. Un email contenant votre nouveau mot de passe temporaire vous a ete envoye."
           );
         } else if (err.includes("INVALID_CREDENTIALS")) {
           const remaining = err.split(":")[1];
@@ -90,6 +102,12 @@ export default function LoginPage() {
             Accédez à votre espace de gestion des congés
           </p>
         </div>
+
+        {info && (
+          <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-700">
+            {info}
+          </div>
+        )}
 
         {error && (
           <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
