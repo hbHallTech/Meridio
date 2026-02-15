@@ -31,7 +31,19 @@
     "signIn": "Sign in",
     "twoFactor": "Two-factor verification",
     "enterCode": "Enter verification code",
-    "invalidCredentials": "Invalid credentials"
+    "invalidCredentials": "Invalid credentials",
+    "accountLocked": "Account temporarily locked. Try again in {minutes} min.",
+    "passwordExpired": "Your password has expired and was reset. A temporary password was sent to your email.",
+    "forceChangePassword": "You must change your password before continuing.",
+    "inactivityLogout": "You were signed out due to inactivity.",
+    "newDeviceDetected": "A login from a new device was detected.",
+    "passwordExpiringSoon": "Your password will expire in {days} day(s). Please change it.",
+    "passwordReused": "This password was recently used. Please choose a different one.",
+    "tooManyRequests": "Too many requests. Please try again later.",
+    "currentPassword": "Current password",
+    "newPassword": "New password",
+    "confirmNewPassword": "Confirm new password",
+    "passwordsDoNotMatch": "Passwords do not match"
   },
   "nav": {
     "dashboard": "Dashboard",

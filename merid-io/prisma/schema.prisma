@@ -119,6 +119,10 @@ model User {
   resetPasswordToken String?
   resetPasswordExpiry DateTime?
   forcePasswordChange Boolean  @default(false)
+  passwordExpiresAt   DateTime?
+  lastPasswordChangeAt DateTime @default(now())
+  passwordHistory     Json?    // Array of last 3 bcrypt hashes
+  lastLoginDevice     Json?    // { ip, userAgent, lastSeen }
   theme             String    @default("system") // "light" | "dark" | "system"
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt

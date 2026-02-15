@@ -191,3 +191,91 @@ export async function sendLeaveRequestNotification(
     `),
   });
 }
+
+// ─── Security Email Templates ───────────────────────────────────────────────
+
+export async function sendNewDeviceLoginEmail(
+  to: string,
+  firstName: string,
+  ip: string,
+  userAgent: string
+) {
+  await sendEmail({
+    to,
+    subject: "Meridio - Nouvelle connexion detectee",
+    html: emailWrapper(`
+      <h2 style="color: #1B3A5C; margin-top: 0;">Bonjour ${firstName},</h2>
+      <p>Une connexion a votre compte Meridio a ete detectee depuis un nouvel appareil :</p>
+      <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+        <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">Adresse IP</td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600;">${ip}</td></tr>
+        <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">Navigateur</td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600; font-size: 12px;">${userAgent.substring(0, 100)}</td></tr>
+        <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">Date</td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600;">${new Date().toLocaleString("fr-CH")}</td></tr>
+      </table>
+      <p style="color: #EF4444; font-weight: 600;">Si vous n'etes pas a l'origine de cette connexion, changez immediatement votre mot de passe et contactez votre administrateur.</p>
+    `),
+  });
+}
+
+export async function sendAccountLockedEmail(
+  to: string,
+  adminFirstName: string,
+  userFullName: string,
+  userEmail: string
+) {
+  await sendEmail({
+    to,
+    subject: `Meridio - Compte verrouille : ${userFullName}`,
+    html: emailWrapper(`
+      <h2 style="color: #1B3A5C; margin-top: 0;">Bonjour ${adminFirstName},</h2>
+      <p>Le compte de <strong>${userFullName}</strong> (${userEmail}) a ete verrouille suite a 5 tentatives de connexion echouees.</p>
+      <p>Le compte sera automatiquement deverrouille dans <strong>15 minutes</strong>.</p>
+      <p style="color: #6b7280;">Si cette activite est suspecte, verifiez l'integrite du compte.</p>
+    `),
+  });
+}
+
+export async function sendPasswordExpiringSoonEmail(
+  to: string,
+  firstName: string,
+  daysLeft: number
+) {
+  const changeUrl = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/profile`;
+
+  await sendEmail({
+    to,
+    subject: "Meridio - Votre mot de passe expire bientot",
+    html: emailWrapper(`
+      <h2 style="color: #1B3A5C; margin-top: 0;">Bonjour ${firstName},</h2>
+      <p>Votre mot de passe Meridio expirera dans <strong>${daysLeft} jour(s)</strong>.</p>
+      <p>Veuillez le changer avant son expiration pour eviter une reinitialisation automatique.</p>
+      <div style="text-align: center; margin: 24px 0;">
+        <a href="${changeUrl}" style="display: inline-block; background-color: #1B3A5C; color: white; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: 600;">Changer mon mot de passe</a>
+      </div>
+    `),
+  });
+}
+
+export async function sendPasswordExpiredResetEmail(
+  to: string,
+  firstName: string,
+  tempPassword: string
+) {
+  const loginUrl = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/login`;
+
+  await sendEmail({
+    to,
+    subject: "Meridio - Mot de passe expire et reinitialise",
+    html: emailWrapper(`
+      <h2 style="color: #1B3A5C; margin-top: 0;">Bonjour ${firstName},</h2>
+      <p>Votre mot de passe Meridio a expire et a ete reinitialise automatiquement.</p>
+      <p>Voici votre nouveau mot de passe temporaire :</p>
+      <div style="text-align: center; margin: 24px 0;">
+        <span style="display: inline-block; background-color: #f0f4f8; border: 2px solid #1B3A5C; border-radius: 8px; padding: 12px 24px; font-size: 18px; font-weight: bold; font-family: monospace; color: #1B3A5C;">${tempPassword}</span>
+      </div>
+      <p style="color: #EF4444; font-weight: 600;">Vous devrez changer votre mot de passe lors de votre prochaine connexion.</p>
+      <div style="text-align: center; margin: 24px 0;">
+        <a href="${loginUrl}" style="display: inline-block; background-color: #1B3A5C; color: white; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: 600;">Se connecter</a>
+      </div>
+    `),
+  });
+}

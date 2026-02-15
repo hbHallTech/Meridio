@@ -3,6 +3,10 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { sendNewAccountEmail, sendAdminPasswordChangedEmail } from "@/lib/email";
+import {
+  buildPasswordHistory,
+  calculatePasswordExpiresAt,
+} from "@/lib/password";
 
 export async function GET() {
   const session = await auth();
@@ -63,6 +67,7 @@ export async function POST(request: Request) {
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
+    const passwordHistory = buildPasswordHistory(passwordHash, null);
 
     const user = await prisma.user.create({
       data: {
@@ -76,6 +81,9 @@ export async function POST(request: Request) {
         hireDate: new Date(hireDate),
         isActive: isActive ?? true,
         forcePasswordChange: forcePasswordChange ?? true,
+        passwordExpiresAt: calculatePasswordExpiresAt(),
+        lastPasswordChangeAt: new Date(),
+        passwordHistory,
       },
       select: {
         id: true,
@@ -170,9 +178,18 @@ export async function PATCH(request: Request) {
 
     let passwordChanged = false;
     if (password && password.trim().length > 0) {
-      updateData.passwordHash = await bcrypt.hash(password, 12);
+      const newHash = await bcrypt.hash(password, 12);
+      const existingHistory =
+        (existingUser.passwordHistory as string[] | null) ?? [];
+      updateData.passwordHash = newHash;
       updateData.passwordChangedAt = new Date();
+      updateData.lastPasswordChangeAt = new Date();
+      updateData.passwordExpiresAt = calculatePasswordExpiresAt();
       updateData.forcePasswordChange = forcePasswordChange ?? true;
+      updateData.passwordHistory = buildPasswordHistory(
+        newHash,
+        existingHistory
+      );
       passwordChanged = true;
     }
 

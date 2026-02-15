@@ -191,6 +191,10 @@ async function main() {
   // ──────────────────────────────────────────────
   const hashedPassword = await bcrypt.hash("ChangeMe2026!", 12);
 
+  // Password expiration: 90 days from now
+  const passwordExpiresAt = new Date();
+  passwordExpiresAt.setDate(passwordExpiresAt.getDate() + 90);
+
   const admin = await prisma.user.upsert({
     where: { email: "hbo@halley-technologies.ch" },
     update: {
@@ -209,6 +213,9 @@ async function main() {
       officeId: geneva.id,
       hireDate: new Date("2024-01-01"),
       language: "fr",
+      passwordExpiresAt,
+      lastPasswordChangeAt: new Date(),
+      passwordHistory: [hashedPassword],
     },
   });
   console.log("[OK] Admin user:", admin.email);
