@@ -216,9 +216,9 @@ export default function NewLeavePage() {
     (r) => r.id === watchExceptionalReason
   );
 
-  // Balance info for selected leave type
+  // Balance info for selected leave type (exceptional leaves never deduct from balance)
   const balanceInfo =
-    selectedLeaveType?.deductsFromBalance && selectedLeaveType.balanceType
+    selectedLeaveType?.deductsFromBalance && selectedLeaveType.balanceType && !isExceptional
       ? formData?.balances[selectedLeaveType.balanceType] ?? null
       : null;
   const remainingAfter = balanceInfo

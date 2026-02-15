@@ -263,8 +263,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Check balance if this leave type deducts from balance
-  if (leaveType.deductsFromBalance && leaveType.balanceType) {
+  // Check balance if this leave type deducts from balance (exceptional leaves are exempt)
+  if (leaveType.deductsFromBalance && leaveType.balanceType && leaveType.code !== "EXCEPTIONAL") {
     const balance = await prisma.leaveBalance.findUnique({
       where: {
         userId_year_balanceType: {
@@ -419,8 +419,8 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // If submitted (not draft), update pending days on balance
-  if (status === "PENDING_MANAGER" && leaveType.deductsFromBalance && leaveType.balanceType) {
+  // If submitted (not draft), update pending days on balance (exceptional leaves are exempt)
+  if (status === "PENDING_MANAGER" && leaveType.deductsFromBalance && leaveType.balanceType && leaveType.code !== "EXCEPTIONAL") {
     await prisma.leaveBalance.update({
       where: {
         userId_year_balanceType: {

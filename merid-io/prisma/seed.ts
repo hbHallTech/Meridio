@@ -107,7 +107,7 @@ async function main() {
     { code: "UNPAID", label_fr: "Congé sans solde", label_en: "Unpaid leave", deductsFromBalance: false, balanceType: null, requiresAttachment: false, attachmentFromDay: null, color: "#F59E0B" },
     { code: "MATERNITY", label_fr: "Congé maternité", label_en: "Maternity leave", deductsFromBalance: false, balanceType: null, requiresAttachment: false, attachmentFromDay: null, color: "#EC4899" },
     { code: "PATERNITY", label_fr: "Congé paternité", label_en: "Paternity leave", deductsFromBalance: false, balanceType: null, requiresAttachment: false, attachmentFromDay: null, color: "#8B5CF6" },
-    { code: "EXCEPTIONAL", label_fr: "Congé exceptionnel", label_en: "Exceptional leave", deductsFromBalance: true, balanceType: "ANNUAL", requiresAttachment: false, attachmentFromDay: null, color: "#F97316" },
+    { code: "EXCEPTIONAL", label_fr: "Congé exceptionnel", label_en: "Exceptional leave", deductsFromBalance: false, balanceType: null, requiresAttachment: false, attachmentFromDay: null, color: "#F97316" },
     { code: "TELEWORK", label_fr: "Télétravail", label_en: "Telework", deductsFromBalance: false, balanceType: null, requiresAttachment: false, attachmentFromDay: null, color: "#6366F1" },
   ];
 
