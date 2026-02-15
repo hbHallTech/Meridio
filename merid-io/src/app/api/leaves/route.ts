@@ -187,16 +187,23 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Get user + office
+  // Get user + office + team
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
       officeId: true,
+      teamId: true,
       hireDate: true,
       office: {
         select: {
           probationMonths: true,
           workingDays: true,
+        },
+      },
+      team: {
+        select: {
+          id: true,
+          managerId: true,
         },
       },
     },
@@ -313,7 +320,48 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const status = action === "submit" ? "PENDING_MANAGER" : "DRAFT";
+  const isSubmit = action === "submit";
+  let status: "DRAFT" | "PENDING_MANAGER" = isSubmit ? "PENDING_MANAGER" : "DRAFT";
+
+  // If submitting, resolve workflow by team
+  let workflowConfig: { id: string; steps: { id: string; stepOrder: number; stepType: "MANAGER" | "HR"; isRequired: boolean }[] } | null = null;
+  if (isSubmit && user.teamId) {
+    const workflows = await prisma.workflowConfig.findMany({
+      where: {
+        isActive: true,
+        teams: { some: { id: user.teamId } },
+      },
+      include: {
+        steps: { orderBy: { stepOrder: "asc" } },
+      },
+    });
+
+    if (workflows.length === 0) {
+      return NextResponse.json(
+        { error: "Aucun workflow actif configuré pour votre équipe. Contactez votre administrateur." },
+        { status: 400 }
+      );
+    }
+
+    // Use the first active workflow
+    workflowConfig = workflows[0];
+  } else if (isSubmit && !user.teamId) {
+    // Fallback: user has no team, try to find workflow by office (backward compat)
+    const workflows = await prisma.workflowConfig.findMany({
+      where: {
+        isActive: true,
+        officeId: user.officeId,
+      },
+      include: {
+        steps: { orderBy: { stepOrder: "asc" } },
+      },
+    });
+
+    if (workflows.length > 0) {
+      workflowConfig = workflows[0];
+    }
+    // If no workflow found and no team, still allow submission without approval steps
+  }
 
   // Create leave request
   const leaveRequest = await prisma.leaveRequest.create({
@@ -331,6 +379,45 @@ export async function POST(request: NextRequest) {
       attachmentUrls,
     },
   });
+
+  // Create approval steps based on workflow
+  if (isSubmit && workflowConfig && workflowConfig.steps.length > 0) {
+    // Find approvers for each step
+    const approvalStepsData: { leaveRequestId: string; approverId: string; stepType: "MANAGER" | "HR"; stepOrder: number }[] = [];
+
+    for (const step of workflowConfig.steps) {
+      if (step.stepType === "MANAGER") {
+        // Approver is the user's team manager
+        const managerId = user.team?.managerId;
+        if (managerId) {
+          approvalStepsData.push({
+            leaveRequestId: leaveRequest.id,
+            approverId: managerId,
+            stepType: step.stepType,
+            stepOrder: step.stepOrder,
+          });
+        }
+      } else if (step.stepType === "HR") {
+        // Find first active HR user
+        const hrUser = await prisma.user.findFirst({
+          where: { roles: { has: "HR" }, isActive: true },
+          select: { id: true },
+        });
+        if (hrUser) {
+          approvalStepsData.push({
+            leaveRequestId: leaveRequest.id,
+            approverId: hrUser.id,
+            stepType: step.stepType,
+            stepOrder: step.stepOrder,
+          });
+        }
+      }
+    }
+
+    if (approvalStepsData.length > 0) {
+      await prisma.approvalStep.createMany({ data: approvalStepsData });
+    }
+  }
 
   // If submitted (not draft), update pending days on balance
   if (status === "PENDING_MANAGER" && leaveType.deductsFromBalance && leaveType.balanceType) {

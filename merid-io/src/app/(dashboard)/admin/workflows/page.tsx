@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Loader2, GitBranch, Plus, Pencil, Trash2, X } from "lucide-react";
+import { Loader2, GitBranch, Plus, Pencil, Trash2, X, Copy, Users } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import { Dialog, ConfirmDialog } from "@/components/ui/dialog";
 
-interface OfficeOption {
+interface TeamOption {
   id: string;
   name: string;
+  office?: { id: string; name: string };
 }
 
 interface WorkflowStep {
@@ -21,10 +22,11 @@ interface WorkflowData {
   id: string;
   mode: string;
   isActive: boolean;
-  officeId: string;
+  officeId: string | null;
   createdAt: string;
   office: { id: string; name: string } | null;
   steps: WorkflowStep[];
+  teams: TeamOption[];
 }
 
 interface StepDraft {
@@ -46,10 +48,14 @@ const modeLabels: Record<string, string> = {
 export default function AdminWorkflowsPage() {
   const { addToast } = useToast();
   const [workflows, setWorkflows] = useState<WorkflowData[]>([]);
-  const [offices, setOffices] = useState<OfficeOption[]>([]);
+  const [allTeams, setAllTeams] = useState<TeamOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
+
+  // Filter state
+  const [filterTeamId, setFilterTeamId] = useState("");
 
   // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -57,10 +63,16 @@ export default function AdminWorkflowsPage() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deletingWorkflow, setDeletingWorkflow] = useState<WorkflowData | null>(null);
 
-  // Form state (managed with useState, not react-hook-form, for dynamic steps)
-  const [formOfficeId, setFormOfficeId] = useState("");
+  // Team association dialog
+  const [teamDialogOpen, setTeamDialogOpen] = useState(false);
+  const [teamDialogWorkflow, setTeamDialogWorkflow] = useState<WorkflowData | null>(null);
+  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
+  const [savingTeams, setSavingTeams] = useState(false);
+
+  // Form state
   const [formMode, setFormMode] = useState<"SEQUENTIAL" | "PARALLEL">("SEQUENTIAL");
   const [formIsActive, setFormIsActive] = useState(true);
+  const [formTeamIds, setFormTeamIds] = useState<string[]>([]);
   const [formSteps, setFormSteps] = useState<StepDraft[]>([
     { stepOrder: 1, stepType: "MANAGER", isRequired: true },
   ]);
@@ -79,26 +91,30 @@ export default function AdminWorkflowsPage() {
     }
   }, [addToast]);
 
-  const fetchOffices = useCallback(async () => {
+  const fetchTeams = useCallback(async () => {
     try {
-      const res = await fetch("/api/admin/offices");
-      if (!res.ok) throw new Error("Erreur de chargement des bureaux");
+      const res = await fetch("/api/admin/teams");
+      if (!res.ok) throw new Error("Erreur de chargement des \u00e9quipes");
       const data = await res.json();
-      setOffices(data.map((o: OfficeOption) => ({ id: o.id, name: o.name })));
+      setAllTeams(data.map((t: TeamOption & { office?: { id: string; name: string } }) => ({
+        id: t.id,
+        name: t.name,
+        office: t.office,
+      })));
     } catch {
-      addToast({ type: "error", title: "Erreur", message: "Impossible de charger les bureaux" });
+      addToast({ type: "error", title: "Erreur", message: "Impossible de charger les \u00e9quipes" });
     }
   }, [addToast]);
 
   useEffect(() => {
     fetchWorkflows();
-    fetchOffices();
-  }, [fetchWorkflows, fetchOffices]);
+    fetchTeams();
+  }, [fetchWorkflows, fetchTeams]);
 
   function resetForm() {
-    setFormOfficeId("");
     setFormMode("SEQUENTIAL");
     setFormIsActive(true);
+    setFormTeamIds([]);
     setFormSteps([{ stepOrder: 1, stepType: "MANAGER", isRequired: true }]);
     setFormErrors({});
   }
@@ -111,9 +127,9 @@ export default function AdminWorkflowsPage() {
 
   function openEditDialog(wf: WorkflowData) {
     setEditingWorkflow(wf);
-    setFormOfficeId(wf.officeId);
     setFormMode(wf.mode as "SEQUENTIAL" | "PARALLEL");
     setFormIsActive(wf.isActive);
+    setFormTeamIds(wf.teams.map((t) => t.id));
     setFormSteps(
       wf.steps.map((s) => ({
         stepOrder: s.stepOrder,
@@ -130,6 +146,12 @@ export default function AdminWorkflowsPage() {
     setConfirmOpen(true);
   }
 
+  function openTeamDialog(wf: WorkflowData) {
+    setTeamDialogWorkflow(wf);
+    setSelectedTeamIds(wf.teams.map((t) => t.id));
+    setTeamDialogOpen(true);
+  }
+
   function addStep() {
     setFormSteps((prev) => [
       ...prev,
@@ -144,7 +166,6 @@ export default function AdminWorkflowsPage() {
   function removeStep(index: number) {
     setFormSteps((prev) => {
       const next = prev.filter((_, i) => i !== index);
-      // Renumber step orders
       return next.map((s, i) => ({ ...s, stepOrder: i + 1 }));
     });
   }
@@ -157,7 +178,6 @@ export default function AdminWorkflowsPage() {
 
   function validate(): boolean {
     const errs: Record<string, string> = {};
-    if (!formOfficeId) errs.officeId = "Le bureau est requis";
     if (formSteps.length === 0) errs.steps = "Au moins une \u00e9tape est requise";
     setFormErrors(errs);
     return Object.keys(errs).length === 0;
@@ -169,9 +189,9 @@ export default function AdminWorkflowsPage() {
     try {
       const isEdit = !!editingWorkflow;
       const payload = {
-        officeId: formOfficeId,
         mode: formMode,
         isActive: formIsActive,
+        teamIds: formTeamIds,
         steps: formSteps.map((s) => ({
           stepOrder: s.stepOrder,
           stepType: s.stepType,
@@ -205,6 +225,37 @@ export default function AdminWorkflowsPage() {
       });
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleDuplicate(wf: WorkflowData) {
+    setDuplicating(true);
+    try {
+      const res = await fetch("/api/admin/workflows", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "duplicate", sourceId: wf.id }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Erreur inconnue" }));
+        throw new Error(err.error || "Erreur inconnue");
+      }
+
+      addToast({
+        type: "success",
+        title: "Workflow dupliqu\u00e9",
+        message: "Le workflow a \u00e9t\u00e9 dupliqu\u00e9 avec succ\u00e8s (inactif).",
+      });
+      await fetchWorkflows();
+    } catch (error) {
+      addToast({
+        type: "error",
+        title: "Erreur",
+        message: error instanceof Error ? error.message : "Impossible de dupliquer le workflow",
+      });
+    } finally {
+      setDuplicating(false);
     }
   }
 
@@ -242,6 +293,49 @@ export default function AdminWorkflowsPage() {
     }
   }
 
+  async function handleSaveTeams() {
+    if (!teamDialogWorkflow) return;
+    setSavingTeams(true);
+    try {
+      const res = await fetch("/api/admin/workflows", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: teamDialogWorkflow.id,
+          action: "updateTeams",
+          teamIds: selectedTeamIds,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Erreur inconnue" }));
+        throw new Error(err.error || "Erreur inconnue");
+      }
+
+      addToast({
+        type: "success",
+        title: "\u00c9quipes mises \u00e0 jour",
+        message: "Les \u00e9quipes associ\u00e9es ont \u00e9t\u00e9 mises \u00e0 jour.",
+      });
+      setTeamDialogOpen(false);
+      setTeamDialogWorkflow(null);
+      await fetchWorkflows();
+    } catch (error) {
+      addToast({
+        type: "error",
+        title: "Erreur",
+        message: error instanceof Error ? error.message : "Impossible de mettre \u00e0 jour les \u00e9quipes",
+      });
+    } finally {
+      setSavingTeams(false);
+    }
+  }
+
+  // Filter workflows by team
+  const filteredWorkflows = filterTeamId
+    ? workflows.filter((wf) => wf.teams.some((t) => t.id === filterTeamId))
+    : workflows;
+
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -257,7 +351,8 @@ export default function AdminWorkflowsPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Workflows d&apos;approbation</h1>
           <p className="mt-1 text-sm text-gray-500">
-            {workflows.length} workflow{workflows.length !== 1 ? "s" : ""} configur&eacute;{workflows.length !== 1 ? "s" : ""}
+            {filteredWorkflows.length} workflow{filteredWorkflows.length !== 1 ? "s" : ""} configur&eacute;{filteredWorkflows.length !== 1 ? "s" : ""}
+            {filterTeamId && ` (filtr\u00e9)`}
           </p>
         </div>
         <button
@@ -269,14 +364,39 @@ export default function AdminWorkflowsPage() {
         </button>
       </div>
 
+      {/* Team filter */}
+      <div className="flex items-center gap-3">
+        <label className="text-sm font-medium text-gray-700">Filtrer par &eacute;quipe :</label>
+        <select
+          value={filterTeamId}
+          onChange={(e) => setFilterTeamId(e.target.value)}
+          className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#1B3A5C] focus:outline-none focus:ring-1 focus:ring-[#1B3A5C]"
+        >
+          <option value="">Toutes les &eacute;quipes</option>
+          {allTeams.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name}{t.office ? ` (${t.office.name})` : ""}
+            </option>
+          ))}
+        </select>
+        {filterTeamId && (
+          <button
+            onClick={() => setFilterTeamId("")}
+            className="text-sm text-gray-500 hover:text-gray-700 underline"
+          >
+            R&eacute;initialiser
+          </button>
+        )}
+      </div>
+
       {/* Cards */}
-      {workflows.length === 0 ? (
+      {filteredWorkflows.length === 0 ? (
         <div className="rounded-xl border border-gray-200 bg-white px-6 py-12 text-center text-sm text-gray-400 shadow-sm">
-          Aucun workflow configur&eacute;.
+          {filterTeamId ? "Aucun workflow pour cette \u00e9quipe." : "Aucun workflow configur\u00e9."}
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          {workflows.map((wf) => (
+          {filteredWorkflows.map((wf) => (
             <div
               key={wf.id}
               className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm cursor-pointer hover:border-gray-300 transition-colors"
@@ -284,11 +404,12 @@ export default function AdminWorkflowsPage() {
             >
               {/* Workflow header */}
               <div className="flex items-start justify-between">
-                <div>
+                <div className="flex-1 min-w-0">
                   <h2 className="text-lg font-semibold text-gray-900">
-                    {wf.office?.name ?? "Bureau inconnu"}
+                    Workflow
+                    {wf.office ? ` — ${wf.office.name}` : ""}
                   </h2>
-                  <div className="mt-2 flex items-center gap-2">
+                  <div className="mt-2 flex items-center gap-2 flex-wrap">
                     <span
                       className="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold"
                       style={{ backgroundColor: "rgba(0,188,212,0.1)", color: "#00BCD4" }}
@@ -306,7 +427,28 @@ export default function AdminWorkflowsPage() {
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openTeamDialog(wf);
+                    }}
+                    className="rounded-lg p-2 text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                    title="\u00c9quipes associ\u00e9es"
+                  >
+                    <Users className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDuplicate(wf);
+                    }}
+                    disabled={duplicating}
+                    className="rounded-lg p-2 text-gray-400 hover:bg-purple-50 hover:text-purple-600 transition-colors disabled:opacity-30"
+                    title="Dupliquer"
+                  >
+                    <Copy className="h-4 w-4" />
+                  </button>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -335,6 +477,24 @@ export default function AdminWorkflowsPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Team badges */}
+              {wf.teams.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {wf.teams.map((team) => (
+                    <span
+                      key={team.id}
+                      className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700"
+                    >
+                      <Users className="h-3 w-3" />
+                      {team.name}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {wf.teams.length === 0 && (
+                <p className="mt-3 text-xs text-amber-600">Aucune &eacute;quipe associ&eacute;e</p>
+              )}
 
               {/* Steps */}
               {wf.steps.length > 0 && (
@@ -384,24 +544,6 @@ export default function AdminWorkflowsPage() {
         maxWidth="lg"
       >
         <div className="space-y-5">
-          {/* Bureau */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Bureau</label>
-            <select
-              value={formOfficeId}
-              onChange={(e) => setFormOfficeId(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#1B3A5C] focus:outline-none focus:ring-1 focus:ring-[#1B3A5C]"
-            >
-              <option value="">S&eacute;lectionner un bureau</option>
-              {offices.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.name}
-                </option>
-              ))}
-            </select>
-            {formErrors.officeId && <p className="mt-1 text-xs text-red-600">{formErrors.officeId}</p>}
-          </div>
-
           {/* Mode */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Mode</label>
@@ -415,7 +557,7 @@ export default function AdminWorkflowsPage() {
             </select>
           </div>
 
-          {/* Actif toggle */}
+          {/* Active toggle */}
           <div className="flex items-center gap-3">
             <label className="text-sm font-medium text-gray-700">Actif</label>
             <button
@@ -434,6 +576,47 @@ export default function AdminWorkflowsPage() {
             <span className="text-sm text-gray-500">
               {formIsActive ? "Actif" : "Inactif"}
             </span>
+          </div>
+
+          {/* Team selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              &Eacute;quipes associ&eacute;es
+            </label>
+            <div className="max-h-48 overflow-y-auto rounded-lg border border-gray-300 p-2 space-y-1">
+              {allTeams.length === 0 ? (
+                <p className="text-sm text-gray-400 px-2 py-1">Aucune &eacute;quipe disponible</p>
+              ) : (
+                allTeams.map((team) => (
+                  <label
+                    key={team.id}
+                    className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-gray-50 cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={formTeamIds.includes(team.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setFormTeamIds((prev) => [...prev, team.id]);
+                        } else {
+                          setFormTeamIds((prev) => prev.filter((id) => id !== team.id));
+                        }
+                      }}
+                      className="h-4 w-4 rounded border-gray-300 text-[#1B3A5C] focus:ring-[#1B3A5C]"
+                    />
+                    <span className="text-gray-900">{team.name}</span>
+                    {team.office && (
+                      <span className="text-gray-400 text-xs">({team.office.name})</span>
+                    )}
+                  </label>
+                ))
+              )}
+            </div>
+            {formTeamIds.length > 0 && (
+              <p className="mt-1 text-xs text-gray-500">
+                {formTeamIds.length} &eacute;quipe{formTeamIds.length > 1 ? "s" : ""} s&eacute;lectionn&eacute;e{formTeamIds.length > 1 ? "s" : ""}
+              </p>
+            )}
           </div>
 
           {/* Steps */}
@@ -457,15 +640,12 @@ export default function AdminWorkflowsPage() {
                   key={index}
                   className="flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3"
                 >
-                  {/* Step order badge */}
                   <div
                     className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
                     style={{ backgroundColor: "#1B3A5C" }}
                   >
                     {step.stepOrder}
                   </div>
-
-                  {/* Type select */}
                   <div className="flex-1">
                     <select
                       value={step.stepType}
@@ -476,8 +656,6 @@ export default function AdminWorkflowsPage() {
                       <option value="HR">Ressources Humaines</option>
                     </select>
                   </div>
-
-                  {/* Required checkbox */}
                   <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer whitespace-nowrap">
                     <input
                       type="checkbox"
@@ -487,8 +665,6 @@ export default function AdminWorkflowsPage() {
                     />
                     Requis
                   </label>
-
-                  {/* Remove button */}
                   <button
                     type="button"
                     onClick={() => removeStep(index)}
@@ -525,6 +701,79 @@ export default function AdminWorkflowsPage() {
         </div>
       </Dialog>
 
+      {/* Team Association Dialog */}
+      <Dialog
+        open={teamDialogOpen}
+        onClose={() => {
+          setTeamDialogOpen(false);
+          setTeamDialogWorkflow(null);
+        }}
+        title={`\u00c9quipes associ\u00e9es${teamDialogWorkflow?.office ? ` — ${teamDialogWorkflow.office.name}` : ""}`}
+        maxWidth="md"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-500">
+            S&eacute;lectionnez les &eacute;quipes qui utilisent ce workflow d&apos;approbation.
+          </p>
+          <div className="max-h-64 overflow-y-auto rounded-lg border border-gray-200 p-2 space-y-1">
+            {allTeams.length === 0 ? (
+              <p className="text-sm text-gray-400 px-2 py-2">Aucune &eacute;quipe disponible</p>
+            ) : (
+              allTeams.map((team) => (
+                <label
+                  key={team.id}
+                  className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedTeamIds.includes(team.id)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedTeamIds((prev) => [...prev, team.id]);
+                      } else {
+                        setSelectedTeamIds((prev) => prev.filter((id) => id !== team.id));
+                      }
+                    }}
+                    className="h-4 w-4 rounded border-gray-300 text-[#1B3A5C] focus:ring-[#1B3A5C]"
+                  />
+                  <div>
+                    <span className="text-gray-900 font-medium">{team.name}</span>
+                    {team.office && (
+                      <span className="ml-2 text-gray-400 text-xs">({team.office.name})</span>
+                    )}
+                  </div>
+                </label>
+              ))
+            )}
+          </div>
+          <p className="text-xs text-gray-500">
+            {selectedTeamIds.length} &eacute;quipe{selectedTeamIds.length !== 1 ? "s" : ""} s&eacute;lectionn&eacute;e{selectedTeamIds.length !== 1 ? "s" : ""}
+          </p>
+
+          <div className="flex justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => {
+                setTeamDialogOpen(false);
+                setTeamDialogWorkflow(null);
+              }}
+              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Annuler
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveTeams}
+              disabled={savingTeams}
+              className="inline-flex items-center gap-2 rounded-lg bg-[#1B3A5C] px-4 py-2 text-sm font-medium text-white hover:bg-[#15304d] disabled:opacity-50"
+            >
+              {savingTeams && <Loader2 className="h-4 w-4 animate-spin" />}
+              Enregistrer
+            </button>
+          </div>
+        </div>
+      </Dialog>
+
       {/* Delete Confirm Dialog */}
       <ConfirmDialog
         open={confirmOpen}
@@ -534,7 +783,7 @@ export default function AdminWorkflowsPage() {
         }}
         onConfirm={handleDelete}
         title="Supprimer le workflow"
-        message={`\u00cates-vous s\u00fbr de vouloir supprimer ce workflow${deletingWorkflow?.office?.name ? ` pour "${deletingWorkflow.office.name}"` : ""} ? Cette action est irr\u00e9versible.`}
+        message={`\u00cates-vous s\u00fbr de vouloir supprimer ce workflow${deletingWorkflow?.teams?.length ? ` (${deletingWorkflow.teams.length} \u00e9quipe${deletingWorkflow.teams.length > 1 ? "s" : ""} associ\u00e9e${deletingWorkflow.teams.length > 1 ? "s" : ""})` : ""} ? Cette action est irr\u00e9versible.`}
         confirmLabel="Supprimer"
         loading={deleting}
       />

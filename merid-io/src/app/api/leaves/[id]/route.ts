@@ -120,10 +120,76 @@ export async function PATCH(
         );
       }
 
+      // Get user's team info for workflow resolution
+      const submitter = await prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: {
+          officeId: true,
+          teamId: true,
+          team: { select: { id: true, managerId: true } },
+        },
+      });
+
+      // Resolve workflow by team (or fallback to office)
+      let workflowSteps: { stepOrder: number; stepType: "MANAGER" | "HR"; isRequired: boolean }[] = [];
+      if (submitter?.teamId) {
+        const wf = await prisma.workflowConfig.findFirst({
+          where: { isActive: true, teams: { some: { id: submitter.teamId } } },
+          include: { steps: { orderBy: { stepOrder: "asc" } } },
+        });
+        if (wf) workflowSteps = wf.steps;
+      } else if (submitter?.officeId) {
+        const wf = await prisma.workflowConfig.findFirst({
+          where: { isActive: true, officeId: submitter.officeId },
+          include: { steps: { orderBy: { stepOrder: "asc" } } },
+        });
+        if (wf) workflowSteps = wf.steps;
+      }
+
+      // Delete old approval steps if resubmitting a RETURNED request
+      if (leaveRequest.status === "RETURNED") {
+        await prisma.approvalStep.deleteMany({
+          where: { leaveRequestId: id },
+        });
+      }
+
       await prisma.leaveRequest.update({
         where: { id },
         data: { status: "PENDING_MANAGER" },
       });
+
+      // Create approval steps from workflow
+      if (workflowSteps.length > 0 && submitter) {
+        const approvalStepsData: { leaveRequestId: string; approverId: string; stepType: "MANAGER" | "HR"; stepOrder: number }[] = [];
+
+        for (const step of workflowSteps) {
+          if (step.stepType === "MANAGER" && submitter.team?.managerId) {
+            approvalStepsData.push({
+              leaveRequestId: id,
+              approverId: submitter.team.managerId,
+              stepType: step.stepType,
+              stepOrder: step.stepOrder,
+            });
+          } else if (step.stepType === "HR") {
+            const hrUser = await prisma.user.findFirst({
+              where: { roles: { has: "HR" }, isActive: true },
+              select: { id: true },
+            });
+            if (hrUser) {
+              approvalStepsData.push({
+                leaveRequestId: id,
+                approverId: hrUser.id,
+                stepType: step.stepType,
+                stepOrder: step.stepOrder,
+              });
+            }
+          }
+        }
+
+        if (approvalStepsData.length > 0) {
+          await prisma.approvalStep.createMany({ data: approvalStepsData });
+        }
+      }
 
       // Update pending balance
       const lt = leaveRequest.leaveTypeConfig;
