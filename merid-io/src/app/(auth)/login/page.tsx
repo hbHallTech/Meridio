@@ -87,13 +87,6 @@ export default function LoginPage() {
 
   return (
     <div>
-      {/* Mobile header */}
-      <div className="mb-8 text-center lg:hidden">
-        <h1 className="text-2xl font-bold" style={{ color: "#1B3A5C" }}>
-          Halley-Technologies
-        </h1>
-        <p className="text-sm text-gray-500">Meridio - Gestion des congés</p>
-      </div>
 
       <div className="rounded-xl border bg-white p-8 shadow-sm">
         <div className="mb-6">
