@@ -52,7 +52,8 @@ export async function POST(request: NextRequest) {
   }
 
   const hashedPassword = await bcrypt.hash(parsed.data.password, 12);
-  const newHistory = buildPasswordHistory(hashedPassword, history);
+  const newHistory = await buildPasswordHistory(hashedPassword, history);
+  const expiresAt = await calculatePasswordExpiresAt();
 
   await prisma.user.update({
     where: { id: user.id },
@@ -62,7 +63,7 @@ export async function POST(request: NextRequest) {
       resetPasswordExpiry: null,
       passwordChangedAt: new Date(),
       lastPasswordChangeAt: new Date(),
-      passwordExpiresAt: calculatePasswordExpiresAt(),
+      passwordExpiresAt: expiresAt,
       passwordHistory: newHistory,
       failedLoginAttempts: 0,
       lockedUntil: null,

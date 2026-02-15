@@ -207,16 +207,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (isPasswordExpired(user.passwordExpiresAt)) {
           const tempPassword = generateStrongPassword();
           const newHash = await bcrypt.hash(tempPassword, 12);
-          const newHistory = buildPasswordHistory(
+          const newHistory = await buildPasswordHistory(
             newHash,
             (user.passwordHistory as string[] | null) ?? null
           );
+          const newExpiresAt = await calculatePasswordExpiresAt();
 
           await prisma.user.update({
             where: { id: user.id },
             data: {
               passwordHash: newHash,
-              passwordExpiresAt: calculatePasswordExpiresAt(),
+              passwordExpiresAt: newExpiresAt,
               lastPasswordChangeAt: new Date(),
               forcePasswordChange: true,
               passwordHistory: newHistory,

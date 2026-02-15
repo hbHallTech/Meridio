@@ -1,8 +1,67 @@
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
+import { prisma } from "@/lib/prisma";
 
-const PASSWORD_EXPIRY_DAYS = 90;
-const PASSWORD_HISTORY_SIZE = 5;
+// Default values (used when DB is unavailable)
+const DEFAULT_PASSWORD_EXPIRY_DAYS = 90;
+const DEFAULT_PASSWORD_HISTORY_SIZE = 5;
+const DEFAULT_PASSWORD_MIN_LENGTH = 12;
+
+export interface PasswordPolicy {
+  pwdExpirationEnabled: boolean;
+  pwdMaxAgeDays: number;
+  pwdExpiryAlertDays: number;
+  pwdMinLength: number;
+  pwdRequireLowercase: boolean;
+  pwdRequireUppercase: boolean;
+  pwdRequireDigit: boolean;
+  pwdRequireSpecial: boolean;
+  pwdHistoryCount: number;
+  pwdForceChangeOnFirst: boolean;
+  pwdCheckDictionary: boolean;
+}
+
+/**
+ * Fetch the password policy from the Company record (singleton).
+ * Falls back to hardcoded defaults if DB is unavailable.
+ */
+export async function getPasswordPolicy(): Promise<PasswordPolicy> {
+  try {
+    const company = await prisma.company.findFirst({
+      select: {
+        pwdExpirationEnabled: true,
+        pwdMaxAgeDays: true,
+        pwdExpiryAlertDays: true,
+        pwdMinLength: true,
+        pwdRequireLowercase: true,
+        pwdRequireUppercase: true,
+        pwdRequireDigit: true,
+        pwdRequireSpecial: true,
+        pwdHistoryCount: true,
+        pwdForceChangeOnFirst: true,
+        pwdCheckDictionary: true,
+      },
+    });
+
+    if (company) return company;
+  } catch {
+    // DB not available — use defaults
+  }
+
+  return {
+    pwdExpirationEnabled: true,
+    pwdMaxAgeDays: DEFAULT_PASSWORD_EXPIRY_DAYS,
+    pwdExpiryAlertDays: 5,
+    pwdMinLength: DEFAULT_PASSWORD_MIN_LENGTH,
+    pwdRequireLowercase: true,
+    pwdRequireUppercase: true,
+    pwdRequireDigit: true,
+    pwdRequireSpecial: true,
+    pwdHistoryCount: DEFAULT_PASSWORD_HISTORY_SIZE,
+    pwdForceChangeOnFirst: true,
+    pwdCheckDictionary: false,
+  };
+}
 
 /**
  * Generate a cryptographically strong password (12+ chars)
@@ -54,38 +113,46 @@ export async function isPasswordInHistory(
 
 /**
  * Build an updated password history array, keeping only the last N hashes.
+ * Reads history size from DB policy.
  */
-export function buildPasswordHistory(
+export async function buildPasswordHistory(
   currentHash: string,
   existingHistory: string[] | null
-): string[] {
+): Promise<string[]> {
+  const policy = await getPasswordPolicy();
   const history = existingHistory ? [...existingHistory] : [];
   history.push(currentHash);
-  // Keep only the last PASSWORD_HISTORY_SIZE entries
-  return history.slice(-PASSWORD_HISTORY_SIZE);
+  return history.slice(-policy.pwdHistoryCount);
 }
 
 /**
- * Calculate the password expiration date (now + 90 days).
+ * Calculate the password expiration date based on DB policy.
  */
-export function calculatePasswordExpiresAt(): Date {
+export async function calculatePasswordExpiresAt(): Promise<Date> {
+  const policy = await getPasswordPolicy();
   const date = new Date();
-  date.setDate(date.getDate() + PASSWORD_EXPIRY_DAYS);
+  if (policy.pwdExpirationEnabled) {
+    date.setDate(date.getDate() + policy.pwdMaxAgeDays);
+  } else {
+    // If expiration disabled, set far future
+    date.setFullYear(date.getFullYear() + 100);
+  }
   return date;
 }
 
 /**
- * Check if a password is expiring within `daysThreshold` days.
+ * Check if a password is expiring within the configured alert threshold.
  */
-export function isPasswordExpiringSoon(
+export async function isPasswordExpiringSoon(
   expiresAt: Date | null,
-  daysThreshold = 5
-): boolean {
+  daysThreshold?: number
+): Promise<boolean> {
   if (!expiresAt) return false;
+  const threshold = daysThreshold ?? (await getPasswordPolicy()).pwdExpiryAlertDays;
   const now = new Date();
-  const threshold = new Date();
-  threshold.setDate(threshold.getDate() + daysThreshold);
-  return expiresAt > now && expiresAt <= threshold;
+  const alertDate = new Date();
+  alertDate.setDate(alertDate.getDate() + threshold);
+  return expiresAt > now && expiresAt <= alertDate;
 }
 
 /**
@@ -94,4 +161,31 @@ export function isPasswordExpiringSoon(
 export function isPasswordExpired(expiresAt: Date | null): boolean {
   if (!expiresAt) return false;
   return expiresAt <= new Date();
+}
+
+/**
+ * Validate a password against the company policy.
+ * Returns an array of error messages (empty = valid).
+ */
+export async function validatePasswordPolicy(password: string): Promise<string[]> {
+  const policy = await getPasswordPolicy();
+  const errors: string[] = [];
+
+  if (password.length < policy.pwdMinLength) {
+    errors.push(`Minimum ${policy.pwdMinLength} caractères`);
+  }
+  if (policy.pwdRequireLowercase && !/[a-z]/.test(password)) {
+    errors.push("Au moins une minuscule requise");
+  }
+  if (policy.pwdRequireUppercase && !/[A-Z]/.test(password)) {
+    errors.push("Au moins une majuscule requise");
+  }
+  if (policy.pwdRequireDigit && !/\d/.test(password)) {
+    errors.push("Au moins un chiffre requis");
+  }
+  if (policy.pwdRequireSpecial && !/[^A-Za-z\d\s]/.test(password)) {
+    errors.push("Au moins un caractère spécial requis");
+  }
+
+  return errors;
 }

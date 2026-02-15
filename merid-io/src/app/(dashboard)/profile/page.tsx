@@ -26,6 +26,7 @@ import {
   Sun,
   Moon,
   Monitor,
+  Bell,
 } from "lucide-react";
 
 // ─── Types ───
@@ -72,6 +73,19 @@ const BALANCE_LABELS: Record<string, { fr: string; en: string; color: string }> 
   OFFERED: { fr: "Congés offerts", en: "Offered Days", color: "#00BCD4" },
 };
 
+const NOTIF_TYPES = [
+  { type: "NEW_REQUEST", fr: "Nouvelle demande de congé", en: "New leave request" },
+  { type: "APPROVED", fr: "Demande approuvée", en: "Request approved" },
+  { type: "REFUSED", fr: "Demande refusée", en: "Request refused" },
+  { type: "RETURNED", fr: "Demande renvoyée", en: "Request returned" },
+  { type: "REMINDER", fr: "Rappel de traitement", en: "Processing reminder" },
+  { type: "PASSWORD_EXPIRING", fr: "Expiration mot de passe", en: "Password expiring" },
+  { type: "PASSWORD_CHANGED", fr: "Mot de passe modifié", en: "Password changed" },
+  { type: "NEW_LOGIN", fr: "Nouvelle connexion", en: "New login detected" },
+  { type: "ACCOUNT_LOCKED", fr: "Compte verrouillé", en: "Account locked" },
+  { type: "CLOSURE", fr: "Fermeture entreprise", en: "Company closure" },
+];
+
 const ROLE_LABELS: Record<string, { fr: string; en: string }> = {
   EMPLOYEE: { fr: "Employé", en: "Employee" },
   MANAGER: { fr: "Manager", en: "Manager" },
@@ -117,6 +131,8 @@ export default function ProfilePage() {
   const [showCurrentPwd, setShowCurrentPwd] = useState(false);
   const [showNewPwd, setShowNewPwd] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [notifPrefs, setNotifPrefs] = useState<Record<string, boolean>>({});
+  const [notifSaving, setNotifSaving] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -151,6 +167,19 @@ export default function ProfilePage() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
+
+    // Fetch notification preferences
+    fetch("/api/profile/notifications", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((prefs: { type: string; enabled: boolean }[]) => {
+        const map: Record<string, boolean> = {};
+        for (const nt of NOTIF_TYPES) {
+          const found = prefs.find((p) => p.type === nt.type);
+          map[nt.type] = found ? found.enabled : true;
+        }
+        setNotifPrefs(map);
+      })
+      .catch(() => {});
   }, [pathname]);
 
   // Avatar upload
@@ -235,6 +264,26 @@ export default function ProfilePage() {
       addToast({ type: "error", title: lang === "en" ? "Error" : "Erreur" });
     } finally {
       setPwdSubmitting(false);
+    }
+  };
+
+  // Save notification preferences
+  const handleNotifToggle = async (type: string, enabled: boolean) => {
+    const updated = { ...notifPrefs, [type]: enabled };
+    setNotifPrefs(updated);
+    setNotifSaving(true);
+    try {
+      await fetch("/api/profile/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ settings: [{ type, enabled }] }),
+      });
+    } catch {
+      // Revert on error
+      setNotifPrefs(notifPrefs);
+      addToast({ type: "error", title: lang === "en" ? "Error" : "Erreur" });
+    } finally {
+      setNotifSaving(false);
     }
   };
 
@@ -609,6 +658,40 @@ export default function ProfilePage() {
             })}
           </div>
         )}
+      </div>
+      {/* ─── Notification preferences section ─── */}
+      <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="flex items-center gap-2">
+          <Bell className="h-5 w-5 text-gray-500" />
+          <h2 className="text-lg font-semibold text-gray-900">
+            {lang === "en" ? "My Notifications" : "Mes notifications"}
+          </h2>
+          {notifSaving && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
+        </div>
+        <p className="mt-1 text-sm text-gray-500">
+          {lang === "en"
+            ? "Choose which notifications you want to receive."
+            : "Choisissez les notifications que vous souhaitez recevoir."}
+        </p>
+
+        <div className="mt-4 space-y-1">
+          {NOTIF_TYPES.map((nt) => (
+            <div key={nt.type} className="flex items-center justify-between py-2">
+              <span className="text-sm text-gray-700">
+                {lang === "en" ? nt.en : nt.fr}
+              </span>
+              <label className="relative inline-flex cursor-pointer items-center">
+                <input
+                  type="checkbox"
+                  checked={notifPrefs[nt.type] ?? true}
+                  onChange={(e) => handleNotifToggle(nt.type, e.target.checked)}
+                  className="peer sr-only"
+                />
+                <div className="peer h-6 w-11 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-[#00BCD4] peer-checked:after:translate-x-full peer-checked:after:border-white" />
+              </label>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
