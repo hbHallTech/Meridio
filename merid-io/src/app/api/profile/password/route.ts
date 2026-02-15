@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { changePasswordSchema } from "@/lib/validators";
 import { sendPasswordChangedEmail } from "@/lib/email";
@@ -9,13 +8,22 @@ import {
   calculatePasswordExpiresAt,
 } from "@/lib/password";
 import { notifyPasswordChanged, createAuditLog } from "@/lib/notifications";
+import { assertSessionActive } from "@/lib/session-guard";
+import { getRequestIp } from "@/lib/rate-limit";
 import bcrypt from "bcryptjs";
 
 export async function POST(request: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Non authentifie" }, { status: 401 });
+  let session;
+  try {
+    session = await assertSessionActive();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Non authentifie";
+    const status = message === "SESSION_INACTIVE" ? 440 : 401;
+    return NextResponse.json({ error: message }, { status });
   }
+
+  const ip = getRequestIp(request.headers);
+  const userAgent = request.headers.get("user-agent") ?? "unknown";
 
   const body = await request.json();
   const parsed = changePasswordSchema.safeParse(body);
@@ -55,7 +63,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Check password history (last 3 passwords)
+  // Check password history (last 5 passwords)
   const history = (user.passwordHistory as string[] | null) ?? [];
   const isReused = await isPasswordInHistory(parsed.data.newPassword, history);
   if (isReused) {
@@ -93,6 +101,8 @@ export async function POST(request: NextRequest) {
     action: "PASSWORD_CHANGED",
     entityType: "User",
     entityId: session.user.id,
+    ipAddress: ip,
+    newValue: { userAgent },
   }).catch(() => {});
 
   return NextResponse.json({ success: true });

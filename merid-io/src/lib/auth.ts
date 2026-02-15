@@ -78,6 +78,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (token.forcePasswordChange !== undefined)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (session.user as any).forcePasswordChange = token.forcePasswordChange;
+      if (token.lastActivity !== undefined)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (session as any).lastActivity = token.lastActivity;
       return session;
     },
   },
@@ -102,6 +105,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         if (!user || !user.isActive) {
           throw new Error("INVALID_CREDENTIALS");
+        }
+
+        // ── Extract device info early for all audit logs ──
+        let deviceInfo: DeviceInfo = { ip: "unknown", userAgent: "unknown", lastSeen: new Date().toISOString() };
+        try {
+          deviceInfo = await getDeviceInfo();
+        } catch {
+          // Fallback to defaults if headers unavailable
         }
 
         // Check brute force lockout
@@ -140,9 +151,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               action: "ACCOUNT_LOCKED",
               entityType: "User",
               entityId: user.id,
+              ipAddress: deviceInfo.ip,
               newValue: {
                 attempts,
                 lockDurationMinutes: LOCK_DURATION_MINUTES,
+                userAgent: deviceInfo.userAgent,
               },
             }).catch(() => {});
 
@@ -177,7 +190,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             action: "LOGIN_FAILED",
             entityType: "User",
             entityId: user.id,
-            newValue: { attempts },
+            ipAddress: deviceInfo.ip,
+            newValue: { attempts, userAgent: deviceInfo.userAgent },
           }).catch(() => {});
 
           if (attempts >= MAX_LOGIN_ATTEMPTS) {
@@ -223,7 +237,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             action: "PASSWORD_AUTO_RESET",
             entityType: "User",
             entityId: user.id,
-            newValue: { reason: "password_expired" },
+            ipAddress: deviceInfo.ip,
+            newValue: { reason: "password_expired", userAgent: deviceInfo.userAgent },
           }).catch(() => {});
 
           throw new Error("PASSWORD_EXPIRED_RESET");
@@ -243,47 +258,45 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           action: "LOGIN_SUCCESS",
           entityType: "User",
           entityId: user.id,
+          ipAddress: deviceInfo.ip,
+          newValue: { userAgent: deviceInfo.userAgent },
         }).catch(() => {});
 
         // ── New device detection ──
-        try {
-          const deviceInfo = await getDeviceInfo();
-          const storedDevice = user.lastLoginDevice as DeviceInfo | null;
+        const storedDevice = user.lastLoginDevice as DeviceInfo | null;
 
-          if (isNewDevice(deviceInfo, storedDevice)) {
-            await notifyNewLoginDetected(
-              user.id,
-              deviceInfo.ip,
-              deviceInfo.userAgent
-            ).catch(() => {});
+        if (isNewDevice(deviceInfo, storedDevice)) {
+          await notifyNewLoginDetected(
+            user.id,
+            deviceInfo.ip,
+            deviceInfo.userAgent
+          ).catch(() => {});
 
-            await sendNewDeviceLoginEmail(
-              user.email,
-              user.firstName,
-              deviceInfo.ip,
-              deviceInfo.userAgent
-            ).catch(() => {});
+          await sendNewDeviceLoginEmail(
+            user.email,
+            user.firstName,
+            deviceInfo.ip,
+            deviceInfo.userAgent
+          ).catch(() => {});
 
-            await createAuditLog({
-              userId: user.id,
-              action: "NEW_DEVICE_LOGIN",
-              entityType: "User",
-              entityId: user.id,
-              newValue: {
-                ip: deviceInfo.ip,
-                userAgent: deviceInfo.userAgent,
-              },
-            }).catch(() => {});
-          }
-
-          // Update stored device
-          await prisma.user.update({
-            where: { id: user.id },
-            data: { lastLoginDevice: deviceInfo },
-          });
-        } catch {
-          // Don't block login if device detection fails
+          await createAuditLog({
+            userId: user.id,
+            action: "NEW_DEVICE_LOGIN",
+            entityType: "User",
+            entityId: user.id,
+            ipAddress: deviceInfo.ip,
+            newValue: {
+              ip: deviceInfo.ip,
+              userAgent: deviceInfo.userAgent,
+            },
+          }).catch(() => {});
         }
+
+        // Update stored device
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { lastLoginDevice: deviceInfo },
+        });
 
         return {
           id: user.id,

@@ -2,7 +2,7 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 
 const PASSWORD_EXPIRY_DAYS = 90;
-const PASSWORD_HISTORY_SIZE = 3;
+const PASSWORD_HISTORY_SIZE = 5;
 
 /**
  * Generate a cryptographically strong password (12+ chars)
