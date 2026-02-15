@@ -7,7 +7,7 @@ import {
   stepCountIs,
   type UIMessage,
 } from "ai";
-import { openai } from "@ai-sdk/openai";
+import { xai } from "@ai-sdk/xai";
 import { auth } from "@/lib/auth";
 import { z } from "zod";
 
@@ -164,7 +164,7 @@ export async function POST(req: Request) {
   const stream = createUIMessageStream({
     execute: async ({ writer }) => {
       const result = streamText({
-        model: openai("gpt-4o-mini"),
+        model: xai("grok-2-1212"),
         system: systemPrompt,
         messages: modelMessages,
         tools,
