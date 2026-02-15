@@ -1,10 +1,10 @@
 "use client";
 
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useChat } from "@ai-sdk/react";
 import { useRouter } from "next/navigation";
-import { MessageCircle, Send, X, Bot, ExternalLink, Loader2 } from "lucide-react";
+import { MessageCircle, Send, X, Bot, ExternalLink, Loader2, Trash2 } from "lucide-react";
 import type { UIMessage } from "ai";
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
@@ -12,6 +12,10 @@ import type { UIMessage } from "ai";
 interface OpenPageAction {
   url: string;
   label: string;
+}
+
+interface SuggestionItem {
+  text: string;
 }
 
 // ─── Role detection ─────────────────────────────────────────────────────────────
@@ -33,18 +37,18 @@ function detectPrimaryRole(roles: string[]): { key: string; label: string } {
   return { key: "EMPLOYEE", label: ROLE_LABELS.EMPLOYEE };
 }
 
-// ─── Quick-action suggestions per role ──────────────────────────────────────────
+// ─── Quick-action suggestions per role (navigation buttons) ─────────────────────
 
 const QUICK_ACTIONS: Record<string, OpenPageAction[]> = {
   EMPLOYEE: [
     { url: "/leaves/new", label: "Nouvelle demande" },
-    { url: "/leaves/balances", label: "Voir mes soldes" },
     { url: "/leaves", label: "Mes congés" },
+    { url: "/profile", label: "Mon profil" },
   ],
   MANAGER: [
     { url: "/manager/approvals", label: "Approbations en attente" },
     { url: "/manager/calendar", label: "Calendrier équipe" },
-    { url: "/manager/delegations", label: "Délégations" },
+    { url: "/manager/delegation", label: "Délégations" },
   ],
   HR: [
     { url: "/hr/approvals", label: "Approbations RH" },
@@ -58,12 +62,73 @@ const QUICK_ACTIONS: Record<string, OpenPageAction[]> = {
   ],
 };
 
+// ─── Suggestion bubbles per role (questions the user can ask) ────────────────────
+
+const SUGGESTIONS: Record<string, SuggestionItem[]> = {
+  EMPLOYEE: [
+    { text: "Quels sont mes soldes de congés ?" },
+    { text: "Comment poser un congé ?" },
+    { text: "Quels sont les prochains jours fériés ?" },
+    { text: "Qui est mon manager ?" },
+  ],
+  MANAGER: [
+    { text: "Y a-t-il des approbations en attente ?" },
+    { text: "Qui est absent cette semaine ?" },
+    { text: "Comment déléguer mes approbations ?" },
+    { text: "Voir le rapport de mon équipe" },
+  ],
+  HR: [
+    { text: "Combien de demandes sont en attente ?" },
+    { text: "Quelles sont les stats d'absences ?" },
+    { text: "Comment ajuster le solde d'un employé ?" },
+    { text: "Générer un rapport RH" },
+  ],
+  ADMIN: [
+    { text: "Comment ajouter un utilisateur ?" },
+    { text: "Configurer un workflow d'approbation" },
+    { text: "Ajouter un jour férié" },
+    { text: "Voir les logs d'audit" },
+  ],
+};
+
+// ─── localStorage helpers ───────────────────────────────────────────────────────
+
+function getChatStorageKey(userId: string): string {
+  return `meridio-chat-${userId}`;
+}
+
+function loadMessages(userId: string): UIMessage[] | null {
+  try {
+    const raw = localStorage.getItem(getChatStorageKey(userId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as UIMessage[];
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveMessages(userId: string, messages: UIMessage[]): void {
+  try {
+    localStorage.setItem(getChatStorageKey(userId), JSON.stringify(messages));
+  } catch {
+    // quota exceeded or unavailable – silently ignore
+  }
+}
+
+function clearMessages(userId: string): void {
+  try {
+    localStorage.removeItem(getChatStorageKey(userId));
+  } catch {
+    // silently ignore
+  }
+}
+
 // ─── Extract open_page tool invocations from message parts ──────────────────────
 
 function extractActions(msg: UIMessage): OpenPageAction[] {
   const actions: OpenPageAction[] = [];
   for (const part of msg.parts) {
-    // Tool parts have type "tool-<toolName>"
     if (part.type.startsWith("tool-") && "output" in part && part.output) {
       const output = part.output as { url?: string; label?: string };
       if (output.url && output.label) {
@@ -97,6 +162,19 @@ function ActionButton({ action, onClick }: { action: OpenPageAction; onClick: (u
   );
 }
 
+// ─── Suggestion bubble component ────────────────────────────────────────────────
+
+function SuggestionBubble({ text, onClick }: { text: string; onClick: (text: string) => void }) {
+  return (
+    <button
+      onClick={() => onClick(text)}
+      className="meridio-suggestion-bubble rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs text-gray-700 transition-all hover:border-[#00BCD4]/50 hover:bg-[#00BCD4]/5 hover:text-[#00BCD4] dark:border-gray-600 dark:bg-[#21262d] dark:text-gray-300 dark:hover:border-[#00BCD4]/40 dark:hover:bg-[#00BCD4]/10 dark:hover:text-[#00BCD4]"
+    >
+      {text}
+    </button>
+  );
+}
+
 // ─── Main component ─────────────────────────────────────────────────────────────
 
 export function ChatAssistant() {
@@ -104,9 +182,11 @@ export function ChatAssistant() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
+  const [initialized, setInitialized] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const userId = session?.user?.id ?? "";
   const userRoles = (session?.user?.roles as string[]) ?? [];
   const primaryRole = detectPrimaryRole(userRoles);
   const firstName = session?.user?.name?.split(" ")[0] ?? "";
@@ -115,18 +195,39 @@ export function ChatAssistant() {
 
   const isLoading = status === "streaming" || status === "submitted";
 
-  // Set welcome message when opening for the first time
-  useEffect(() => {
-    if (open && messages.length === 0 && firstName) {
-      setMessages([
+  // ── Build welcome message ──
+  const buildWelcomeMessage = useCallback(
+    (): UIMessage => ({
+      id: "welcome",
+      role: "assistant",
+      parts: [
         {
-          id: "welcome",
-          role: "assistant",
-          parts: [{ type: "text", text: `Bonjour ${firstName} ! Comment puis-je vous aider aujourd'hui ?` }],
+          type: "text",
+          text: `Bonjour ${firstName || ""}! Je suis l'assistant Meridio. Comment puis-je vous aider aujourd'hui ?`,
         },
-      ]);
+      ],
+    }),
+    [firstName],
+  );
+
+  // ── Restore messages from localStorage on first open ──
+  useEffect(() => {
+    if (!open || initialized || !userId) return;
+
+    const stored = loadMessages(userId);
+    if (stored && stored.length > 0) {
+      setMessages(stored);
+    } else if (firstName) {
+      setMessages([buildWelcomeMessage()]);
     }
-  }, [open, messages.length, firstName, setMessages]);
+    setInitialized(true);
+  }, [open, initialized, userId, firstName, setMessages, buildWelcomeMessage]);
+
+  // ── Persist messages to localStorage on change ──
+  useEffect(() => {
+    if (!initialized || !userId) return;
+    saveMessages(userId, messages);
+  }, [messages, initialized, userId]);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -145,11 +246,11 @@ export function ChatAssistant() {
     setOpen(false);
   }
 
-  function handleSend() {
-    const text = input.trim();
-    if (!text || isLoading) return;
+  function handleSend(text?: string) {
+    const msg = (text ?? input).trim();
+    if (!msg || isLoading) return;
     setInput("");
-    sendMessage({ text });
+    sendMessage({ text: msg });
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -159,8 +260,19 @@ export function ChatAssistant() {
     }
   }
 
+  function handleClearHistory() {
+    if (!userId) return;
+    clearMessages(userId);
+    setMessages([buildWelcomeMessage()]);
+  }
+
+  // Show suggestions only after welcome, before any user message
+  const hasUserMessage = messages.some((m) => m.role === "user");
+  const showSuggestions = !hasUserMessage && messages.length > 0 && messages[0]?.role === "assistant";
+  const suggestions = SUGGESTIONS[primaryRole.key] ?? SUGGESTIONS.EMPLOYEE;
+
   // Show quick actions only after welcome, before any user message
-  const showQuickActions = messages.length === 1 && messages[0]?.role === "assistant";
+  const showQuickActions = showSuggestions;
   const quickActions = QUICK_ACTIONS[primaryRole.key] ?? QUICK_ACTIONS.EMPLOYEE;
 
   if (!session?.user) return null;
@@ -199,12 +311,21 @@ export function ChatAssistant() {
                 <span className="text-xs text-white/70">({primaryRole.label})</span>
               </div>
             </div>
-            <button
-              onClick={() => setOpen(false)}
-              className="rounded-lg p-1.5 text-white/70 hover:bg-white/10 hover:text-white transition-colors"
-            >
-              <X className="h-5 w-5" />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={handleClearHistory}
+                className="rounded-lg p-1.5 text-white/50 hover:bg-white/10 hover:text-white transition-colors"
+                title="Effacer la conversation"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => setOpen(false)}
+                className="rounded-lg p-1.5 text-white/70 hover:bg-white/10 hover:text-white transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
           </div>
 
           {/* Messages area */}
@@ -253,7 +374,7 @@ export function ChatAssistant() {
               </div>
             )}
 
-            {/* Quick action buttons (shown after welcome message only) */}
+            {/* Quick action buttons (shown before any user message) */}
             {showQuickActions && !isLoading && (
               <div className="flex flex-wrap gap-2 pl-1">
                 {quickActions.map((action) => (
@@ -264,6 +385,20 @@ export function ChatAssistant() {
 
             <div ref={messagesEndRef} />
           </div>
+
+          {/* Suggestion bubbles (above input, before any user message) */}
+          {showSuggestions && !isLoading && (
+            <div className="border-t border-gray-100 px-4 pt-3 pb-1 dark:border-gray-700/50">
+              <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                Suggestions
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {suggestions.map((s) => (
+                  <SuggestionBubble key={s.text} text={s.text} onClick={(t) => handleSend(t)} />
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Input area */}
           <div className="border-t border-gray-200 px-4 py-3 dark:border-gray-700">
@@ -279,7 +414,7 @@ export function ChatAssistant() {
                 className="flex-1 rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-[#00BCD4] focus:outline-none focus:ring-1 focus:ring-[#00BCD4] disabled:opacity-50 dark:border-gray-600 dark:bg-[#0d1117] dark:text-gray-100 dark:placeholder-gray-500"
               />
               <button
-                onClick={handleSend}
+                onClick={() => handleSend()}
                 disabled={!input.trim() || isLoading}
                 className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 style={{ backgroundColor: input.trim() && !isLoading ? "#00BCD4" : undefined }}
