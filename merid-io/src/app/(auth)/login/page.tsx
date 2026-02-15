@@ -19,7 +19,7 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [info, setInfo] = useState(
     reason === "inactivity"
-      ? "Vous avez ete deconnecte pour inactivite."
+      ? "Vous avez été déconnecté - Session expirée"
       : ""
   );
   const [isLoading, setIsLoading] = useState(false);

@@ -14,7 +14,7 @@ function InactivityGuard({ children }: { children: React.ReactNode }) {
       addToast({
         type: "warning",
         title: "Session expiree",
-        message: "Vous avez ete deconnecte pour inactivite.",
+        message: "Vous avez été déconnecté - Session expirée",
         duration: 8000,
       });
     },
