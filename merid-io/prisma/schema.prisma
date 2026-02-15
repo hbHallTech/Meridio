@@ -225,6 +225,7 @@ model Team {
   manager    User     @relation("TeamManager", fields: [managerId], references: [id])
   office     Office   @relation(fields: [officeId], references: [id])
   members    User[]   @relation("TeamMembers")
+  workflows  WorkflowConfig[] @relation("WorkflowTeams")
 }
 
 model Delegation {
@@ -285,14 +286,15 @@ model ExceptionalLeaveRule {
 
 model WorkflowConfig {
   id         String       @id @default(cuid())
-  officeId   String
+  officeId   String?
   mode       WorkflowMode @default(SEQUENTIAL)
   isActive   Boolean      @default(true)
   createdAt  DateTime     @default(now())
   updatedAt  DateTime     @updatedAt
 
-  office     Office       @relation(fields: [officeId], references: [id])
+  office     Office?      @relation(fields: [officeId], references: [id])
   steps      WorkflowStep[]
+  teams      Team[]       @relation("WorkflowTeams")
 }
 
 model WorkflowStep {
