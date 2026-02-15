@@ -24,8 +24,8 @@
     "seed": "npx tsx prisma/seed.ts"
   },
   "dependencies": {
-    "@ai-sdk/openai": "^3.0.29",
     "@ai-sdk/react": "^3.0.88",
+    "@ai-sdk/xai": "^3.0.57",
     "@auth/prisma-adapter": "^2.11.1",
     "@fullcalendar/daygrid": "^6.1.20",
     "@fullcalendar/interaction": "^6.1.20",
