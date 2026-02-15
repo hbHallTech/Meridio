@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { MeridioLogo } from "@/components/MeridioLogo";
 
 // ─── Scene data ──────────────────────────────────────────────────────────────
 
@@ -72,7 +73,7 @@ const SCENES: Scene[] = [
   },
 ];
 
-const SCENE_DURATION = 5200;
+const SCENE_DURATION = 3200;
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -140,12 +141,9 @@ export function MeridioLoginStory() {
         {/* Header: brand + chips */}
         <header className="mls-top">
           <div className="mls-brand">
-            <div className="mls-logo-mark" aria-hidden="true" />
-            <div>
-              <div className="mls-brand-name">Halley-Technologies</div>
-              <div className="mls-brand-sub">
-                Merid.io — Gestion des congés &amp; notes de frais
-              </div>
+            <MeridioLogo height={30} />
+            <div className="mls-brand-sub">
+              Gestion des congés &amp; notes de frais
             </div>
           </div>
           <div className="mls-chips" key={active}>
@@ -317,21 +315,12 @@ export function MeridioLoginStory() {
           gap: 18px;
         }
         .mls-brand {
-          display: flex; gap: 12px; align-items: center; min-width: 0;
-        }
-        .mls-logo-mark {
-          width: 34px; height: 34px; border-radius: 10px;
-          background: linear-gradient(135deg, rgba(44,144,255,.9), rgba(0,211,167,.85));
-          box-shadow: 0 10px 30px rgba(0,0,0,.25);
-          flex: 0 0 auto;
-        }
-        .mls-brand-name {
-          font-weight: 700; font-size: 18px; letter-spacing: 0.2px; line-height: 1.15;
+          display: flex; flex-direction: column; gap: 4px; min-width: 0;
         }
         .mls-brand-sub {
-          margin-top: 2px; font-size: 12.5px; opacity: 0.85;
+          font-size: 12px; opacity: 0.55;
           white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-          max-width: 46vw;
+          max-width: 46vw; padding-left: 2px;
         }
         .mls-chips {
           display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end;
