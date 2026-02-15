@@ -1,6 +1,7 @@
 /**
- * Meridio "Meridian Pulse" logo — inline SVG variants.
- * Concept: flowing meridian curve with a pulsing teal node at center.
+ * Meridio official logo — inline SVG variants.
+ * Design: ribbon curve (blue→teal→violet) + spark node + "Meridio" wordmark.
+ * Based on the official 2400×900 master SVG.
  */
 
 interface LogoProps {
@@ -9,14 +10,17 @@ interface LogoProps {
   height?: number;
   /** Show text or icon-only */
   variant?: "full" | "icon";
-  /** Text color override */
+  /** Text color override (default: white for dark bg) */
   textColor?: string;
 }
 
-/** Full horizontal logo: icon + "Meridio" text */
+/**
+ * Full horizontal logo: mark + "Meridio" wordmark.
+ * viewBox is 2400×900 scaled to requested height.
+ */
 export function MeridioLogo({
   className,
-  height = 32,
+  height = 36,
   variant = "full",
   textColor = "#ffffff",
 }: LogoProps) {
@@ -24,12 +28,14 @@ export function MeridioLogo({
     return <MeridioIcon className={className} size={height} />;
   }
 
-  const w = Math.round(height * (240 / 32));
+  // Original aspect ratio: 2400/900 ≈ 2.67, but the visual content
+  // sits roughly in a 2000×600 box so we use a tighter viewBox.
+  const w = Math.round(height * (380 / 100));
 
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 240 32"
+      viewBox="60 140 2200 620"
       width={w}
       height={height}
       fill="none"
@@ -37,50 +43,64 @@ export function MeridioLogo({
       aria-label="Meridio"
       role="img"
     >
-      {/* Meridian curve */}
-      <path
-        d="M3 20C7 20 10 8 18 8C26 8 26 26 34 26C39 26 41 18 41 18"
-        stroke="url(#mlogo-g)"
-        strokeWidth="2.8"
-        strokeLinecap="round"
-        fill="none"
-      />
-      {/* Pulse glow */}
-      <circle cx="18" cy="16" r="5" fill="#00d3a7" opacity="0.15" />
-      {/* Pulse circle */}
-      <circle cx="18" cy="16" r="3" fill="#00d3a7" />
-      {/* Spark */}
-      <circle cx="18" cy="16" r="1" fill="#fff" />
-      {/* Text */}
-      <text
-        x="52"
-        y="23"
-        fontFamily="Inter, system-ui, -apple-system, sans-serif"
-        fontSize="21"
-        fontWeight="700"
-        fill={textColor}
-        letterSpacing="-0.3"
-      >
-        Meridio
-      </text>
       <defs>
-        <linearGradient
-          id="mlogo-g"
-          x1="3"
-          y1="16"
-          x2="41"
-          y2="16"
-          gradientUnits="userSpaceOnUse"
-        >
-          <stop stopColor="#2c90ff" />
-          <stop offset="1" stopColor="#00d3a7" />
+        <linearGradient id="mlg-ribbon" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#2c90ff" />
+          <stop offset="0.55" stopColor="#00d3a7" />
+          <stop offset="1" stopColor="#7b61ff" />
         </linearGradient>
+        <radialGradient id="mlg-glow" cx="50%" cy="50%" r="60%">
+          <stop offset="0" stopColor="#00d3a7" stopOpacity="0.55" />
+          <stop offset="1" stopColor="#00d3a7" stopOpacity="0" />
+        </radialGradient>
       </defs>
+
+      {/* Mark */}
+      <g transform="translate(150,185)">
+        {/* Glow */}
+        <circle cx="310" cy="80" r="120" fill="url(#mlg-glow)" />
+        {/* Ribbon curve */}
+        <path
+          d="M 40 360 C 95 170, 185 120, 275 250 C 325 325, 360 385, 430 385 C 520 385, 560 290, 590 210 C 620 130, 695 85, 770 115"
+          fill="none"
+          stroke="url(#mlg-ribbon)"
+          strokeWidth="68"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        {/* Spark node: dark circle */}
+        <circle cx="770" cy="115" r="58" fill="#0b2540" opacity="0.90" stroke="#00d3a7" strokeWidth="8" />
+        {/* Spark diamond */}
+        <path
+          d="M 770 76 L 784 102 L 812 115 L 784 128 L 770 154 L 756 128 L 728 115 L 756 102 Z"
+          fill="#eef6ff"
+        />
+        {/* Outer ring */}
+        <circle cx="770" cy="115" r="84" fill="none" stroke="#2c90ff" strokeWidth="6" opacity="0.35" />
+      </g>
+
+      {/* Wordmark */}
+      <g transform="translate(1060,310)">
+        <text
+          x="0"
+          y="0"
+          fontFamily="Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial"
+          fontSize="220"
+          fontWeight="800"
+          fill={textColor}
+          letterSpacing="-2"
+        >
+          Meridio
+        </text>
+      </g>
     </svg>
   );
 }
 
-/** Icon-only variant (for favicon area, collapsed sidebar, etc.) */
+/**
+ * Icon-only variant: just the ribbon mark + spark node.
+ * For favicon, collapsed sidebar, app icon.
+ */
 export function MeridioIcon({
   className,
   size = 32,
@@ -91,7 +111,7 @@ export function MeridioIcon({
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 36 36"
+      viewBox="80 120 880 500"
       width={size}
       height={size}
       fill="none"
@@ -99,34 +119,35 @@ export function MeridioIcon({
       aria-label="Meridio"
       role="img"
     >
-      {/* Meridian curve */}
-      <path
-        d="M3 22C7 22 10 10 18 10C26 10 26 28 34 28C37 28 38 22 38 22"
-        stroke="url(#micon-g)"
-        strokeWidth="2.8"
-        strokeLinecap="round"
-        fill="none"
-      />
-      {/* Pulse glow */}
-      <circle cx="18" cy="18" r="6" fill="#00d3a7" opacity="0.14" />
-      <circle cx="18" cy="18" r="4" fill="#00d3a7" opacity="0.25" />
-      {/* Pulse circle */}
-      <circle cx="18" cy="18" r="2.8" fill="#00d3a7" />
-      {/* Spark */}
-      <circle cx="18" cy="18" r="1" fill="#fff" />
       <defs>
-        <linearGradient
-          id="micon-g"
-          x1="3"
-          y1="18"
-          x2="38"
-          y2="18"
-          gradientUnits="userSpaceOnUse"
-        >
-          <stop stopColor="#2c90ff" />
-          <stop offset="1" stopColor="#00d3a7" />
+        <linearGradient id="mic-ribbon" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#2c90ff" />
+          <stop offset="0.55" stopColor="#00d3a7" />
+          <stop offset="1" stopColor="#7b61ff" />
         </linearGradient>
+        <radialGradient id="mic-glow" cx="50%" cy="50%" r="60%">
+          <stop offset="0" stopColor="#00d3a7" stopOpacity="0.55" />
+          <stop offset="1" stopColor="#00d3a7" stopOpacity="0" />
+        </radialGradient>
       </defs>
+
+      <g transform="translate(150,185)">
+        <circle cx="310" cy="80" r="120" fill="url(#mic-glow)" />
+        <path
+          d="M 40 360 C 95 170, 185 120, 275 250 C 325 325, 360 385, 430 385 C 520 385, 560 290, 590 210 C 620 130, 695 85, 770 115"
+          fill="none"
+          stroke="url(#mic-ribbon)"
+          strokeWidth="68"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <circle cx="770" cy="115" r="58" fill="#0b2540" opacity="0.90" stroke="#00d3a7" strokeWidth="8" />
+        <path
+          d="M 770 76 L 784 102 L 812 115 L 784 128 L 770 154 L 756 128 L 728 115 L 756 102 Z"
+          fill="#eef6ff"
+        />
+        <circle cx="770" cy="115" r="84" fill="none" stroke="#2c90ff" strokeWidth="6" opacity="0.35" />
+      </g>
     </svg>
   );
 }

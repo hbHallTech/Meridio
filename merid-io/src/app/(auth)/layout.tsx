@@ -20,7 +20,7 @@ export default function AuthLayout({
       <div className="flex w-full lg:w-[48%] flex-col items-center justify-center bg-gray-50 p-6">
         {/* Mobile header */}
         <div className="mb-8 flex justify-center lg:hidden">
-          <MeridioLogo height={28} textColor="#1B3A5C" />
+          <MeridioLogo height={32} textColor="#0b2540" />
         </div>
 
         <div className="w-full max-w-md flex-1 flex items-center">
