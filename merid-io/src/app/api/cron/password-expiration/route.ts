@@ -90,16 +90,17 @@ export async function GET(request: NextRequest) {
   for (const user of expiredUsers) {
     const tempPassword = generateStrongPassword();
     const newHash = await bcrypt.hash(tempPassword, 12);
-    const newHistory = buildPasswordHistory(
+    const newHistory = await buildPasswordHistory(
       newHash,
       (user.passwordHistory as string[] | null) ?? null
     );
+    const newExpiresAt = await calculatePasswordExpiresAt();
 
     await prisma.user.update({
       where: { id: user.id },
       data: {
         passwordHash: newHash,
-        passwordExpiresAt: calculatePasswordExpiresAt(),
+        passwordExpiresAt: newExpiresAt,
         lastPasswordChangeAt: now,
         forcePasswordChange: true,
         passwordHistory: newHistory,

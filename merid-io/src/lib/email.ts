@@ -1,22 +1,85 @@
 import nodemailer from "nodemailer";
+import type { Transporter } from "nodemailer";
+import { prisma } from "@/lib/prisma";
+import { decrypt } from "@/lib/crypto";
 
-const smtpPort = Number(process.env.SMTP_PORT) || 587;
+// Cached transporter (rebuilt when DB config changes)
+let _transporter: Transporter | null = null;
+let _lastConfigHash = "";
 
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || "smtp.office365.com",
-  port: smtpPort,
-  secure: smtpPort === 465,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-  ...(smtpPort !== 465 && {
-    tls: {
-      ciphers: "SSLv3",
-      rejectUnauthorized: false,
+async function getSmtpConfig() {
+  try {
+    const company = await prisma.company.findFirst({
+      select: {
+        smtpHost: true,
+        smtpPort: true,
+        smtpSecure: true,
+        smtpUser: true,
+        smtpPassEncrypted: true,
+        smtpFrom: true,
+      },
+    });
+
+    if (company?.smtpHost && company?.smtpUser) {
+      let smtpPass = "";
+      if (company.smtpPassEncrypted) {
+        try {
+          smtpPass = decrypt(company.smtpPassEncrypted);
+        } catch {
+          smtpPass = company.smtpPassEncrypted;
+        }
+      }
+      return {
+        host: company.smtpHost,
+        port: company.smtpPort || 587,
+        secure: company.smtpSecure,
+        user: company.smtpUser,
+        pass: smtpPass,
+        from: company.smtpFrom || company.smtpUser,
+      };
+    }
+  } catch {
+    // DB not available — fall through to env
+  }
+
+  // Fallback to .env
+  return {
+    host: process.env.SMTP_HOST || "smtp.office365.com",
+    port: Number(process.env.SMTP_PORT) || 587,
+    secure: (Number(process.env.SMTP_PORT) || 587) === 465,
+    user: process.env.SMTP_USER || "",
+    pass: process.env.SMTP_PASS || "",
+    from: process.env.SMTP_FROM || process.env.SMTP_USER || "",
+  };
+}
+
+async function getTransporter(): Promise<Transporter> {
+  const config = await getSmtpConfig();
+  const configHash = `${config.host}:${config.port}:${config.user}:${config.secure}`;
+
+  if (_transporter && configHash === _lastConfigHash) {
+    return _transporter;
+  }
+
+  _transporter = nodemailer.createTransport({
+    host: config.host,
+    port: config.port,
+    secure: config.secure || config.port === 465,
+    auth: {
+      user: config.user,
+      pass: config.pass,
     },
-  }),
-});
+    ...(config.port !== 465 && {
+      tls: {
+        ciphers: "SSLv3",
+        rejectUnauthorized: false,
+      },
+    }),
+  });
+
+  _lastConfigHash = configHash;
+  return _transporter;
+}
 
 interface SendEmailOptions {
   to: string;
@@ -25,13 +88,17 @@ interface SendEmailOptions {
 }
 
 export async function sendEmail({ to, subject, html }: SendEmailOptions) {
-  if (!process.env.SMTP_USER) {
+  const config = await getSmtpConfig();
+
+  if (!config.user) {
     console.log(`[EMAIL SKIP] No SMTP configured. To: ${to}, Subject: ${subject}`);
     return;
   }
 
+  const transporter = await getTransporter();
+
   await transporter.sendMail({
-    from: process.env.SMTP_FROM || process.env.SMTP_USER,
+    from: config.from,
     to,
     subject,
     html,

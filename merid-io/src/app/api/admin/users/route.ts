@@ -67,7 +67,8 @@ export async function POST(request: Request) {
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
-    const passwordHistory = buildPasswordHistory(passwordHash, null);
+    const passwordHistory = await buildPasswordHistory(passwordHash, null);
+    const passwordExpiresAt = await calculatePasswordExpiresAt();
 
     const user = await prisma.user.create({
       data: {
@@ -81,7 +82,7 @@ export async function POST(request: Request) {
         hireDate: new Date(hireDate),
         isActive: isActive ?? true,
         forcePasswordChange: forcePasswordChange ?? true,
-        passwordExpiresAt: calculatePasswordExpiresAt(),
+        passwordExpiresAt,
         lastPasswordChangeAt: new Date(),
         passwordHistory,
       },
@@ -184,9 +185,9 @@ export async function PATCH(request: Request) {
       updateData.passwordHash = newHash;
       updateData.passwordChangedAt = new Date();
       updateData.lastPasswordChangeAt = new Date();
-      updateData.passwordExpiresAt = calculatePasswordExpiresAt();
+      updateData.passwordExpiresAt = await calculatePasswordExpiresAt();
       updateData.forcePasswordChange = forcePasswordChange ?? true;
-      updateData.passwordHistory = buildPasswordHistory(
+      updateData.passwordHistory = await buildPasswordHistory(
         newHash,
         existingHistory
       );
