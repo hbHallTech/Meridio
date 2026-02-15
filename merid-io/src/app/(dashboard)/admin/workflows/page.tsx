@@ -35,6 +35,12 @@ interface StepDraft {
   isRequired: boolean;
 }
 
+interface StepDraft {
+  stepOrder: number;
+  stepType: "MANAGER" | "HR";
+  isRequired: boolean;
+}
+
 const stepTypeLabels: Record<string, string> = {
   MANAGER: "Manager",
   HR: "Ressources Humaines",

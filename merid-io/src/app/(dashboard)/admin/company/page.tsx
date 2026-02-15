@@ -12,6 +12,7 @@ import Link from "next/link";
 
 // ─── Types ───
 
+
 interface OfficeData {
   id: string;
   name: string;
