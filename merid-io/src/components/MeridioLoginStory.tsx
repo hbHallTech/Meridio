@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { Bot, CheckCircle2, Sparkles } from "lucide-react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 // ─── Scene data ──────────────────────────────────────────────────────────────
 
@@ -12,12 +11,16 @@ interface Scene {
   bullets: string[];
   roleChip: string;
   aiChip: string;
-  accent: string; // tailwind ring/border accent for chip
+  kpi1: string;
+  kpi2: string;
+  panelTitle: string;
+  primaryBtn: string;
+  activeTile: number;
 }
 
 const SCENES: Scene[] = [
   {
-    kicker: "Scène 1 — Employé",
+    kicker: "Scène 1 — Collaborateur",
     title: "Demande en 30 secondes",
     description: "Congé ou note de frais, guidé pas à pas.",
     bullets: [
@@ -27,7 +30,11 @@ const SCENES: Scene[] = [
     ],
     roleChip: "Employé",
     aiChip: "AI Assistant (Employé)",
-    accent: "#00BCD4",
+    kpi1: "18.5 j",
+    kpi2: "Brouillon",
+    panelTitle: "Demande",
+    primaryBtn: "Soumettre",
+    activeTile: 1,
   },
   {
     kicker: "Scène 2 — Manager",
@@ -40,7 +47,11 @@ const SCENES: Scene[] = [
     ],
     roleChip: "Manager",
     aiChip: "AI Assistant (Manager)",
-    accent: "#7c3aed",
+    kpi1: "Équipe",
+    kpi2: "À valider",
+    panelTitle: "Approbation",
+    primaryBtn: "Approuver",
+    activeTile: 2,
   },
   {
     kicker: "Scène 3 — RH / Finance",
@@ -53,211 +64,487 @@ const SCENES: Scene[] = [
     ],
     roleChip: "RH / Finance",
     aiChip: "AI Assistant (RH/Finance)",
-    accent: "#10b981",
+    kpi1: "Conformité",
+    kpi2: "Validé",
+    panelTitle: "Contrôle",
+    primaryBtn: "Soumettre",
+    activeTile: 3,
   },
 ];
 
-const SCENE_DURATION = 3200;
+const SCENE_DURATION = 5200;
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function MeridioLoginStory() {
   const [active, setActive] = useState(0);
-  const [progress, setProgress] = useState(0);
   const [paused, setPaused] = useState(false);
+  const barRef = useRef<HTMLDivElement>(null);
 
-  const next = useCallback(() => {
-    setActive((prev) => (prev + 1) % SCENES.length);
-    setProgress(0);
+  const animateBar = useCallback(() => {
+    const bar = barRef.current;
+    if (!bar) return;
+    bar.style.transition = "none";
+    bar.style.transform = "scaleX(0)";
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        bar.style.transition = `transform ${SCENE_DURATION}ms linear`;
+        bar.style.transform = "scaleX(1)";
+      });
+    });
   }, []);
 
-  // Auto-advance timer
+  const goTo = useCallback(
+    (index: number) => {
+      setActive(index);
+      animateBar();
+    },
+    [animateBar],
+  );
+
+  // Auto-advance
   useEffect(() => {
     if (paused) return;
-    const interval = setInterval(() => {
-      setProgress((p) => {
-        if (p >= 100) {
-          next();
-          return 0;
-        }
-        return p + 100 / (SCENE_DURATION / 50);
+    animateBar();
+    const timer = setInterval(() => {
+      setActive((prev) => {
+        const next = (prev + 1) % SCENES.length;
+        return next;
       });
-    }, 50);
-    return () => clearInterval(interval);
-  }, [paused, next]);
-
-  function goTo(index: number) {
-    setActive(index);
-    setProgress(0);
-  }
+      animateBar();
+    }, SCENE_DURATION);
+    return () => clearInterval(timer);
+  }, [paused, animateBar]);
 
   const scene = SCENES[active];
 
   return (
     <div
-      className="meridio-story relative flex h-full flex-col justify-between overflow-hidden p-10 xl:p-14"
+      className="mls-root"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
+      role="region"
+      aria-label="Merid.io story"
     >
-      {/* ── Background blobs ── */}
-      <div className="pointer-events-none absolute inset-0">
-        {/* Blob 1 - teal */}
-        <div
-          className="meridio-blob absolute -top-24 -left-24 h-[420px] w-[420px] rounded-full opacity-25 blur-[100px]"
-          style={{ background: "#00BCD4", animationDelay: "0s" }}
-        />
-        {/* Blob 2 - purple */}
-        <div
-          className="meridio-blob absolute -bottom-20 right-10 h-[350px] w-[350px] rounded-full opacity-20 blur-[100px]"
-          style={{ background: "#7c3aed", animationDelay: "-2s" }}
-        />
-        {/* Blob 3 - blue */}
-        <div
-          className="meridio-blob absolute top-1/2 left-1/2 h-[300px] w-[300px] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-15 blur-[100px]"
-          style={{ background: "#3b82f6", animationDelay: "-4s" }}
-        />
-        {/* Noise overlay */}
-        <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E\")" }} />
-        {/* Subtle grid */}
-        <div
-          className="absolute inset-0 opacity-[0.04]"
-          style={{
-            backgroundImage: "linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)",
-            backgroundSize: "40px 40px",
-          }}
-        />
+      {/* ── Background ── */}
+      <div className="mls-bg">
+        <div className="mls-blob mls-b1" />
+        <div className="mls-blob mls-b2" />
+        <div className="mls-blob mls-b3" />
+        <div className="mls-noise" />
+        <div className="mls-grid" />
       </div>
 
-      {/* ── Top: branding ── */}
-      <div className="relative z-10">
-        <h1 className="text-2xl font-bold text-white xl:text-3xl">Halley-Technologies</h1>
-        <p className="mt-1 text-sm font-medium" style={{ color: "#00BCD4" }}>
-          Meridio — Gestion des congés
-        </p>
-      </div>
+      {/* ── Content ── */}
+      <div className="mls-content">
+        {/* Header: brand + chips */}
+        <header className="mls-top">
+          <div className="mls-brand">
+            <div className="mls-logo-mark" aria-hidden="true" />
+            <div>
+              <div className="mls-brand-name">Halley-Technologies</div>
+              <div className="mls-brand-sub">
+                Merid.io — Gestion des congés &amp; notes de frais
+              </div>
+            </div>
+          </div>
+          <div className="mls-chips" key={active}>
+            <span className="mls-chip">{scene.roleChip}</span>
+            <span className="mls-chip mls-chip-ai">{scene.aiChip}</span>
+          </div>
+        </header>
 
-      {/* ── Middle: scene content ── */}
-      <div className="relative z-10 flex-1 flex flex-col justify-center py-8">
-        <div
-          key={active}
-          className="meridio-scene-enter space-y-5"
-        >
-          {/* Kicker */}
-          <p className="text-xs font-semibold uppercase tracking-widest text-white/40">
-            {scene.kicker}
-          </p>
+        {/* Stage: copy + mock card */}
+        <div className="mls-stage">
+          {/* Left copy */}
+          <div className="mls-copy" key={active}>
+            <div className="mls-kicker">{scene.kicker}</div>
+            <h2 className="mls-title">{scene.title}</h2>
+            <p className="mls-desc">{scene.description}</p>
+            <ul className="mls-bullets">
+              {scene.bullets.map((b) => (
+                <li key={b}>
+                  <span className="mls-dot" aria-hidden="true" />
+                  <span>{b}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="mls-hint">
+              Workflow clair &bull; Notifications &bull; Suivi temps réel
+            </div>
+          </div>
 
-          {/* Title */}
-          <h2 className="text-3xl font-extrabold leading-tight text-white xl:text-4xl">
-            {scene.title}
-          </h2>
-
-          {/* Description */}
-          <p className="max-w-md text-base leading-relaxed text-white/70">
-            {scene.description}
-          </p>
-
-          {/* Bullets */}
-          <ul className="space-y-2.5 pt-1">
-            {scene.bullets.map((b) => (
-              <li key={b} className="flex items-start gap-2.5 text-sm text-white/80">
-                <CheckCircle2
-                  className="mt-0.5 h-4 w-4 shrink-0"
-                  style={{ color: scene.accent }}
-                />
-                {b}
-              </li>
-            ))}
-          </ul>
-
-          {/* Chips */}
-          <div className="flex flex-wrap items-center gap-2.5 pt-2">
-            <span
-              className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold backdrop-blur-md"
-              style={{
-                borderColor: `${scene.accent}40`,
-                backgroundColor: `${scene.accent}15`,
-                color: scene.accent,
-              }}
-            >
-              <Sparkles className="h-3 w-3" />
-              {scene.roleChip}
-            </span>
-            <span
-              className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-white/70 backdrop-blur-md"
-            >
-              <Bot className="h-3 w-3" />
-              {scene.aiChip}
-            </span>
+          {/* Right mock card */}
+          <div className="mls-mock-wrap" aria-hidden="true">
+            <div className="mls-mock-card" key={active}>
+              {/* Tab bar */}
+              <div className="mls-mock-top">
+                <div className="mls-pill" />
+                <div className="mls-pill mls-pill-sm" />
+                <div className="mls-pill mls-pill-sm" />
+              </div>
+              <div className="mls-mock-body">
+                {/* KPIs */}
+                <div className="mls-row">
+                  <div className="mls-kpi">
+                    <div className="mls-kpi-label">Solde</div>
+                    <div className="mls-kpi-value">{scene.kpi1}</div>
+                  </div>
+                  <div className="mls-kpi">
+                    <div className="mls-kpi-label">Statut</div>
+                    <div className="mls-kpi-value">{scene.kpi2}</div>
+                  </div>
+                </div>
+                {/* Panel */}
+                <div className="mls-panel">
+                  <div className="mls-panel-title">
+                    <span>{scene.panelTitle}</span>
+                    <span className="mls-ai-tag">AI</span>
+                  </div>
+                  <div className="mls-lines">
+                    <div className="mls-line" style={{ width: "90%" }} />
+                    <div className="mls-line" style={{ width: "70%" }} />
+                    <div className="mls-line" style={{ width: "80%" }} />
+                  </div>
+                  <div className="mls-btn-row">
+                    <span className="mls-btn-mini">Prévisualiser</span>
+                    <span className="mls-btn-mini mls-btn-primary">
+                      {scene.primaryBtn}
+                    </span>
+                  </div>
+                </div>
+                {/* Tiles */}
+                <div className="mls-mini-grid">
+                  <div className={`mls-tile${scene.activeTile === 1 ? " mls-tile-active" : ""}`}>
+                    Calendrier
+                  </div>
+                  <div className={`mls-tile${scene.activeTile === 2 ? " mls-tile-active" : ""}`}>
+                    Équipe
+                  </div>
+                  <div className={`mls-tile${scene.activeTile === 3 ? " mls-tile-active" : ""}`}>
+                    Reporting
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* ── Bottom: hint + progress + dots ── */}
-      <div className="relative z-10 space-y-4">
-        {/* Hint */}
-        <p className="text-xs text-white/30">
-          Workflow clair &bull; Notifications &bull; Suivi temps réel
-        </p>
-
-        {/* Progress bar */}
-        <div className="h-0.5 w-full overflow-hidden rounded-full bg-white/10">
-          <div
-            className="h-full rounded-full transition-[width] duration-100 ease-linear"
-            style={{
-              width: `${progress}%`,
-              backgroundColor: scene.accent,
-            }}
-          />
-        </div>
-
-        {/* Dots + copyright */}
-        <div className="flex items-center justify-between">
-          <div className="flex gap-2">
-            {SCENES.map((s, i) => (
+        {/* Footer: dots + progress */}
+        <footer className="mls-bottom">
+          <div className="mls-dots" aria-label="Navigation scènes">
+            {SCENES.map((_, i) => (
               <button
                 key={i}
+                className={`mls-dot-btn${i === active ? " mls-dot-active" : ""}`}
                 onClick={() => goTo(i)}
-                aria-label={`Aller à ${s.kicker}`}
-                className="group relative h-2.5 w-2.5 rounded-full transition-all duration-300"
-                style={{
-                  backgroundColor: i === active ? s.accent : "rgba(255,255,255,0.2)",
-                  transform: i === active ? "scale(1.3)" : "scale(1)",
-                }}
+                aria-label={`Aller à la scène ${i + 1}`}
               />
             ))}
           </div>
-          <p className="text-[10px] text-white/30">
-            &copy; {new Date().getFullYear()} Halley-Technologies SA
-          </p>
-        </div>
+          <div className="mls-progress">
+            <div className="mls-bar" ref={barRef} />
+          </div>
+        </footer>
       </div>
 
-      {/* ── Inline styles (CSS animations) ── */}
+      {/* ── Scoped styles ── */}
       <style jsx>{`
-        /* Blob floating animation */
-        .meridio-blob {
-          animation: meridio-float 8s ease-in-out infinite;
-        }
-        @keyframes meridio-float {
-          0%, 100% { transform: translate(0, 0) scale(1); }
-          33% { transform: translate(15px, -20px) scale(1.05); }
-          66% { transform: translate(-10px, 12px) scale(0.95); }
+        /* Root */
+        .mls-root {
+          position: relative;
+          width: 100%;
+          height: 100%;
+          padding: 22px;
+          display: flex;
+          align-items: stretch;
+          justify-items: stretch;
+          color: #eef6ff;
         }
 
-        /* Scene enter animation */
-        .meridio-scene-enter {
-          animation: meridio-fade-up 0.5s ease-out both;
+        /* Background */
+        .mls-bg { position: absolute; inset: 0; overflow: hidden; }
+        .mls-blob {
+          position: absolute;
+          width: 520px; height: 520px;
+          border-radius: 50%;
+          filter: blur(40px);
+          opacity: 0.22;
+          will-change: transform;
+          animation: mls-float 10s ease-in-out infinite;
         }
-        @keyframes meridio-fade-up {
+        .mls-b1 { left: -160px; top: -180px; background: #2c90ff; }
+        .mls-b2 { right: -220px; top: 10%; background: #00d3a7; animation-duration: 12s; }
+        .mls-b3 { left: 15%; bottom: -240px; background: #7b61ff; animation-duration: 14s; }
+        .mls-noise {
+          position: absolute; inset: 0;
+          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)' opacity='.20'/%3E%3C/svg%3E");
+          mix-blend-mode: overlay;
+          opacity: 0.16;
+        }
+        .mls-grid {
+          position: absolute; inset: 0;
+          background:
+            linear-gradient(to right, rgba(255,255,255,.06) 1px, transparent 1px),
+            linear-gradient(to bottom, rgba(255,255,255,.06) 1px, transparent 1px);
+          background-size: 48px 48px;
+          opacity: 0.10;
+          mask-image: radial-gradient(ellipse at 30% 20%, black 0%, transparent 70%);
+        }
+
+        /* Content wrapper */
+        .mls-content {
+          position: relative;
+          z-index: 1;
+          width: 100%;
+          height: 100%;
+          min-height: 560px;
+          overflow: hidden;
+          border-radius: 18px;
+          border: 1px solid rgba(255,255,255,0.10);
+          background: #0b2540;
+          padding: 28px;
+          display: flex;
+          flex-direction: column;
+          gap: 18px;
+        }
+
+        /* Header */
+        .mls-top {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 18px;
+        }
+        .mls-brand {
+          display: flex; gap: 12px; align-items: center; min-width: 0;
+        }
+        .mls-logo-mark {
+          width: 34px; height: 34px; border-radius: 10px;
+          background: linear-gradient(135deg, rgba(44,144,255,.9), rgba(0,211,167,.85));
+          box-shadow: 0 10px 30px rgba(0,0,0,.25);
+          flex: 0 0 auto;
+        }
+        .mls-brand-name {
+          font-weight: 700; font-size: 18px; letter-spacing: 0.2px; line-height: 1.15;
+        }
+        .mls-brand-sub {
+          margin-top: 2px; font-size: 12.5px; opacity: 0.85;
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+          max-width: 46vw;
+        }
+        .mls-chips {
+          display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end;
+          animation: mls-fade-in 0.4s ease-out both;
+        }
+        .mls-chip {
+          font-size: 12px;
+          padding: 7px 10px;
+          border-radius: 999px;
+          background: rgba(255,255,255,0.10);
+          border: 1px solid rgba(255,255,255,0.16);
+          backdrop-filter: blur(8px);
+          white-space: nowrap;
+        }
+        .mls-chip-ai {
+          background: rgba(0,211,167,0.12);
+          border-color: rgba(0,211,167,0.28);
+        }
+
+        /* Stage (2-col) */
+        .mls-stage {
+          display: grid;
+          grid-template-columns: 1.05fr 0.95fr;
+          gap: 22px;
+          align-items: center;
+          flex: 1;
+          min-height: 0;
+        }
+        @media (max-width: 1280px) {
+          .mls-stage { grid-template-columns: 1fr; }
+          .mls-mock-wrap { display: none; }
+        }
+
+        /* Copy block */
+        .mls-copy {
+          animation: mls-fade-up 0.5s ease-out both;
+        }
+        .mls-kicker {
+          font-size: 12px; letter-spacing: 0.16em;
+          text-transform: uppercase; opacity: 0.8;
+        }
+        .mls-title {
+          margin: 10px 0 8px;
+          font-size: clamp(22px, 2.2vw, 32px);
+          font-weight: 800;
+          line-height: 1.1;
+        }
+        .mls-desc {
+          margin: 0 0 14px;
+          font-size: 14px; opacity: 0.9;
+          max-width: 52ch;
+        }
+        .mls-bullets {
+          margin: 0; padding: 0; list-style: none;
+          display: grid; gap: 10px; max-width: 58ch;
+        }
+        .mls-bullets li {
+          display: flex; gap: 10px; align-items: flex-start;
+          font-size: 13.5px; line-height: 1.25; opacity: 0.92;
+        }
+        .mls-dot {
+          width: 10px; height: 10px; margin-top: 4px;
+          border-radius: 999px;
+          background: rgba(255,255,255,0.18);
+          border: 1px solid rgba(255,255,255,0.22);
+          box-shadow: 0 0 0 4px rgba(44,144,255,0.12);
+          flex: 0 0 auto;
+        }
+        .mls-hint {
+          display: inline-flex;
+          gap: 10px;
+          padding: 10px 12px;
+          border-radius: 12px;
+          background: rgba(0,0,0,0.18);
+          border: 1px solid rgba(255,255,255,0.14);
+          font-size: 12.5px;
+          opacity: 0.95;
+          margin-top: 14px;
+        }
+
+        /* Mock card */
+        .mls-mock-wrap {
+          width: 100%; display: grid; place-items: center; min-height: 280px;
+        }
+        .mls-mock-card {
+          width: min(420px, 100%);
+          border-radius: 18px;
+          background: rgba(255,255,255,0.10);
+          border: 1px solid rgba(255,255,255,0.16);
+          box-shadow: 0 18px 60px rgba(0,0,0,0.28);
+          backdrop-filter: blur(10px);
+          overflow: hidden;
+          animation: mls-fade-in 0.5s ease-out both;
+        }
+        .mls-mock-top {
+          display: flex; gap: 8px;
+          padding: 14px 14px 12px;
+          border-bottom: 1px solid rgba(255,255,255,0.12);
+          background: rgba(0,0,0,0.10);
+        }
+        .mls-pill {
+          width: 54px; height: 10px; border-radius: 999px;
+          background: rgba(255,255,255,0.18);
+        }
+        .mls-pill-sm { width: 34px; opacity: 0.85; }
+        .mls-mock-body { padding: 14px; display: grid; gap: 12px; }
+        .mls-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .mls-kpi {
+          padding: 12px; border-radius: 14px;
+          background: rgba(0,0,0,0.14);
+          border: 1px solid rgba(255,255,255,0.12);
+        }
+        .mls-kpi-label { font-size: 11px; opacity: 0.85; }
+        .mls-kpi-value { margin-top: 6px; font-size: 16px; font-weight: 700; }
+        .mls-panel {
+          padding: 12px; border-radius: 14px;
+          background: rgba(255,255,255,0.08);
+          border: 1px solid rgba(255,255,255,0.12);
+        }
+        .mls-panel-title {
+          display: flex; align-items: center; justify-content: space-between;
+          font-weight: 700; font-size: 13px; margin-bottom: 10px;
+        }
+        .mls-ai-tag {
+          font-size: 11px; padding: 4px 8px; border-radius: 999px;
+          background: rgba(0,211,167,0.14);
+          border: 1px solid rgba(0,211,167,0.28);
+        }
+        .mls-lines { display: grid; gap: 8px; margin-bottom: 12px; }
+        .mls-line {
+          height: 10px; border-radius: 999px;
+          background: rgba(255,255,255,0.16);
+        }
+        .mls-btn-row { display: flex; gap: 10px; justify-content: flex-end; }
+        .mls-btn-mini {
+          font-size: 12px; padding: 10px 12px; border-radius: 12px;
+          border: 1px solid rgba(255,255,255,0.14);
+          background: rgba(0,0,0,0.10);
+          color: #eef6ff;
+        }
+        .mls-btn-primary {
+          background: linear-gradient(135deg, rgba(44,144,255,.9), rgba(0,211,167,.85));
+          border-color: rgba(255,255,255,0.18);
+          font-weight: 700;
+        }
+        .mls-mini-grid {
+          display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;
+        }
+        .mls-tile {
+          text-align: center; padding: 10px 8px; font-size: 12px;
+          border-radius: 12px;
+          background: rgba(0,0,0,0.12);
+          border: 1px solid rgba(255,255,255,0.12);
+          opacity: 0.92; color: #eef6ff;
+        }
+        .mls-tile-active {
+          background: rgba(0,211,167,0.14);
+          border-color: rgba(0,211,167,0.26);
+          box-shadow: 0 0 0 6px rgba(0,211,167,0.08);
+        }
+
+        /* Footer */
+        .mls-bottom {
+          display: flex; align-items: center;
+          justify-content: space-between; gap: 14px;
+        }
+        .mls-dots { display: flex; gap: 8px; }
+        .mls-dot-btn {
+          width: 10px; height: 10px; border-radius: 999px;
+          border: 1px solid rgba(255,255,255,0.25);
+          background: rgba(255,255,255,0.12);
+          cursor: pointer;
+          transition: all 0.3s ease;
+          padding: 0;
+        }
+        .mls-dot-active {
+          background: rgba(0,211,167,0.75);
+          border-color: rgba(0,211,167,0.85);
+          box-shadow: 0 0 0 6px rgba(0,211,167,0.12);
+        }
+        .mls-progress {
+          flex: 1; height: 6px; border-radius: 999px;
+          background: rgba(255,255,255,0.10);
+          border: 1px solid rgba(255,255,255,0.12);
+          overflow: hidden;
+        }
+        .mls-bar {
+          height: 100%; width: 100%;
+          transform-origin: left center;
+          background: linear-gradient(90deg, rgba(44,144,255,.9), rgba(0,211,167,.85));
+          transform: scaleX(0);
+        }
+
+        /* Animations */
+        @keyframes mls-float {
+          0%, 100% { transform: translate3d(0,0,0) scale(1); }
+          50% { transform: translate3d(0,28px,0) scale(1.05); }
+        }
+        @keyframes mls-fade-up {
           from { opacity: 0; transform: translateY(12px); }
           to { opacity: 1; transform: translateY(0); }
         }
+        @keyframes mls-fade-in {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
 
-        /* Respect prefers-reduced-motion */
         @media (prefers-reduced-motion: reduce) {
-          .meridio-blob { animation: none !important; }
-          .meridio-scene-enter { animation: none !important; opacity: 1; }
+          .mls-blob { animation: none !important; }
+          .mls-copy { animation: none !important; opacity: 1; }
+          .mls-chips { animation: none !important; opacity: 1; }
+          .mls-mock-card { animation: none !important; opacity: 1; }
+          .mls-bar { transition: none !important; transform: scaleX(1) !important; }
         }
       `}</style>
     </div>
