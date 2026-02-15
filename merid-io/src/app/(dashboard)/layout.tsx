@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { ToastProvider, useToast } from "@/components/ui/toast";
+import { ChatAssistant } from "@/components/ChatAssistant";
 import { useInactivity } from "@/hooks/useInactivity";
 
 function InactivityGuard({ children }: { children: React.ReactNode }) {
@@ -45,6 +46,7 @@ export default function DashboardLayout({
             </main>
           </div>
         </div>
+        <ChatAssistant />
       </InactivityGuard>
     </ToastProvider>
   );
