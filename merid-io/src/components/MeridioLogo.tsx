@@ -1,6 +1,6 @@
 /**
  * Meridio official logo — inline SVG variants.
- * Design: ribbon curve (blue→teal→violet) + spark node + "Meridio" wordmark.
+ * Design: oscilloscope zigzag wave (blue→teal→violet) + star head + "Meridıo" wordmark.
  * Based on the official 2400×900 master SVG.
  */
 
@@ -12,10 +12,12 @@ interface LogoProps {
   variant?: "full" | "icon";
   /** Text color override (default: white for dark bg) */
   textColor?: string;
+  /** Show tagline under wordmark */
+  showTagline?: boolean;
 }
 
 /**
- * Full horizontal logo: mark + "Meridio" wordmark.
+ * Full horizontal logo: mark + "Meridıo" wordmark.
  * viewBox is 2400×900 scaled to requested height.
  */
 export function MeridioLogo({
@@ -23,19 +25,18 @@ export function MeridioLogo({
   height = 36,
   variant = "full",
   textColor = "#ffffff",
+  showTagline = false,
 }: LogoProps) {
   if (variant === "icon") {
     return <MeridioIcon className={className} size={height} />;
   }
 
-  // Original aspect ratio: 2400/900 ≈ 2.67, but the visual content
-  // sits roughly in a 2000×600 box so we use a tighter viewBox.
-  const w = Math.round(height * (380 / 100));
+  const w = Math.round(height * (2400 / 900));
 
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
-      viewBox="60 140 2200 620"
+      viewBox="0 0 2400 900"
       width={w}
       height={height}
       fill="none"
@@ -44,43 +45,73 @@ export function MeridioLogo({
       role="img"
     >
       <defs>
-        <linearGradient id="mlg-ribbon" x1="0" y1="0" x2="1" y2="1">
+        <linearGradient id="mlg-wave" x1="0" y1="0" x2="1" y2="0">
           <stop offset="0" stopColor="#2c90ff" />
           <stop offset="0.55" stopColor="#00d3a7" />
           <stop offset="1" stopColor="#7b61ff" />
         </linearGradient>
-        <radialGradient id="mlg-glow" cx="50%" cy="50%" r="60%">
-          <stop offset="0" stopColor="#00d3a7" stopOpacity="0.55" />
+        <radialGradient id="mlg-pulse" cx="50%" cy="50%" r="60%">
+          <stop offset="0" stopColor="#00d3a7" stopOpacity="0.65" />
           <stop offset="1" stopColor="#00d3a7" stopOpacity="0" />
         </radialGradient>
+        <filter id="mlg-shadow" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur in="SourceAlpha" stdDeviation="8" result="blur" />
+          <feOffset dx="0" dy="10" result="off" />
+          <feColorMatrix
+            in="off"
+            type="matrix"
+            values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.28 0"
+            result="shadow"
+          />
+          <feMerge>
+            <feMergeNode in="shadow" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+        <filter id="mlg-glow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="6" result="b" />
+          <feMerge>
+            <feMergeNode in="b" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
       </defs>
 
       {/* Mark */}
-      <g transform="translate(150,185)">
-        {/* Glow */}
-        <circle cx="310" cy="80" r="120" fill="url(#mlg-glow)" />
-        {/* Ribbon curve */}
+      <g transform="translate(150,195)" filter="url(#mlg-shadow)">
+        {/* Radial pulse behind star */}
+        <circle cx="820" cy="120" r="160" fill="url(#mlg-pulse)" />
+        {/* Main oscilloscope stroke */}
         <path
-          d="M 40 360 C 95 170, 185 120, 275 250 C 325 325, 360 385, 430 385 C 520 385, 560 290, 590 210 C 620 130, 695 85, 770 115"
+          d="M 60 420 L 220 160 L 380 420 L 540 160 L 700 420 L 860 120"
           fill="none"
-          stroke="url(#mlg-ribbon)"
-          strokeWidth="68"
+          stroke="url(#mlg-wave)"
+          strokeWidth="78"
           strokeLinecap="round"
-          strokeLinejoin="round"
+          strokeLinejoin="miter"
+          strokeMiterlimit="4"
         />
-        {/* Spark node: dark circle */}
-        <circle cx="770" cy="115" r="58" fill="#0b2540" opacity="0.90" stroke="#00d3a7" strokeWidth="8" />
-        {/* Spark diamond */}
+        {/* Visible trail */}
         <path
-          d="M 770 76 L 784 102 L 812 115 L 784 128 L 770 154 L 756 128 L 728 115 L 756 102 Z"
-          fill="#eef6ff"
+          d="M 700 420 L 860 120"
+          fill="none"
+          stroke="#eef6ff"
+          strokeOpacity="0.30"
+          strokeWidth="34"
+          strokeLinecap="round"
+          filter="url(#mlg-glow)"
         />
-        {/* Outer ring */}
-        <circle cx="770" cy="115" r="84" fill="none" stroke="#2c90ff" strokeWidth="6" opacity="0.35" />
+        {/* Star head */}
+        <path
+          d="M 860 70 L 878 104 L 916 120 L 878 136 L 860 170 L 842 136 L 804 120 L 842 104 Z"
+          fill="#eef6ff"
+          filter="url(#mlg-glow)"
+        />
       </g>
 
       {/* Wordmark */}
-      <g transform="translate(1060,310)">
+      <g transform="translate(1120,320)">
+        {/* "Meridıo" with dotless i */}
         <text
           x="0"
           y="0"
@@ -90,15 +121,37 @@ export function MeridioLogo({
           fill={textColor}
           letterSpacing="-2"
         >
-          Meridio
+          Merid&#305;o
         </text>
+        {/* Star as dot on the ı */}
+        <g transform="translate(551.5,-223.5) scale(0.75)">
+          <path
+            d="M 120 40 L 134 66 L 164 78 L 134 90 L 120 116 L 106 90 L 76 78 L 106 66 Z"
+            fill="#00d3a7"
+            filter="url(#mlg-glow)"
+          />
+        </g>
+        {/* Tagline */}
+        {showTagline && (
+          <text
+            x="6"
+            y="150"
+            fontFamily="Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial"
+            fontSize="64"
+            fontWeight="500"
+            fill={textColor === "#ffffff" ? "rgba(255,255,255,0.6)" : "#334155"}
+            opacity="0.92"
+          >
+            Congés &amp; notes de frais
+          </text>
+        )}
       </g>
     </svg>
   );
 }
 
 /**
- * Icon-only variant: just the ribbon mark + spark node.
+ * Icon-only variant: just the oscilloscope mark + star head.
  * For favicon, collapsed sidebar, app icon.
  */
 export function MeridioIcon({
@@ -111,7 +164,7 @@ export function MeridioIcon({
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
-      viewBox="80 120 880 500"
+      viewBox="0 50 1100 600"
       width={size}
       height={size}
       fill="none"
@@ -120,33 +173,49 @@ export function MeridioIcon({
       role="img"
     >
       <defs>
-        <linearGradient id="mic-ribbon" x1="0" y1="0" x2="1" y2="1">
+        <linearGradient id="mic-wave" x1="0" y1="0" x2="1" y2="0">
           <stop offset="0" stopColor="#2c90ff" />
           <stop offset="0.55" stopColor="#00d3a7" />
           <stop offset="1" stopColor="#7b61ff" />
         </linearGradient>
-        <radialGradient id="mic-glow" cx="50%" cy="50%" r="60%">
-          <stop offset="0" stopColor="#00d3a7" stopOpacity="0.55" />
+        <radialGradient id="mic-pulse" cx="50%" cy="50%" r="60%">
+          <stop offset="0" stopColor="#00d3a7" stopOpacity="0.65" />
           <stop offset="1" stopColor="#00d3a7" stopOpacity="0" />
         </radialGradient>
+        <filter id="mic-glow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="6" result="b" />
+          <feMerge>
+            <feMergeNode in="b" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
       </defs>
 
-      <g transform="translate(150,185)">
-        <circle cx="310" cy="80" r="120" fill="url(#mic-glow)" />
+      <g transform="translate(150,195)">
+        <circle cx="820" cy="120" r="160" fill="url(#mic-pulse)" />
         <path
-          d="M 40 360 C 95 170, 185 120, 275 250 C 325 325, 360 385, 430 385 C 520 385, 560 290, 590 210 C 620 130, 695 85, 770 115"
+          d="M 60 420 L 220 160 L 380 420 L 540 160 L 700 420 L 860 120"
           fill="none"
-          stroke="url(#mic-ribbon)"
-          strokeWidth="68"
+          stroke="url(#mic-wave)"
+          strokeWidth="78"
           strokeLinecap="round"
-          strokeLinejoin="round"
+          strokeLinejoin="miter"
+          strokeMiterlimit="4"
         />
-        <circle cx="770" cy="115" r="58" fill="#0b2540" opacity="0.90" stroke="#00d3a7" strokeWidth="8" />
         <path
-          d="M 770 76 L 784 102 L 812 115 L 784 128 L 770 154 L 756 128 L 728 115 L 756 102 Z"
-          fill="#eef6ff"
+          d="M 700 420 L 860 120"
+          fill="none"
+          stroke="#eef6ff"
+          strokeOpacity="0.30"
+          strokeWidth="34"
+          strokeLinecap="round"
+          filter="url(#mic-glow)"
         />
-        <circle cx="770" cy="115" r="84" fill="none" stroke="#2c90ff" strokeWidth="6" opacity="0.35" />
+        <path
+          d="M 860 70 L 878 104 L 916 120 L 878 136 L 860 170 L 842 136 L 804 120 L 842 104 Z"
+          fill="#eef6ff"
+          filter="url(#mic-glow)"
+        />
       </g>
     </svg>
   );
