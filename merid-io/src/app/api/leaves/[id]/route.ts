@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { createAuditLog } from "@/lib/notifications";
+import { getRequestIp } from "@/lib/rate-limit";
 
 // ─── GET: leave request detail ───
 
@@ -206,6 +208,22 @@ export async function PATCH(
         });
       }
 
+      // Audit log for submit
+      const ip = getRequestIp(request.headers);
+      createAuditLog({
+        userId: session.user.id,
+        action: "LEAVE_SUBMIT",
+        entityType: "LeaveRequest",
+        entityId: id,
+        ipAddress: ip,
+        newValue: {
+          previousStatus: leaveRequest.status,
+          newStatus: "PENDING_MANAGER",
+          totalDays: leaveRequest.totalDays,
+          leaveType: lt.code,
+        },
+      }).catch(() => {});
+
       return NextResponse.json({ status: "PENDING_MANAGER" });
     }
 
@@ -239,6 +257,22 @@ export async function PATCH(
           data: { pendingDays: { decrement: leaveRequest.totalDays } },
         });
       }
+
+      // Audit log for cancel
+      const cancelIp = getRequestIp(request.headers);
+      createAuditLog({
+        userId: session.user.id,
+        action: "LEAVE_CANCEL",
+        entityType: "LeaveRequest",
+        entityId: id,
+        ipAddress: cancelIp,
+        newValue: {
+          previousStatus: leaveRequest.status,
+          newStatus: "CANCELLED",
+          totalDays: leaveRequest.totalDays,
+          leaveType: ltc.code,
+        },
+      }).catch(() => {});
 
       return NextResponse.json({ status: "CANCELLED" });
     }

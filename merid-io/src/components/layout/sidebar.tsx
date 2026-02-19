@@ -97,6 +97,8 @@ export function Sidebar({
 
   async function toggleLanguage() {
     const newLang = currentLang === "fr" ? "en" : "fr";
+    // Set NEXT_LOCALE cookie so next-intl reads the correct locale on reload
+    document.cookie = `NEXT_LOCALE=${newLang};path=/;max-age=31536000;SameSite=Lax`;
     await update({ language: newLang });
     window.location.reload();
   }
