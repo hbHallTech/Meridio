@@ -4,9 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { leaveRequestSchema } from "@/lib/validators";
 import { notifyNewLeaveRequest } from "@/lib/notifications";
 import type { Prisma } from "@prisma/client";
-import { writeFile, mkdir } from "fs/promises";
-import path from "path";
-import crypto from "crypto";
+// File uploads now handled by /api/upload (Vercel Blob)
 
 // ─── GET: list user's leave requests (server-side filtering + pagination) ───
 
@@ -166,7 +164,6 @@ export async function POST(request: NextRequest) {
     exceptionalReason: (formData.get("exceptionalReason") as string) || undefined,
   };
   const action = formData.get("action") as string; // "draft" or "submit"
-  const attachments = formData.getAll("attachments") as File[];
 
   const parsed = leaveRequestSchema.safeParse(body);
   if (!parsed.success) {
@@ -329,48 +326,12 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Bug3: Handle file uploads — save to disk with unique names
-  const attachmentUrls: string[] = [];
-  const uploadDir = path.join(process.cwd(), "public", "uploads", "attachments");
-  for (const file of attachments) {
-    if (file.size > 0) {
-      // Validate file size (max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        console.log(`Bug3: File too large: ${file.name} (${file.size} bytes)`);
-        return NextResponse.json(
-          { error: `Fichier trop volumineux : ${file.name} (max 5Mo)` },
-          { status: 400 }
-        );
-      }
-      // Validate file type
-      const allowedTypes = ["image/jpeg", "image/png", "image/gif", "image/webp", "application/pdf"];
-      if (!allowedTypes.includes(file.type)) {
-        console.log(`Bug3: Invalid file type: ${file.name} (${file.type})`);
-        return NextResponse.json(
-          { error: `Type de fichier non autorisé : ${file.name}. Formats acceptés : PDF, JPG, PNG, GIF, WebP` },
-          { status: 400 }
-        );
-      }
-
-      try {
-        await mkdir(uploadDir, { recursive: true });
-        const ext = path.extname(file.name) || (file.type === "application/pdf" ? ".pdf" : ".bin");
-        const uniqueName = `${crypto.randomUUID()}${ext}`;
-        const filePath = path.join(uploadDir, uniqueName);
-        const buffer = Buffer.from(await file.arrayBuffer());
-        await writeFile(filePath, buffer);
-        const publicUrl = `/uploads/attachments/${uniqueName}`;
-        attachmentUrls.push(publicUrl);
-        console.log(`Bug3: File uploaded: ${file.name} -> ${publicUrl} (${file.size} bytes)`);
-      } catch (uploadError) {
-        console.log(`Bug3: File upload error for ${file.name}:`, uploadError);
-        return NextResponse.json(
-          { error: `Erreur lors de l'upload de ${file.name}` },
-          { status: 500 }
-        );
-      }
-    }
-  }
+  // Attachments are now pre-uploaded via /api/upload (Vercel Blob)
+  // The form sends comma-separated URLs in the "attachmentUrls" field
+  const attachmentUrlsRaw = formData.get("attachmentUrls") as string | null;
+  const attachmentUrls: string[] = attachmentUrlsRaw
+    ? attachmentUrlsRaw.split(",").map((u) => u.trim()).filter(Boolean)
+    : [];
 
   const isSubmit = action === "submit";
   const status: "DRAFT" | "PENDING_MANAGER" = isSubmit ? "PENDING_MANAGER" : "DRAFT";

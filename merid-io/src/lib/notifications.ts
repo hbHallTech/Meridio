@@ -14,20 +14,39 @@ interface CreateNotificationParams {
 
 /**
  * Check if a notification type is enabled at company level.
+ * Also checks user-level preference if userId is provided.
  */
-async function isNotificationEnabled(type: string): Promise<boolean> {
+async function isNotificationEnabled(type: string, userId?: string): Promise<boolean> {
   try {
     const company = await prisma.company.findFirst({ select: { id: true } });
-    if (!company) return true; // Default to enabled if no company
+    if (!company) {
+      console.log(`Email notif ${type} : pas de company, activé par défaut`);
+      return true;
+    }
 
     const setting = await prisma.companyNotificationSetting.findUnique({
       where: { companyId_type: { companyId: company.id, type } },
     });
-    // If no setting exists, default to enabled
-    return setting ? setting.enabled : true;
+    const companyEnabled = setting ? setting.enabled : true;
+    console.log(`Email notif ${type} : company toggle=${companyEnabled} (setting exists=${!!setting})`);
+
+    if (!companyEnabled) return false;
+
+    // Check user-level preference
+    if (userId) {
+      const userPref = await prisma.userNotificationPref.findUnique({
+        where: { userId_type: { userId, type } },
+      });
+      if (userPref && !userPref.enabled) {
+        console.log(`Email notif ${type} : user ${userId} a désactivé cette notification`);
+        return false;
+      }
+    }
+
+    return true;
   } catch (error) {
-    console.log("Bug1: Error checking notification toggle:", error);
-    return true; // Default to enabled on error
+    console.log(`Email notif ${type} : erreur vérification toggle, activé par défaut`, error);
+    return true;
   }
 }
 
@@ -66,16 +85,21 @@ export async function notifyNewLeaveRequest(
   approverIds: string[],
   params: LeaveNotifyParams
 ) {
-  const enabled = await isNotificationEnabled("NEW_REQUEST");
-  console.log(`Bug1: notifyNewLeaveRequest enabled=${enabled}, approvers=${approverIds.join(",")}`);
-  if (!enabled) return;
-
   for (const approverId of approverIds) {
+    const enabled = await isNotificationEnabled("NEW_REQUEST", approverId);
+    if (!enabled) {
+      console.log(`Email notif NEW_REQUEST : désactivé pour approver ${approverId}`);
+      continue;
+    }
+
     const approver = await prisma.user.findUnique({
       where: { id: approverId },
       select: { email: true, firstName: true },
     });
-    if (!approver) continue;
+    if (!approver) {
+      console.log(`Email notif NEW_REQUEST : approver ${approverId} introuvable`);
+      continue;
+    }
 
     const results = await Promise.allSettled([
       createNotification({
@@ -96,21 +120,17 @@ export async function notifyNewLeaveRequest(
       ),
     ]);
 
-    for (const r of results) {
-      if (r.status === "rejected") {
-        console.log(`Bug1: notifyNewLeaveRequest error for ${approver.email}:`, r.reason);
-      }
-    }
+    const inAppResult = results[0].status === "fulfilled" ? "success" : "fail";
+    const emailResult = results[1].status === "fulfilled" ? "success" : "fail";
+    const emailError = results[1].status === "rejected" ? ` ${results[1].reason}` : "";
+    console.log(`Email notif NEW_REQUEST envoyé à ${approver.email} : in-app=${inAppResult}, email=${emailResult}${emailError}`);
 
     // Mark notification as sent by email
-    if (results[1].status === "fulfilled") {
-      console.log(`Bug1: Email envoyé pour NEW_REQUEST à ${approver.email}`);
-      if (results[0].status === "fulfilled") {
-        await prisma.notification.update({
-          where: { id: results[0].value.id },
-          data: { sentByEmail: true },
-        }).catch(() => {});
-      }
+    if (results[1].status === "fulfilled" && results[0].status === "fulfilled") {
+      await prisma.notification.update({
+        where: { id: results[0].value.id },
+        data: { sentByEmail: true },
+      }).catch(() => {});
     }
   }
 }
@@ -122,15 +142,20 @@ export async function notifyLeaveApproved(
   employeeId: string,
   params: { leaveRequestId: string; leaveType: string; startDate: string; endDate: string; approverName: string }
 ) {
-  const enabled = await isNotificationEnabled("APPROVED");
-  console.log(`Bug1: notifyLeaveApproved enabled=${enabled}, employee=${employeeId}`);
-  if (!enabled) return;
+  const enabled = await isNotificationEnabled("APPROVED", employeeId);
+  if (!enabled) {
+    console.log(`Email notif APPROVED : désactivé pour employee ${employeeId}`);
+    return;
+  }
 
   const employee = await prisma.user.findUnique({
     where: { id: employeeId },
     select: { email: true, firstName: true },
   });
-  if (!employee) return;
+  if (!employee) {
+    console.log(`Email notif APPROVED : employee ${employeeId} introuvable`);
+    return;
+  }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
@@ -151,13 +176,15 @@ export async function notifyLeaveApproved(
     }),
   ]);
 
-  for (const r of results) {
-    if (r.status === "rejected") {
-      console.log(`Bug1: notifyLeaveApproved error for ${employee.email}:`, r.reason);
-    }
-  }
-  if (results[1].status === "fulfilled") {
-    console.log(`Bug1: Email envoyé pour APPROVED à ${employee.email}`);
+  const emailResult = results[1].status === "fulfilled" ? "success" : "fail";
+  const emailError = results[1].status === "rejected" ? ` ${results[1].reason}` : "";
+  console.log(`Email notif APPROVED envoyé à ${employee.email} : ${emailResult}${emailError}`);
+
+  if (results[1].status === "fulfilled" && results[0].status === "fulfilled") {
+    await prisma.notification.update({
+      where: { id: results[0].value.id },
+      data: { sentByEmail: true },
+    }).catch(() => {});
   }
 }
 
@@ -168,15 +195,20 @@ export async function notifyLeaveRejected(
   employeeId: string,
   params: { leaveRequestId: string; leaveType: string; startDate: string; endDate: string; approverName: string; comment: string }
 ) {
-  const enabled = await isNotificationEnabled("REFUSED");
-  console.log(`Bug1: notifyLeaveRejected enabled=${enabled}, employee=${employeeId}`);
-  if (!enabled) return;
+  const enabled = await isNotificationEnabled("REFUSED", employeeId);
+  if (!enabled) {
+    console.log(`Email notif REFUSED : désactivé pour employee ${employeeId}`);
+    return;
+  }
 
   const employee = await prisma.user.findUnique({
     where: { id: employeeId },
     select: { email: true, firstName: true },
   });
-  if (!employee) return;
+  if (!employee) {
+    console.log(`Email notif REFUSED : employee ${employeeId} introuvable`);
+    return;
+  }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
@@ -197,13 +229,15 @@ export async function notifyLeaveRejected(
     }),
   ]);
 
-  for (const r of results) {
-    if (r.status === "rejected") {
-      console.log(`Bug1: notifyLeaveRejected error for ${employee.email}:`, r.reason);
-    }
-  }
-  if (results[1].status === "fulfilled") {
-    console.log(`Bug1: Email envoyé pour REFUSED à ${employee.email}`);
+  const emailResult = results[1].status === "fulfilled" ? "success" : "fail";
+  const emailError = results[1].status === "rejected" ? ` ${results[1].reason}` : "";
+  console.log(`Email notif REFUSED envoyé à ${employee.email} : ${emailResult}${emailError}`);
+
+  if (results[1].status === "fulfilled" && results[0].status === "fulfilled") {
+    await prisma.notification.update({
+      where: { id: results[0].value.id },
+      data: { sentByEmail: true },
+    }).catch(() => {});
   }
 }
 
@@ -214,15 +248,20 @@ export async function notifyLeaveNeedsRevision(
   employeeId: string,
   params: { leaveRequestId: string; leaveType: string; startDate: string; endDate: string; approverName: string; comment: string }
 ) {
-  const enabled = await isNotificationEnabled("RETURNED");
-  console.log(`Bug1: notifyLeaveNeedsRevision enabled=${enabled}, employee=${employeeId}`);
-  if (!enabled) return;
+  const enabled = await isNotificationEnabled("RETURNED", employeeId);
+  if (!enabled) {
+    console.log(`Email notif RETURNED : désactivé pour employee ${employeeId}`);
+    return;
+  }
 
   const employee = await prisma.user.findUnique({
     where: { id: employeeId },
     select: { email: true, firstName: true },
   });
-  if (!employee) return;
+  if (!employee) {
+    console.log(`Email notif RETURNED : employee ${employeeId} introuvable`);
+    return;
+  }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
@@ -243,13 +282,15 @@ export async function notifyLeaveNeedsRevision(
     }),
   ]);
 
-  for (const r of results) {
-    if (r.status === "rejected") {
-      console.log(`Bug1: notifyLeaveNeedsRevision error for ${employee.email}:`, r.reason);
-    }
-  }
-  if (results[1].status === "fulfilled") {
-    console.log(`Bug1: Email envoyé pour RETURNED à ${employee.email}`);
+  const emailResult = results[1].status === "fulfilled" ? "success" : "fail";
+  const emailError = results[1].status === "rejected" ? ` ${results[1].reason}` : "";
+  console.log(`Email notif RETURNED envoyé à ${employee.email} : ${emailResult}${emailError}`);
+
+  if (results[1].status === "fulfilled" && results[0].status === "fulfilled") {
+    await prisma.notification.update({
+      where: { id: results[0].value.id },
+      data: { sentByEmail: true },
+    }).catch(() => {});
   }
 }
 
