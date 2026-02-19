@@ -88,6 +88,39 @@ export async function requireManagerOfLeave(
 }
 
 /**
+ * Verify that the current user is the owner of the leave request.
+ * Used for owner-only actions like editing a DRAFT/RETURNED leave.
+ *
+ * Returns a 403 NextResponse if not authorized, or null if OK.
+ */
+export async function requireOwnerOfLeave(
+  user: SessionUser | undefined | null,
+  leaveRequestId: string
+): Promise<NextResponse | null> {
+  if (!user?.id) {
+    return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
+  }
+
+  const leaveRequest = await prisma.leaveRequest.findUnique({
+    where: { id: leaveRequestId },
+    select: { userId: true },
+  });
+
+  if (!leaveRequest) {
+    return NextResponse.json({ error: "Demande introuvable" }, { status: 404 });
+  }
+
+  if (leaveRequest.userId !== user.id) {
+    console.warn(
+      `[RBAC] Ownership denied: user=${user.id} is not owner of leaveRequest=${leaveRequestId} (owner=${leaveRequest.userId})`
+    );
+    return NextResponse.json({ error: "Accès non autorisé" }, { status: 403 });
+  }
+
+  return null;
+}
+
+/**
  * Verify that the current user is either HR assigned to the approval step,
  * or an ADMIN. This prevents random HR users from approving if not assigned.
  *

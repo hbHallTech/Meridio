@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
       addRandomSuffix: false,
     });
 
-    console.log(`[upload] Success: user=${userId} file=${file.name} → ${blob.url}`);
+    console.log(`[upload] Success: user=${userId} file=${file.name} size=${file.size} → ${blob.url}`);
 
     return NextResponse.json({
       url: blob.url,
@@ -94,8 +94,19 @@ export async function POST(request: NextRequest) {
       size: file.size,
       type: file.type,
     });
-  } catch (error) {
-    console.error(`[upload] Error: user=${userId} file=${file.name}`, error);
+  } catch (error: unknown) {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    console.error(`[upload] Blob storage error: user=${userId} file=${file.name} error=${errMsg}`);
+
+    // Detect common Vercel Blob errors for better user feedback
+    if (errMsg.includes("BLOB_STORE_NOT_FOUND") || errMsg.includes("token")) {
+      console.error("[upload] BLOB_STORE_NOT_FOUND — BLOB_READ_WRITE_TOKEN may be missing or invalid");
+      return NextResponse.json(
+        { error: "Service de stockage indisponible. Contactez l'administrateur." },
+        { status: 503 }
+      );
+    }
+
     return NextResponse.json(
       { error: `Erreur lors de l'upload de ${file.name}` },
       { status: 500 }

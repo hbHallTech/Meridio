@@ -42,9 +42,17 @@ export function parseToDate(value: string): Date {
   return new Date(value);
 }
 
+/** Maximum allowed date range in days (prevents abuse / heavy queries) */
+const MAX_RANGE_DAYS = 366;
+
 /**
  * Validate and parse date range query params from URLSearchParams.
  * Returns { from, to } as Date | null, or an error string if invalid.
+ *
+ * Enforces:
+ *  - Zod validation on input strings
+ *  - Max range of 366 days when both from and to are provided
+ *  - from must be before to
  *
  * Usage in route handlers:
  *   const result = parseDateRangeParams(searchParams, "manager/calendar");
@@ -72,6 +80,20 @@ export function parseDateRangeParams(
 
   const from = parsed.data.from ? parseFromDate(parsed.data.from) : null;
   const to = parsed.data.to ? parseToDate(parsed.data.to) : null;
+
+  // Enforce max range to prevent heavy queries
+  if (from && to) {
+    const diffMs = to.getTime() - from.getTime();
+    const diffDays = diffMs / (1000 * 60 * 60 * 24);
+    if (diffDays > MAX_RANGE_DAYS) {
+      console.warn(`[${routeLabel}] Date range too large: ${diffDays.toFixed(0)} days (max ${MAX_RANGE_DAYS})`);
+      return { error: `Période trop longue (max ${MAX_RANGE_DAYS} jours)` };
+    }
+    if (diffDays < 0) {
+      console.warn(`[${routeLabel}] Inverted date range: from=${from.toISOString()} to=${to.toISOString()}`);
+      return { error: "La date de début doit être avant la date de fin" };
+    }
+  }
 
   console.log(`[${routeLabel}] Date range: from=${from?.toISOString() ?? "none"} to=${to?.toISOString() ?? "none"}`);
 

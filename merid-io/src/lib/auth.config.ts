@@ -113,9 +113,19 @@ export const authConfig: NextAuthConfig = {
         );
       }
 
-      // RBAC: Check role-based access for protected routes
-      const userRoles = (auth?.user?.roles as UserRole[]) ?? [];
+      // RBAC: Check role-based access for protected routes.
+      // In Edge middleware, auth.user.roles may not be populated by the
+      // session callback. Fall back to reading roles from the raw JWT token.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const authAny = auth as any;
+      const userRoles: UserRole[] =
+        (auth?.user?.roles as UserRole[]) ??
+        (authAny?.roles as UserRole[]) ??
+        [];
       if (!hasRequiredRole(pathname, userRoles)) {
+        console.warn(
+          `[RBAC/middleware] Access denied: pathname=${pathname} roles=[${userRoles}]`
+        );
         // For API routes, return 403 JSON response
         if (pathname.startsWith("/api/")) {
           return Response.json(

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { leaveRequestSchema } from "@/lib/validators";
+import { requireOwnerOfLeave } from "@/lib/rbac";
 import { createAuditLog } from "@/lib/notifications";
 import { getRequestIp } from "@/lib/rate-limit";
 
@@ -313,6 +314,10 @@ export async function PUT(
 
   const { id } = await params;
 
+  // RBAC: only the leave owner can edit
+  const ownerDenied = await requireOwnerOfLeave(session?.user, id);
+  if (ownerDenied) return ownerDenied;
+
   const leaveRequest = await prisma.leaveRequest.findUnique({
     where: { id },
     include: { leaveTypeConfig: true },
@@ -320,10 +325,6 @@ export async function PUT(
 
   if (!leaveRequest) {
     return NextResponse.json({ error: "Demande introuvable" }, { status: 404 });
-  }
-
-  if (leaveRequest.userId !== session.user.id) {
-    return NextResponse.json({ error: "Accès non autorisé" }, { status: 403 });
   }
 
   if (leaveRequest.status !== "DRAFT" && leaveRequest.status !== "RETURNED") {
