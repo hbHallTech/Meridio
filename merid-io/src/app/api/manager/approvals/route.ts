@@ -1,17 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { requireRoles } from "@/lib/rbac";
 import { LeaveStatus } from "@prisma/client";
 
 export async function GET(request: NextRequest) {
   const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Non authentifie" }, { status: 401 });
-  }
-  const roles = session.user.roles ?? [];
-  if (!roles.includes("MANAGER") && !roles.includes("ADMIN")) {
-    return NextResponse.json({ error: "Acces refuse" }, { status: 403 });
-  }
+  const denied = requireRoles(session?.user, "MANAGER", "ADMIN");
+  if (denied) return denied;
+  const currentUserId = session!.user.id!;
 
   const { searchParams } = request.nextUrl;
   const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));
@@ -20,7 +17,7 @@ export async function GET(request: NextRequest) {
 
   // Find teams managed by this user
   const managedTeams = await prisma.team.findMany({
-    where: { managerId: session.user.id },
+    where: { managerId: currentUserId },
     select: { id: true },
   });
   const teamIds = managedTeams.map((t) => t.id);

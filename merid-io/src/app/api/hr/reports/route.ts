@@ -1,42 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-
-function safeParseDateParam(value: string | undefined): Date | null {
-  if (!value) return null;
-  const d = new Date(value);
-  if (isNaN(d.getTime())) {
-    console.error(`[hr/reports] Invalid date param: "${value}"`);
-    return null;
-  }
-  return d;
-}
-
-function safeParseEndDateParam(value: string | undefined): Date | null {
-  if (!value) return null;
-  const raw = value.includes("T") ? value : `${value}T23:59:59.999Z`;
-  const d = new Date(raw);
-  if (isNaN(d.getTime())) {
-    console.error(`[hr/reports] Invalid end date param: "${value}"`);
-    return null;
-  }
-  return d;
-}
+import { parseDateRangeParams } from "@/lib/date-utils";
+import { requireRoles } from "@/lib/rbac";
 
 export async function GET(request: NextRequest) {
   const session = await auth();
-  const roles = session?.user?.roles ?? [];
-  if (!roles.includes("HR") && !roles.includes("ADMIN")) {
-    return NextResponse.json({ error: "Acces refuse" }, { status: 403 });
-  }
+  const denied = requireRoles(session?.user, "HR", "ADMIN");
+  if (denied) return denied;
 
   const { searchParams } = request.nextUrl;
   const officeId = searchParams.get("officeId") || undefined;
   const teamId = searchParams.get("teamId") || undefined;
   const typeId = searchParams.get("typeId") || undefined;
   const status = searchParams.get("status") || undefined;
-  const from = searchParams.get("from") || undefined;
-  const to = searchParams.get("to") || undefined;
+
+  // Validate date params with Zod — return 400 on invalid input
+  const dateRange = parseDateRangeParams(searchParams, "hr/reports");
+  if (dateRange.error) {
+    return NextResponse.json({ error: dateRange.error }, { status: 400 });
+  }
+  const { from, to } = dateRange;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where: any = {};
@@ -46,11 +30,8 @@ export async function GET(request: NextRequest) {
     where.status = { in: statuses };
   }
   if (typeId) where.leaveTypeConfigId = typeId;
-
-  const fromDate = safeParseDateParam(from);
-  const toDate = safeParseEndDateParam(to);
-  if (fromDate) where.startDate = { ...(where.startDate ?? {}), gte: fromDate };
-  if (toDate) where.endDate = { ...(where.endDate ?? {}), lte: toDate };
+  if (from) where.startDate = { ...(where.startDate ?? {}), gte: from };
+  if (to) where.endDate = { ...(where.endDate ?? {}), lte: to };
 
   if (officeId || teamId) {
     where.user = {};
@@ -58,50 +39,60 @@ export async function GET(request: NextRequest) {
     if (teamId) where.user.teamId = teamId;
   }
 
-  const items = await prisma.leaveRequest.findMany({
-    where,
-    orderBy: { startDate: "desc" },
-    select: {
-      id: true,
-      startDate: true,
-      endDate: true,
-      totalDays: true,
-      status: true,
-      reason: true,
-      createdAt: true,
-      user: {
-        select: {
-          firstName: true,
-          lastName: true,
-          email: true,
-          office: { select: { name: true } },
-          team: { select: { name: true } },
+  try {
+    const items = await prisma.leaveRequest.findMany({
+      where,
+      orderBy: { startDate: "desc" },
+      select: {
+        id: true,
+        startDate: true,
+        endDate: true,
+        totalDays: true,
+        status: true,
+        reason: true,
+        createdAt: true,
+        user: {
+          select: {
+            firstName: true,
+            lastName: true,
+            email: true,
+            office: { select: { name: true } },
+            team: { select: { name: true } },
+          },
+        },
+        leaveTypeConfig: {
+          select: { code: true, label_fr: true, label_en: true, color: true },
         },
       },
-      leaveTypeConfig: {
-        select: { code: true, label_fr: true, label_en: true, color: true },
-      },
-    },
-  });
+    });
 
-  // Filter options
-  const [offices, teams, leaveTypes] = await Promise.all([
-    prisma.office.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
-    prisma.team.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
-    prisma.leaveTypeConfig.findMany({
-      where: { isActive: true },
-      select: { id: true, label_fr: true, label_en: true },
-      distinct: ["code"],
-    }),
-  ]);
+    // Filter options
+    const [offices, teams, leaveTypes] = await Promise.all([
+      prisma.office.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
+      prisma.team.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
+      prisma.leaveTypeConfig.findMany({
+        where: { isActive: true },
+        select: { id: true, label_fr: true, label_en: true },
+        distinct: ["code"],
+      }),
+    ]);
 
-  // Summary stats
-  const totalDays = items.reduce((s, i) => s + i.totalDays, 0);
-  const approvedCount = items.filter((i) => i.status === "APPROVED").length;
+    // Summary stats
+    const totalDays = items.reduce((s, i) => s + i.totalDays, 0);
+    const approvedCount = items.filter((i) => i.status === "APPROVED").length;
 
-  return NextResponse.json({
-    items,
-    filters: { offices, teams, leaveTypes },
-    summary: { totalRequests: items.length, totalDays, approvedCount },
-  });
+    console.log(`[hr/reports] Fetched ${items.length} leave requests`);
+
+    return NextResponse.json({
+      items,
+      filters: { offices, teams, leaveTypes },
+      summary: { totalRequests: items.length, totalDays, approvedCount },
+    });
+  } catch (error) {
+    console.error("[hr/reports] Query error:", error);
+    return NextResponse.json(
+      { error: "Erreur lors du chargement des rapports" },
+      { status: 500 }
+    );
+  }
 }
