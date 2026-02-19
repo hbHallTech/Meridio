@@ -129,7 +129,7 @@ const HALF_DAY_OPTIONS = [
   { value: "AFTERNOON", label_fr: "Après-midi", label_en: "Afternoon" },
 ];
 
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+const MAX_FILE_SIZE = 4.5 * 1024 * 1024; // 4.5MB — Vercel server upload limit
 const ACCEPTED_TYPES = [
   "image/jpeg",
   "image/png",
@@ -293,7 +293,7 @@ export default function NewLeavePage() {
         if (file.size > MAX_FILE_SIZE) {
           addToast({
             type: "error",
-            title: lang === "en" ? "File too large (max 5MB)" : "Fichier trop volumineux (max 5Mo)",
+            title: lang === "en" ? "File too large (max 4.5 MB)" : "Fichier trop volumineux (max 4.5 Mo)",
             message: file.name,
           });
           continue;
@@ -720,8 +720,8 @@ export default function NewLeavePage() {
             </p>
             <p className="text-xs text-gray-400">
               {lang === "en"
-                ? "Images or PDF, max 5MB"
-                : "Images ou PDF, max 5Mo"}
+                ? "Images or PDF, max 4.5 MB"
+                : "Images ou PDF, max 4.5 Mo"}
             </p>
           </div>
           <input

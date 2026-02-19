@@ -4,7 +4,7 @@ import { put } from "@vercel/blob";
 import crypto from "crypto";
 import path from "path";
 
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+const MAX_FILE_SIZE = 4.5 * 1024 * 1024; // 4.5MB — Vercel server upload limit
 const ALLOWED_TYPES = [
   "image/jpeg",
   "image/png",
@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
   if (file.size > MAX_FILE_SIZE) {
     console.warn(`[upload] Rejected file size: user=${userId} file=${file.name} size=${file.size}`);
     return NextResponse.json(
-      { error: `Fichier trop volumineux : ${file.name} (max 5Mo)` },
+      { error: `Fichier trop volumineux : ${file.name} (max 4.5 Mo)` },
       { status: 400 }
     );
   }
