@@ -69,16 +69,38 @@ async function getTransporter(): Promise<Transporter> {
       user: config.user,
       pass: config.pass,
     },
+    // Use STARTTLS for port 587 (standard). No SSLv3 — use modern ciphers.
     ...(config.port !== 465 && {
       tls: {
-        ciphers: "SSLv3",
-        rejectUnauthorized: false,
+        minVersion: "TLSv1.2",
       },
     }),
   });
 
   _lastConfigHash = configHash;
   return _transporter;
+}
+
+/**
+ * Strip HTML tags to produce a plain text version of the email.
+ * This is critical for deliverability — HTML-only emails are flagged as spam.
+ */
+function htmlToPlainText(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<\/h[1-6]>/gi, "\n\n")
+    .replace(/<\/tr>/gi, "\n")
+    .replace(/<\/td>/gi, "  ")
+    .replace(/<a[^>]+href="([^"]*)"[^>]*>(.*?)<\/a>/gi, "$2 ($1)")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&copy;/g, "(c)")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 interface SendEmailOptions {
@@ -91,11 +113,12 @@ export async function sendEmail({ to, subject, html }: SendEmailOptions) {
   const config = await getSmtpConfig();
 
   if (!config.user) {
-    console.log(`Email notif envoyé à ${to} : skip (SMTP non configuré) - ${subject}`);
+    console.log(`[email] Skip (SMTP non configuré): to=${to} subject="${subject}"`);
     return;
   }
 
   const transporter = await getTransporter();
+  const text = htmlToPlainText(html);
 
   try {
     await transporter.sendMail({
@@ -103,10 +126,15 @@ export async function sendEmail({ to, subject, html }: SendEmailOptions) {
       to,
       subject,
       html,
+      text,
+      headers: {
+        "X-Mailer": "Meridio HR Platform",
+      },
     });
-    console.log(`Email notif envoyé à ${to} : success - ${subject}`);
-  } catch (error) {
-    console.log(`Email notif envoyé à ${to} : fail - ${subject}`, error);
+    console.log(`[email] Sent: to=${to} subject="${subject}"`);
+  } catch (error: unknown) {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    console.error(`[email] Failed: to=${to} subject="${subject}" error=${errMsg}`);
     throw error;
   }
 }
@@ -114,20 +142,24 @@ export async function sendEmail({ to, subject, html }: SendEmailOptions) {
 function emailWrapper(content: string): string {
   return `
     <!DOCTYPE html>
-    <html>
-    <head><meta charset="utf-8"></head>
+    <html lang="fr">
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Meridio</title>
+    </head>
     <body style="font-family: 'Segoe UI', Arial, sans-serif; background-color: #f4f6f8; margin: 0; padding: 20px;">
       <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
         <div style="background-color: #1B3A5C; padding: 24px; text-align: center;">
           <h1 style="color: white; margin: 0; font-size: 24px;">Halley-Technologies</h1>
-          <p style="color: #00BCD4; margin: 4px 0 0; font-size: 14px;">Meridio - Gestion des congés</p>
+          <p style="color: #00BCD4; margin: 4px 0 0; font-size: 14px;">Meridio - Gestion des conges</p>
         </div>
         <div style="padding: 32px 24px;">
           ${content}
         </div>
         <div style="background-color: #f8f9fa; padding: 16px 24px; text-align: center; font-size: 12px; color: #6b7280;">
-          <p style="margin: 0;">Cet email a été envoyé automatiquement par Meridio.</p>
-          <p style="margin: 4px 0 0;">Halley-Technologies SA &copy; ${new Date().getFullYear()}</p>
+          <p style="margin: 0;">Cet email a ete envoye automatiquement par Meridio.</p>
+          <p style="margin: 4px 0 0;">Halley-Technologies SA - ${new Date().getFullYear()}</p>
         </div>
       </div>
     </body>
@@ -138,15 +170,15 @@ function emailWrapper(content: string): string {
 export async function send2FACode(to: string, code: string, firstName: string) {
   await sendEmail({
     to,
-    subject: "Meridio - Code de vérification",
+    subject: `Meridio - Votre code : ${code}`,
     html: emailWrapper(`
       <h2 style="color: #1B3A5C; margin-top: 0;">Bonjour ${firstName},</h2>
-      <p>Voici votre code de vérification pour accéder à Meridio :</p>
+      <p>Voici votre code de verification pour acceder a Meridio :</p>
       <div style="text-align: center; margin: 24px 0;">
-        <span style="display: inline-block; background-color: #f0f4f8; border: 2px solid #1B3A5C; border-radius: 8px; padding: 16px 32px; font-size: 32px; letter-spacing: 8px; font-weight: bold; color: #1B3A5C;">${code}</span>
+        <span style="display: inline-block; background-color: #f0f4f8; border: 2px solid #1B3A5C; border-radius: 8px; padding: 16px 32px; font-size: 32px; letter-spacing: 4px; font-weight: bold; color: #1B3A5C;">${code}</span>
       </div>
       <p style="color: #6b7280;">Ce code expire dans <strong>10 minutes</strong>.</p>
-      <p style="color: #6b7280;">Si vous n'avez pas demandé ce code, ignorez cet email.</p>
+      <p style="color: #6b7280;">Si vous n'avez pas demande ce code, ignorez cet email.</p>
     `),
   });
 }
@@ -160,13 +192,13 @@ export async function sendPasswordResetEmail(
 
   await sendEmail({
     to,
-    subject: "Meridio - Réinitialisation du mot de passe",
+    subject: "Meridio - Reinitialisation du mot de passe",
     html: emailWrapper(`
       <h2 style="color: #1B3A5C; margin-top: 0;">Bonjour ${firstName},</h2>
-      <p>Vous avez demandé la réinitialisation de votre mot de passe.</p>
-      <p>Cliquez sur le bouton ci-dessous pour créer un nouveau mot de passe :</p>
+      <p>Vous avez demande la reinitialisation de votre mot de passe.</p>
+      <p>Cliquez sur le bouton ci-dessous pour creer un nouveau mot de passe :</p>
       <div style="text-align: center; margin: 24px 0;">
-        <a href="${resetUrl}" style="display: inline-block; background-color: #1B3A5C; color: white; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: 600;">Réinitialiser mon mot de passe</a>
+        <a href="${resetUrl}" style="display: inline-block; background-color: #1B3A5C; color: white; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: 600;">Reinitialiser mon mot de passe</a>
       </div>
       <p style="color: #6b7280;">Ce lien expire dans <strong>1 heure</strong>.</p>
       <p style="color: #6b7280; font-size: 12px;">Si le bouton ne fonctionne pas, copiez ce lien : ${resetUrl}</p>
@@ -177,11 +209,11 @@ export async function sendPasswordResetEmail(
 export async function sendPasswordChangedEmail(to: string, firstName: string) {
   await sendEmail({
     to,
-    subject: "Meridio - Mot de passe modifié",
+    subject: "Meridio - Mot de passe modifie",
     html: emailWrapper(`
       <h2 style="color: #1B3A5C; margin-top: 0;">Bonjour ${firstName},</h2>
-      <p>Votre mot de passe Meridio a été modifié avec succès.</p>
-      <p style="color: #6b7280;">Si vous n'êtes pas à l'origine de cette modification, contactez immédiatement votre administrateur.</p>
+      <p>Votre mot de passe Meridio a ete modifie avec succes.</p>
+      <p style="color: #6b7280;">Si vous n'etes pas a l'origine de cette modification, contactez immediatement votre administrateur.</p>
       <div style="text-align: center; margin: 24px 0;">
         <a href="${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/login" style="display: inline-block; background-color: #1B3A5C; color: white; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: 600;">Se connecter</a>
       </div>
@@ -198,16 +230,16 @@ export async function sendNewAccountEmail(
 
   await sendEmail({
     to,
-    subject: "Meridio - Votre compte a été créé",
+    subject: "Meridio - Votre compte a ete cree",
     html: emailWrapper(`
       <h2 style="color: #1B3A5C; margin-top: 0;">Bienvenue ${firstName},</h2>
-      <p>Votre compte Meridio a été créé par un administrateur.</p>
+      <p>Votre compte Meridio a ete cree par un administrateur.</p>
       <p>Voici vos identifiants de connexion :</p>
       <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
         <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">Email</td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600;">${to}</td></tr>
         <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">Mot de passe</td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600; font-family: monospace;">${tempPassword}</td></tr>
       </table>
-      <p style="color: #EF4444; font-weight: 600;">Vous devrez changer votre mot de passe lors de votre première connexion.</p>
+      <p style="color: #EF4444; font-weight: 600;">Vous devrez changer votre mot de passe lors de votre premiere connexion.</p>
       <div style="text-align: center; margin: 24px 0;">
         <a href="${loginUrl}" style="display: inline-block; background-color: #1B3A5C; color: white; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: 600;">Se connecter</a>
       </div>
@@ -224,10 +256,10 @@ export async function sendAdminPasswordChangedEmail(
 
   await sendEmail({
     to,
-    subject: "Meridio - Votre mot de passe a été réinitialisé",
+    subject: "Meridio - Votre mot de passe a ete reinitialise",
     html: emailWrapper(`
       <h2 style="color: #1B3A5C; margin-top: 0;">Bonjour ${firstName},</h2>
-      <p>Votre mot de passe Meridio a été réinitialisé par un administrateur.</p>
+      <p>Votre mot de passe Meridio a ete reinitialise par un administrateur.</p>
       <p>Voici votre nouveau mot de passe temporaire :</p>
       <div style="text-align: center; margin: 24px 0;">
         <span style="display: inline-block; background-color: #f0f4f8; border: 2px solid #1B3A5C; border-radius: 8px; padding: 12px 24px; font-size: 18px; font-weight: bold; font-family: monospace; color: #1B3A5C;">${tempPassword}</span>
@@ -249,10 +281,10 @@ export async function sendLeaveRequestNotification(
 ) {
   await sendEmail({
     to: managerEmail,
-    subject: `Meridio - Nouvelle demande de congé de ${employeeName}`,
+    subject: `Meridio - Nouvelle demande de conge de ${employeeName}`,
     html: emailWrapper(`
-      <h2 style="color: #1B3A5C; margin-top: 0;">Nouvelle demande de congé</h2>
-      <p><strong>${employeeName}</strong> a soumis une demande de congé :</p>
+      <h2 style="color: #1B3A5C; margin-top: 0;">Nouvelle demande de conge</h2>
+      <p><strong>${employeeName}</strong> a soumis une demande de conge :</p>
       <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
         <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">Type</td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600;">${leaveType}</td></tr>
         <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">Du</td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600;">${startDate}</td></tr>
@@ -265,7 +297,7 @@ export async function sendLeaveRequestNotification(
   });
 }
 
-// ─── Security Email Templates ───────────────────────────────────────────────
+// --- Security Email Templates ---
 
 export async function sendNewDeviceLoginEmail(
   to: string,
