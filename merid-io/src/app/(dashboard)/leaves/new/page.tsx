@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -142,15 +142,18 @@ const ACCEPTED_TYPES = [
 
 export default function NewLeavePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { data: session } = useSession();
   const { addToast } = useToast();
   const lang = session?.user?.language ?? "fr";
+  const editId = searchParams.get("edit") || null;
 
   const [formData, setFormData] = useState<FormData | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [calculatedDays, setCalculatedDays] = useState(0);
   const [files, setFiles] = useState<File[]>([]);
+  const [existingAttachmentUrls, setExistingAttachmentUrls] = useState<string[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -188,6 +191,33 @@ export default function NewLeavePage() {
       .catch(() => setFormData(null))
       .finally(() => setLoading(false));
   }, []);
+
+  // Pre-fill form when editing an existing request
+  useEffect(() => {
+    if (!editId) return;
+    fetch(`/api/leaves/${editId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!data) return;
+        console.log(`Édition demande ${editId} : champs pré-remplis`, {
+          leaveType: data.leaveType?.code,
+          startDate: data.startDate,
+          endDate: data.endDate,
+          reason: data.reason,
+        });
+        setValue("leaveTypeConfigId", data.leaveType?.id ?? "");
+        setValue("startDate", data.startDate?.split("T")[0] ?? "");
+        setValue("endDate", data.endDate?.split("T")[0] ?? "");
+        setValue("startHalfDay", data.startHalfDay ?? "FULL_DAY");
+        setValue("endHalfDay", data.endHalfDay ?? "FULL_DAY");
+        setValue("reason", data.reason ?? "");
+        setValue("exceptionalReason", data.exceptionalReason ?? "");
+        if (data.attachmentUrls && data.attachmentUrls.length > 0) {
+          setExistingAttachmentUrls(data.attachmentUrls);
+        }
+      })
+      .catch(() => {});
+  }, [editId, setValue]);
 
   // Calculate days on change
   useEffect(() => {
@@ -279,10 +309,52 @@ export default function NewLeavePage() {
     setFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const removeExistingAttachment = (index: number) => {
+    setExistingAttachmentUrls((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  // Upload a single file to Vercel Blob via /api/upload
+  const uploadFile = async (file: File): Promise<string | null> => {
+    const fd = new FormData();
+    fd.append("file", file);
+    try {
+      const res = await fetch("/api/upload", { method: "POST", body: fd });
+      if (!res.ok) {
+        const err = await res.json();
+        addToast({
+          type: "error",
+          title: lang === "en" ? `Upload error: ${file.name}` : `Erreur upload : ${file.name}`,
+          message: err.error,
+        });
+        return null;
+      }
+      const data = await res.json();
+      console.log(`Upload justificatif : ${file.name} → ${data.url}`);
+      return data.url as string;
+    } catch {
+      addToast({
+        type: "error",
+        title: lang === "en" ? `Upload error: ${file.name}` : `Erreur upload : ${file.name}`,
+      });
+      return null;
+    }
+  };
+
   // Submit handler
   const onSubmit = async (values: LeaveRequestInput, action: "draft" | "submit") => {
     setSubmitting(true);
     try {
+      // Upload new files first
+      const uploadedUrls: string[] = [...existingAttachmentUrls];
+      for (const file of files) {
+        const url = await uploadFile(file);
+        if (!url) {
+          setSubmitting(false);
+          return; // Abort on upload error
+        }
+        uploadedUrls.push(url);
+      }
+
       const fd = new FormData();
       fd.append("leaveTypeConfigId", values.leaveTypeConfigId);
       fd.append("startDate", values.startDate);
@@ -292,11 +364,14 @@ export default function NewLeavePage() {
       fd.append("reason", values.reason ?? "");
       fd.append("exceptionalReason", values.exceptionalReason ?? "");
       fd.append("action", action);
-      for (const file of files) {
-        fd.append("attachments", file);
+      if (uploadedUrls.length > 0) {
+        fd.append("attachmentUrls", uploadedUrls.join(","));
       }
 
-      const res = await fetch("/api/leaves", { method: "POST", body: fd });
+      // If editing, use PATCH to update; otherwise POST to create
+      const url = editId ? `/api/leaves/${editId}` : "/api/leaves";
+      const method = editId ? "PUT" : "POST";
+      const res = await fetch(url, { method, body: fd });
       const result = await res.json();
 
       if (!res.ok) {
@@ -362,12 +437,18 @@ export default function NewLeavePage() {
         </Link>
         <div>
           <h1 className="text-2xl font-bold text-gray-900">
-            {lang === "en" ? "New Leave Request" : "Nouvelle demande de congé"}
+            {editId
+              ? lang === "en" ? "Edit Leave Request" : "Modifier la demande de congé"
+              : lang === "en" ? "New Leave Request" : "Nouvelle demande de congé"}
           </h1>
           <p className="text-sm text-gray-500">
-            {lang === "en"
-              ? "Fill in the details below to request time off."
-              : "Remplissez les informations ci-dessous pour demander un congé."}
+            {editId
+              ? lang === "en"
+                ? "Update the details below and resubmit."
+                : "Modifiez les informations ci-dessous et resoumettez."
+              : lang === "en"
+                ? "Fill in the details below to request time off."
+                : "Remplissez les informations ci-dessous pour demander un congé."}
           </p>
         </div>
       </div>
@@ -655,7 +736,37 @@ export default function NewLeavePage() {
             }}
           />
 
-          {/* File list */}
+          {/* Existing attachments (edit mode) */}
+          {existingAttachmentUrls.length > 0 && (
+            <ul className="mt-3 space-y-2">
+              {existingAttachmentUrls.map((url, idx) => {
+                const fileName = url.split("/").pop() ?? url;
+                return (
+                  <li
+                    key={`existing-${idx}`}
+                    className="flex items-center justify-between rounded-lg border border-blue-200 bg-blue-50 px-3 py-2"
+                  >
+                    <div className="flex items-center gap-2 overflow-hidden">
+                      <FileText className="h-4 w-4 shrink-0 text-blue-400" />
+                      <span className="truncate text-sm text-blue-700">{fileName}</span>
+                      <span className="shrink-0 text-xs text-blue-400">
+                        {lang === "en" ? "Existing" : "Existant"}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeExistingAttachment(idx)}
+                      className="shrink-0 rounded p-1 text-blue-400 hover:bg-blue-100 hover:text-red-500"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          {/* New file list */}
           {files.length > 0 && (
             <ul className="mt-3 space-y-2">
               {files.map((file, idx) => (

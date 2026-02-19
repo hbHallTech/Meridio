@@ -91,18 +91,24 @@ export async function sendEmail({ to, subject, html }: SendEmailOptions) {
   const config = await getSmtpConfig();
 
   if (!config.user) {
-    console.log(`[EMAIL SKIP] No SMTP configured. To: ${to}, Subject: ${subject}`);
+    console.log(`Email notif envoyé à ${to} : skip (SMTP non configuré) - ${subject}`);
     return;
   }
 
   const transporter = await getTransporter();
 
-  await transporter.sendMail({
-    from: config.from,
-    to,
-    subject,
-    html,
-  });
+  try {
+    await transporter.sendMail({
+      from: config.from,
+      to,
+      subject,
+      html,
+    });
+    console.log(`Email notif envoyé à ${to} : success - ${subject}`);
+  } catch (error) {
+    console.log(`Email notif envoyé à ${to} : fail - ${subject}`, error);
+    throw error;
+  }
 }
 
 function emailWrapper(content: string): string {
