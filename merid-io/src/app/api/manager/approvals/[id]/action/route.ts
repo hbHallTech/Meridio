@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { approvalSchema } from "@/lib/validators";
-import { createAuditLog } from "@/lib/notifications";
+import {
+  createAuditLog,
+  notifyLeaveApproved,
+  notifyLeaveRejected,
+  notifyLeaveNeedsRevision,
+  notifyNewLeaveRequest,
+} from "@/lib/notifications";
 import { getRequestIp } from "@/lib/rate-limit";
 import { LeaveStatus, ApprovalAction } from "@prisma/client";
 
@@ -41,7 +47,8 @@ export async function POST(
     include: {
       approvalSteps: { orderBy: { stepOrder: "asc" } },
       user: { select: { id: true, firstName: true, lastName: true, teamId: true } },
-      leaveTypeConfig: { select: { deductsFromBalance: true, balanceType: true } },
+      // Bug5: Include code to check for EXCEPTIONAL type
+      leaveTypeConfig: { select: { code: true, label_fr: true, deductsFromBalance: true, balanceType: true } },
     },
   });
 
@@ -103,14 +110,19 @@ export async function POST(
     data: { status: newStatus },
   });
 
-  // Update balance on final decision (no HR step after)
-  if (
-    newStatus !== LeaveStatus.PENDING_HR &&
+  // Bug5: Check for EXCEPTIONAL type — never deduct from balance
+  const isExceptional = leaveRequest.leaveTypeConfig.code === "EXCEPTIONAL";
+  const shouldUpdateBalance =
+    !isExceptional &&
     leaveRequest.leaveTypeConfig.deductsFromBalance &&
-    leaveRequest.leaveTypeConfig.balanceType
-  ) {
+    leaveRequest.leaveTypeConfig.balanceType;
+
+  console.log(`Bug5: Manager approval - code=${leaveRequest.leaveTypeConfig.code}, isExceptional=${isExceptional}, shouldUpdateBalance=${!!shouldUpdateBalance}`);
+
+  // Update balance on final decision (no HR step after)
+  if (newStatus !== LeaveStatus.PENDING_HR && shouldUpdateBalance) {
     const year = leaveRequest.startDate.getFullYear();
-    const balanceType = leaveRequest.leaveTypeConfig.balanceType;
+    const balanceType = leaveRequest.leaveTypeConfig.balanceType!;
 
     if (action === "APPROVED") {
       await prisma.leaveBalance.updateMany({
@@ -126,6 +138,61 @@ export async function POST(
         data: { pendingDays: { decrement: leaveRequest.totalDays } },
       });
     }
+  }
+
+  // Bug1: Send notification to employee based on action
+  const approverUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { firstName: true, lastName: true },
+  });
+  const approverName = approverUser
+    ? `${approverUser.firstName} ${approverUser.lastName}`
+    : "Manager";
+  const startDateStr = leaveRequest.startDate.toISOString().split("T")[0];
+  const endDateStr = leaveRequest.endDate.toISOString().split("T")[0];
+
+  if (action === "APPROVED" && newStatus === LeaveStatus.APPROVED) {
+    notifyLeaveApproved(leaveRequest.userId, {
+      leaveRequestId,
+      leaveType: leaveRequest.leaveTypeConfig.label_fr,
+      startDate: startDateStr,
+      endDate: endDateStr,
+      approverName,
+    }).catch((err) => console.log("Bug1: Error notifying approval:", err));
+  } else if (action === "APPROVED" && newStatus === LeaveStatus.PENDING_HR) {
+    // Bug4: Notify HR approver(s) for next step
+    const hrSteps = leaveRequest.approvalSteps.filter(
+      (s) => s.stepType === "HR" && s.action === null && s.id !== managerStep.id
+    );
+    if (hrSteps.length > 0) {
+      const hrApproverIds = hrSteps.map((s) => s.approverId);
+      notifyNewLeaveRequest(hrApproverIds, {
+        leaveRequestId,
+        employeeName: `${leaveRequest.user.firstName} ${leaveRequest.user.lastName}`,
+        leaveType: leaveRequest.leaveTypeConfig.label_fr,
+        startDate: startDateStr,
+        endDate: endDateStr,
+        totalDays: leaveRequest.totalDays,
+      }).catch((err) => console.log("Bug1: Error notifying HR step:", err));
+    }
+  } else if (action === "REFUSED") {
+    notifyLeaveRejected(leaveRequest.userId, {
+      leaveRequestId,
+      leaveType: leaveRequest.leaveTypeConfig.label_fr,
+      startDate: startDateStr,
+      endDate: endDateStr,
+      approverName,
+      comment: comment?.trim() || "",
+    }).catch((err) => console.log("Bug1: Error notifying rejection:", err));
+  } else if (action === "RETURNED") {
+    notifyLeaveNeedsRevision(leaveRequest.userId, {
+      leaveRequestId,
+      leaveType: leaveRequest.leaveTypeConfig.label_fr,
+      startDate: startDateStr,
+      endDate: endDateStr,
+      approverName,
+      comment: comment?.trim() || "",
+    }).catch((err) => console.log("Bug1: Error notifying return:", err));
   }
 
   await createAuditLog({

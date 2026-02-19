@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { leaveRequestSchema } from "@/lib/validators";
+import { notifyNewLeaveRequest } from "@/lib/notifications";
 import type { Prisma } from "@prisma/client";
+import { writeFile, mkdir } from "fs/promises";
+import path from "path";
+import crypto from "crypto";
 
 // ─── GET: list user's leave requests (server-side filtering + pagination) ───
 
@@ -191,6 +195,8 @@ export async function POST(request: NextRequest) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
+      firstName: true,
+      lastName: true,
       officeId: true,
       teamId: true,
       hireDate: true,
@@ -213,15 +219,27 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 404 });
   }
 
-  // Check probation
-  const now = new Date();
-  const probationEnd = new Date(user.hireDate);
-  probationEnd.setMonth(probationEnd.getMonth() + user.office.probationMonths);
-  if (now < probationEnd) {
-    return NextResponse.json(
-      { error: "Les demandes de congé ne sont pas possibles pendant la période d'essai" },
-      { status: 403 }
-    );
+  // Bug2: Check probation only if trialModeEnabled is true at company level
+  const company = await prisma.company.findFirst({
+    select: { trialModeEnabled: true },
+  });
+  const trialModeEnabled = company?.trialModeEnabled ?? false;
+  console.log(`Bug2: trialModeEnabled=${trialModeEnabled}, action=${action}`);
+
+  if (trialModeEnabled) {
+    const now = new Date();
+    const probationEnd = new Date(user.hireDate);
+    probationEnd.setMonth(probationEnd.getMonth() + user.office.probationMonths);
+    if (now < probationEnd) {
+      // Bug2: Allow drafts even during probation, only block submit
+      if (action === "submit") {
+        return NextResponse.json(
+          { error: "Les demandes de congé ne peuvent pas être soumises pendant la période d'essai. Vous pouvez enregistrer un brouillon." },
+          { status: 403 }
+        );
+      }
+      console.log("Bug2: Probation active but allowing draft save");
+    }
   }
 
   // Get leave type config
@@ -311,20 +329,54 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Handle file uploads — store filenames (in production, use S3/cloud storage)
+  // Bug3: Handle file uploads — save to disk with unique names
   const attachmentUrls: string[] = [];
+  const uploadDir = path.join(process.cwd(), "public", "uploads", "attachments");
   for (const file of attachments) {
     if (file.size > 0) {
-      // For now, store as data URIs or file names — real impl would upload to storage
-      attachmentUrls.push(file.name);
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        console.log(`Bug3: File too large: ${file.name} (${file.size} bytes)`);
+        return NextResponse.json(
+          { error: `Fichier trop volumineux : ${file.name} (max 5Mo)` },
+          { status: 400 }
+        );
+      }
+      // Validate file type
+      const allowedTypes = ["image/jpeg", "image/png", "image/gif", "image/webp", "application/pdf"];
+      if (!allowedTypes.includes(file.type)) {
+        console.log(`Bug3: Invalid file type: ${file.name} (${file.type})`);
+        return NextResponse.json(
+          { error: `Type de fichier non autorisé : ${file.name}. Formats acceptés : PDF, JPG, PNG, GIF, WebP` },
+          { status: 400 }
+        );
+      }
+
+      try {
+        await mkdir(uploadDir, { recursive: true });
+        const ext = path.extname(file.name) || (file.type === "application/pdf" ? ".pdf" : ".bin");
+        const uniqueName = `${crypto.randomUUID()}${ext}`;
+        const filePath = path.join(uploadDir, uniqueName);
+        const buffer = Buffer.from(await file.arrayBuffer());
+        await writeFile(filePath, buffer);
+        const publicUrl = `/uploads/attachments/${uniqueName}`;
+        attachmentUrls.push(publicUrl);
+        console.log(`Bug3: File uploaded: ${file.name} -> ${publicUrl} (${file.size} bytes)`);
+      } catch (uploadError) {
+        console.log(`Bug3: File upload error for ${file.name}:`, uploadError);
+        return NextResponse.json(
+          { error: `Erreur lors de l'upload de ${file.name}` },
+          { status: 500 }
+        );
+      }
     }
   }
 
   const isSubmit = action === "submit";
-  let status: "DRAFT" | "PENDING_MANAGER" = isSubmit ? "PENDING_MANAGER" : "DRAFT";
+  const status: "DRAFT" | "PENDING_MANAGER" = isSubmit ? "PENDING_MANAGER" : "DRAFT";
 
   // If submitting, resolve workflow by team
-  let workflowConfig: { id: string; steps: { id: string; stepOrder: number; stepType: "MANAGER" | "HR"; isRequired: boolean }[] } | null = null;
+  let workflowConfig: { id: string; mode: "SEQUENTIAL" | "PARALLEL"; steps: { id: string; stepOrder: number; stepType: "MANAGER" | "HR"; isRequired: boolean }[] } | null = null;
   if (isSubmit && user.teamId) {
     const workflows = await prisma.workflowConfig.findMany({
       where: {
@@ -381,13 +433,10 @@ export async function POST(request: NextRequest) {
   });
 
   // Create approval steps based on workflow
+  const approvalStepsData: { leaveRequestId: string; approverId: string; stepType: "MANAGER" | "HR"; stepOrder: number }[] = [];
   if (isSubmit && workflowConfig && workflowConfig.steps.length > 0) {
-    // Find approvers for each step
-    const approvalStepsData: { leaveRequestId: string; approverId: string; stepType: "MANAGER" | "HR"; stepOrder: number }[] = [];
-
     for (const step of workflowConfig.steps) {
       if (step.stepType === "MANAGER") {
-        // Approver is the user's team manager
         const managerId = user.team?.managerId;
         if (managerId) {
           approvalStepsData.push({
@@ -398,7 +447,6 @@ export async function POST(request: NextRequest) {
           });
         }
       } else if (step.stepType === "HR") {
-        // Find first active HR user
         const hrUser = await prisma.user.findFirst({
           where: { roles: { has: "HR" }, isActive: true },
           select: { id: true },
@@ -416,6 +464,40 @@ export async function POST(request: NextRequest) {
 
     if (approvalStepsData.length > 0) {
       await prisma.approvalStep.createMany({ data: approvalStepsData });
+    }
+  }
+
+  // Bug1 + Bug4: Send notifications to approvers based on workflow mode
+  if (isSubmit && approvalStepsData.length > 0 && workflowConfig) {
+    const employeeName = `${user.firstName} ${user.lastName}`;
+    const notifyParams = {
+      leaveRequestId: leaveRequest.id,
+      employeeName,
+      leaveType: leaveType.label_fr,
+      startDate: data.startDate,
+      endDate: data.endDate,
+      totalDays,
+    };
+
+    if (workflowConfig.mode === "PARALLEL") {
+      // Bug4: PARALLEL mode → notify ALL approvers simultaneously
+      const allApproverIds = approvalStepsData.map((s) => s.approverId);
+      const uniqueApproverIds = [...new Set(allApproverIds)];
+      console.log(`Bug4: Parallel workflow - notifying all ${uniqueApproverIds.length} approvers simultaneously`);
+      notifyNewLeaveRequest(uniqueApproverIds, notifyParams).catch((err) =>
+        console.log("Bug4: Error sending parallel notifications:", err)
+      );
+    } else {
+      // SEQUENTIAL mode → notify only first step approver
+      const firstStepOrder = Math.min(...approvalStepsData.map((s) => s.stepOrder));
+      const firstStepApprovers = approvalStepsData
+        .filter((s) => s.stepOrder === firstStepOrder)
+        .map((s) => s.approverId);
+      const uniqueFirstApprovers = [...new Set(firstStepApprovers)];
+      console.log(`Bug4: Sequential workflow - notifying first step (${uniqueFirstApprovers.length} approver(s))`);
+      notifyNewLeaveRequest(uniqueFirstApprovers, notifyParams).catch((err) =>
+        console.log("Bug4: Error sending sequential notifications:", err)
+      );
     }
   }
 

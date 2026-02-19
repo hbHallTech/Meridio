@@ -1,0 +1,319 @@
+ID;Module;Sous-module;Scénario de test;Pré-conditions;Étapes de test;Résultat attendu;Priorité;Type;Statut
+AUTH-001;Authentification;Login;Connexion avec identifiants valides;Utilisateur existant avec email @halley-technologies.ch;"1. Accéder à /login
+2. Saisir email: hbo@halley-technologies.ch
+3. Saisir mot de passe valide
+4. Cliquer sur Connexion";Redirection vers /dashboard, session créée;Critique;Fonctionnel;À tester
+AUTH-002;Authentification;Login;Connexion avec email invalide (domaine incorrect);Aucune;"1. Accéder à /login
+2. Saisir email: user@gmail.com
+3. Saisir un mot de passe
+4. Cliquer sur Connexion";Message d'erreur, seul le domaine @halley-technologies.ch est accepté;Critique;Fonctionnel;À tester
+AUTH-003;Authentification;Login;Connexion avec mot de passe incorrect;Utilisateur existant;"1. Accéder à /login
+2. Saisir email valide
+3. Saisir mot de passe incorrect
+4. Cliquer sur Connexion";Message d'erreur générique (ne pas révéler si l'email existe);Critique;Sécurité;À tester
+AUTH-004;Authentification;Login;Verrouillage après tentatives échouées;Utilisateur existant;"1. Tenter 5 connexions avec mauvais mot de passe
+2. Observer le comportement après chaque tentative";Compte verrouillé après le nombre max de tentatives, message rate limiting;Critique;Sécurité;À tester
+AUTH-005;Authentification;2FA;Envoi du code 2FA par email;Utilisateur connecté, 2FA activé;"1. Se connecter avec identifiants valides
+2. Vérifier la réception de l'email avec code 6 chiffres";Email reçu avec code à 6 chiffres, code valide 10 minutes;Haute;Fonctionnel;À tester
+AUTH-006;Authentification;2FA;Vérification code 2FA valide;Code 2FA envoyé et non expiré;"1. Saisir le code à 6 chiffres reçu par email
+2. Valider";Authentification complète, redirection vers /dashboard;Haute;Fonctionnel;À tester
+AUTH-007;Authentification;2FA;Code 2FA expiré (>10 min);Code 2FA envoyé il y a plus de 10 minutes;"1. Attendre 10+ minutes après réception du code
+2. Saisir le code
+3. Valider";Message d'erreur: code expiré, option de renvoi;Haute;Fonctionnel;À tester
+AUTH-008;Authentification;2FA;Rate limiting sur vérification 2FA;Code 2FA envoyé;"1. Saisir 5 codes incorrects consécutifs
+2. Observer le comportement";Blocage temporaire après trop de tentatives;Haute;Sécurité;À tester
+AUTH-009;Authentification;Mot de passe oublié;Demande de réinitialisation mot de passe;Utilisateur existant;"1. Cliquer sur 'Mot de passe oublié' depuis /login
+2. Saisir email valide
+3. Soumettre";Message générique de succès (anti-énumération), email envoyé si compte existe;Haute;Fonctionnel;À tester
+AUTH-010;Authentification;Mot de passe oublié;Réinitialisation avec token valide;Token de réinitialisation reçu par email;"1. Cliquer sur le lien dans l'email
+2. Saisir nouveau mot de passe conforme à la politique
+3. Confirmer le mot de passe
+4. Valider";Mot de passe changé, redirection vers /login avec message de succès;Haute;Fonctionnel;À tester
+AUTH-011;Authentification;Mot de passe oublié;Réinitialisation avec token expiré;Token de réinitialisation expiré;"1. Utiliser un lien de réinitialisation périmé
+2. Tenter de changer le mot de passe";Message d'erreur: lien expiré, proposer un nouveau renvoi;Haute;Fonctionnel;À tester
+AUTH-012;Authentification;Session;Expiration de session après inactivité;Utilisateur connecté, timeout configuré à 30 min;"1. Se connecter
+2. Ne rien faire pendant 30+ minutes
+3. Tenter une action";Redirection vers /login, session expirée;Moyenne;Sécurité;À tester
+AUTH-013;Authentification;Politique mot de passe;Mot de passe ne respectant pas la complexité;Utilisateur en cours de changement de mot de passe;"1. Tenter un mot de passe < 12 caractères
+2. Tenter sans majuscule
+3. Tenter sans chiffre
+4. Tenter sans caractère spécial";Chaque tentative est rejetée avec message explicatif;Haute;Fonctionnel;À tester
+AUTH-014;Authentification;Politique mot de passe;Réutilisation d'un ancien mot de passe;Utilisateur avec historique de 5 mots de passe;"1. Changer le mot de passe
+2. Saisir un des 5 derniers mots de passe utilisés";Rejet avec message: mot de passe déjà utilisé récemment;Haute;Sécurité;À tester
+AUTH-015;Authentification;Politique mot de passe;Expiration du mot de passe (90 jours);Mot de passe non changé depuis 90+ jours;"1. Se connecter avec identifiants valides
+2. Observer la redirection";Forçage du changement de mot de passe avant accès à l'application;Haute;Sécurité;À tester
+AUTH-016;Authentification;Premier login;Forcer changement au premier login;Nouvel utilisateur créé par admin;"1. Se connecter avec le mot de passe temporaire
+2. Observer le comportement";Redirection vers formulaire de changement de mot de passe obligatoire;Haute;Fonctionnel;À tester
+LEAVE-001;Congés;Création;Créer une demande de congé ANNUEL en brouillon;Employé connecté, solde ANNUAL disponible;"1. Aller à /leaves/new
+2. Sélectionner type: Congé annuel
+3. Sélectionner dates début/fin
+4. Cliquer sur 'Enregistrer brouillon'";Demande créée en statut DRAFT, solde non impacté;Critique;Fonctionnel;À tester
+LEAVE-002;Congés;Création;Soumettre une demande de congé directement;Employé connecté, solde suffisant;"1. Aller à /leaves/new
+2. Remplir le formulaire
+3. Cliquer sur 'Soumettre'";Demande créée en statut PENDING_MANAGER, pendingDays incrémenté dans le solde;Critique;Fonctionnel;À tester
+LEAVE-003;Congés;Création;Demande avec solde insuffisant;Employé connecté, solde ANNUAL = 2j, demande de 5j;"1. Aller à /leaves/new
+2. Sélectionner ANNUAL, 5 jours
+3. Soumettre";Message d'erreur: solde insuffisant, demande non créée;Critique;Fonctionnel;À tester
+LEAVE-004;Congés;Création;Demande pendant la période d'essai;Employé embauché il y a moins de 3 mois;"1. Se connecter
+2. Aller à /leaves/new
+3. Tenter de créer un congé";Message d'erreur: période d'essai en cours, impossible de poser un congé;Haute;Fonctionnel;À tester
+LEAVE-005;Congés;Création;Demande avec chevauchement de dates;Employé avec un congé APPROVED du 10 au 14 mars;"1. Créer une nouvelle demande du 12 au 16 mars
+2. Soumettre";Message d'erreur: chevauchement avec une demande existante;Haute;Fonctionnel;À tester
+LEAVE-006;Congés;Calcul jours;Calcul des jours ouvrés (exclusion weekends);Aucune;"1. Sélectionner du lundi au vendredi (5 jours calendaires)
+2. Vérifier le calcul affiché";5 jours ouvrés affichés;Critique;Fonctionnel;À tester
+LEAVE-007;Congés;Calcul jours;Calcul avec jours fériés;Jours fériés CH configurés pour Genève;"1. Sélectionner une période incluant le 1er août (fête nationale)
+2. Vérifier le calcul";Le 1er août n'est pas compté, jours ouvrés réduits d'1 jour;Critique;Fonctionnel;À tester
+LEAVE-008;Congés;Calcul jours;Congé demi-journée (matin);Aucune;"1. Sélectionner 1 jour
+2. Choisir 'Matin' comme période
+3. Vérifier le calcul";0.5 jour ouvré affiché;Haute;Fonctionnel;À tester
+LEAVE-009;Congés;Calcul jours;Congé demi-journée (après-midi);Aucune;"1. Sélectionner 1 jour
+2. Choisir 'Après-midi' comme période
+3. Vérifier le calcul";0.5 jour ouvré affiché;Haute;Fonctionnel;À tester
+LEAVE-010;Congés;Maladie;Congé maladie sans justificatif (1 jour);Employé connecté;"1. Créer un congé SICK de 1 jour
+2. Soumettre sans pièce jointe";Demande acceptée, pas de pièce jointe requise pour 1 jour;Haute;Fonctionnel;À tester
+LEAVE-011;Congés;Maladie;Congé maladie avec justificatif obligatoire (>2 jours);Employé connecté;"1. Créer un congé SICK de 3 jours
+2. Tenter de soumettre sans pièce jointe";Message d'avertissement: justificatif requis à partir de 2 jours;Haute;Fonctionnel;À tester
+LEAVE-012;Congés;Annulation;Annuler un brouillon;Demande en statut DRAFT;"1. Ouvrir la demande en brouillon
+2. Cliquer sur 'Annuler'";Demande passe en statut CANCELLED, aucun impact sur le solde;Haute;Fonctionnel;À tester
+LEAVE-013;Congés;Annulation;Annuler une demande en attente;Demande en statut PENDING_MANAGER;"1. Ouvrir la demande en attente
+2. Cliquer sur 'Annuler'";Statut passe à CANCELLED, pendingDays restauré dans le solde;Haute;Fonctionnel;À tester
+LEAVE-014;Congés;Annulation;Impossible d'annuler un congé approuvé;Demande en statut APPROVED;"1. Ouvrir la demande approuvée
+2. Chercher le bouton 'Annuler'";Bouton absent ou désactivé, impossible d'annuler;Haute;Fonctionnel;À tester
+LEAVE-015;Congés;Exceptionnel;Demande de congé exceptionnel (Mariage);Règle exceptionnelle Mariage configurée (3j max);"1. Créer un congé EXCEPTIONAL
+2. Sélectionner raison: Mariage
+3. Sélectionner 3 jours
+4. Soumettre";Demande créée, ne déduit PAS du solde ANNUAL;Haute;Fonctionnel;À tester
+LEAVE-016;Congés;Exceptionnel;Congé exceptionnel dépassant le max jours;Règle Mariage = 3j max;"1. Créer un congé EXCEPTIONAL Mariage de 5 jours
+2. Soumettre";Rejet: nombre de jours dépasse le maximum autorisé (3j);Haute;Fonctionnel;À tester
+LEAVE-017;Congés;Télétravail;Demande de télétravail;Employé connecté;"1. Créer un congé TELEWORK
+2. Sélectionner dates
+3. Soumettre";Demande créée, ne déduit PAS du solde;Moyenne;Fonctionnel;À tester
+LEAVE-018;Congés;Liste;Filtrer les congés par statut;Employé avec plusieurs demandes en différents statuts;"1. Aller à /leaves
+2. Filtrer par statut APPROVED";Seules les demandes approuvées sont affichées;Moyenne;Fonctionnel;À tester
+LEAVE-019;Congés;Liste;Pagination des congés;Employé avec 20+ demandes;"1. Aller à /leaves
+2. Naviguer entre les pages";Pagination fonctionnelle, données cohérentes;Moyenne;Fonctionnel;À tester
+LEAVE-020;Congés;Congé offert;Utiliser des jours offerts (OFFERED);Solde OFFERED = 3j;"1. Créer un congé de type OFFERED (1 jour)
+2. Soumettre";Demande créée, déduit du solde OFFERED (pas ANNUAL);Haute;Fonctionnel;À tester
+WF-001;Workflow;Approbation Manager;Manager approuve une demande (workflow 1 étape);Demande en PENDING_MANAGER, workflow Genève (1 étape);"1. Se connecter en tant que Manager
+2. Aller à /manager/approvals
+3. Ouvrir la demande
+4. Cliquer sur 'Approuver'";Statut passe à APPROVED, usedDays incrémenté, pendingDays décrémenté;Critique;Fonctionnel;À tester
+WF-002;Workflow;Approbation Manager;Manager refuse une demande avec commentaire;Demande en PENDING_MANAGER;"1. Se connecter en tant que Manager
+2. Ouvrir la demande
+3. Saisir un commentaire obligatoire
+4. Cliquer sur 'Refuser'";Statut passe à REFUSED, pendingDays restauré, commentaire enregistré;Critique;Fonctionnel;À tester
+WF-003;Workflow;Approbation Manager;Manager retourne une demande avec commentaire;Demande en PENDING_MANAGER;"1. Se connecter en tant que Manager
+2. Ouvrir la demande
+3. Saisir un commentaire
+4. Cliquer sur 'Retourner'";Statut passe à RETURNED, employé peut modifier et resoumettre;Haute;Fonctionnel;À tester
+WF-004;Workflow;Approbation Manager;Refus sans commentaire impossible;Demande en PENDING_MANAGER;"1. Se connecter en tant que Manager
+2. Ouvrir la demande
+3. Cliquer sur 'Refuser' sans commentaire";Erreur: le commentaire est obligatoire pour un refus;Haute;Fonctionnel;À tester
+WF-005;Workflow;Approbation HR;HR approuve après le Manager (workflow 2 étapes);Demande en PENDING_HR, workflow Tunis (2 étapes), Manager a déjà approuvé;"1. Se connecter en tant que HR
+2. Aller à /hr/approvals
+3. Ouvrir la demande
+4. Approuver";Statut passe à APPROVED, usedDays incrémenté;Critique;Fonctionnel;À tester
+WF-006;Workflow;Approbation HR;HR refuse une demande;Demande en PENDING_HR;"1. Se connecter en tant que HR
+2. Ouvrir la demande
+3. Saisir commentaire
+4. Refuser";Statut passe à REFUSED, pendingDays restauré;Haute;Fonctionnel;À tester
+WF-007;Workflow;Ressoumission;Employé resoumet après retour;Demande en statut RETURNED;"1. Se connecter en tant qu'employé
+2. Ouvrir la demande retournée
+3. Modifier si nécessaire
+4. Resoumettre";Statut repasse à PENDING_MANAGER;Haute;Fonctionnel;À tester
+WF-008;Workflow;Périmètre;Manager ne voit que les demandes de son équipe;Manager avec une équipe de 3 personnes;"1. Se connecter en tant que Manager
+2. Aller à /manager/approvals";Seules les demandes des membres de l'équipe sont visibles;Critique;Sécurité;À tester
+BAL-001;Soldes;Consultation;Afficher le solde ANNUAL sur le dashboard;Employé connecté, solde configuré;"1. Aller à /dashboard
+2. Vérifier la section solde";Solde ANNUAL affiché: totalDays, usedDays, pendingDays, restant;Haute;Fonctionnel;À tester
+BAL-002;Soldes;Consultation;Afficher le solde OFFERED sur le dashboard;Employé connecté, solde OFFERED configuré;"1. Aller à /dashboard
+2. Vérifier la section solde";Solde OFFERED affiché correctement;Haute;Fonctionnel;À tester
+BAL-003;Soldes;Calcul;Solde proratisé pour embauche en milieu d'année;Employé embauché le 1er juin, allocation annuelle = 25j;"1. Vérifier le solde initial de l'employé";Solde proratisé: environ 12.5 jours (7 mois restants / 12 x 25);Haute;Fonctionnel;À tester
+BAL-004;Soldes;Report;Report de jours de l'année précédente;Employé avec solde restant fin 2025, max carry-over = 10j;"1. Passer au 1er janvier 2026
+2. Vérifier le nouveau solde";carriedOverDays ≤ 10j, report effectué;Haute;Fonctionnel;À tester
+BAL-005;Soldes;Report;Date limite de report dépassée;carriedOverDays > 0, date limite = 31 mars;"1. Vérifier le solde après le 31 mars
+2. Observer les jours reportés";Jours reportés non utilisés sont perdus après la date limite;Moyenne;Fonctionnel;À tester
+BAL-006;Soldes;Ajustement HR;HR ajuste le solde d'un employé;Connecté en tant que HR;"1. Aller à /hr/balances
+2. Sélectionner un employé
+3. Ajuster le solde avec motif
+4. Valider";Solde mis à jour, entrée dans le journal d'audit avec motif;Haute;Fonctionnel;À tester
+BAL-007;Soldes;Cohérence;Vérifier formule restant = total + report - utilisé - en attente;Employé avec congés approuvés et en attente;"1. Calculer manuellement: total + carriedOver - used - pending
+2. Comparer avec l'affichage";Les valeurs correspondent exactement;Critique;Fonctionnel;À tester
+DEL-001;Délégation;Création;Manager crée une délégation;Manager connecté;"1. Aller à /manager/delegation
+2. Sélectionner le délégataire
+3. Définir les dates début/fin
+4. Valider";Délégation créée, délégataire peut approuver pendant la période;Haute;Fonctionnel;À tester
+DEL-002;Délégation;Validation;Impossible de déléguer à soi-même;Manager connecté;"1. Tenter de créer une délégation vers soi-même";Message d'erreur: impossible de se déléguer à soi-même;Haute;Fonctionnel;À tester
+DEL-003;Délégation;Révocation;Révoquer une délégation active;Délégation active existante;"1. Aller à /manager/delegation
+2. Sélectionner la délégation active
+3. Cliquer sur 'Révoquer'";Délégation révoquée, délégataire ne peut plus approuver;Haute;Fonctionnel;À tester
+DEL-004;Délégation;Admin;Admin crée une délégation pour un manager;Connecté en tant qu'Admin;"1. Aller à /admin/delegations
+2. Sélectionner manager source et délégataire
+3. Définir dates
+4. Valider";Délégation créée par l'admin pour le manager;Moyenne;Fonctionnel;À tester
+ROLE-001;Rôles & Permissions;Employé;Employé ne peut pas accéder aux pages admin;Connecté en tant qu'EMPLOYEE;"1. Tenter d'accéder à /admin/users
+2. Tenter d'accéder à /admin/offices
+3. Tenter d'accéder à /hr/approvals";Redirection ou erreur 403 pour chaque page;Critique;Sécurité;À tester
+ROLE-002;Rôles & Permissions;Manager;Manager ne peut pas créer d'utilisateurs;Connecté en tant que MANAGER uniquement;"1. Tenter d'accéder à /admin/users
+2. Tenter de POST /api/admin/users";Accès refusé (403);Haute;Sécurité;À tester
+ROLE-003;Rôles & Permissions;HR;HR ne peut pas gérer les bureaux;Connecté en tant que HR uniquement;"1. Tenter d'accéder à /admin/offices
+2. Tenter de POST /api/admin/offices";Accès refusé (403);Haute;Sécurité;À tester
+ROLE-004;Rôles & Permissions;Admin;Admin a accès à toutes les fonctionnalités;Connecté en tant qu'ADMIN;"1. Accéder à /admin/users
+2. Accéder à /admin/offices
+3. Accéder à /hr/approvals
+4. Accéder à /manager/approvals";Toutes les pages sont accessibles;Haute;Fonctionnel;À tester
+ROLE-005;Rôles & Permissions;Multi-rôle;Utilisateur avec rôles ADMIN+HR+MANAGER+EMPLOYEE;Admin user (hbo@halley-technologies.ch);"1. Se connecter
+2. Vérifier l'accès à toutes les sections";Accès complet à toutes les fonctionnalités de chaque rôle;Haute;Fonctionnel;À tester
+ADMIN-001;Administration;Utilisateurs;Créer un nouvel utilisateur;Connecté en tant qu'Admin;"1. Aller à /admin/users
+2. Cliquer sur 'Ajouter'
+3. Remplir: nom, prénom, email @halley-technologies.ch, rôle, bureau
+4. Valider";Utilisateur créé, email de bienvenue envoyé avec mot de passe temporaire;Haute;Fonctionnel;À tester
+ADMIN-002;Administration;Utilisateurs;Créer un utilisateur avec email dupliqué;Connecté en tant qu'Admin, utilisateur existant;"1. Tenter de créer un utilisateur avec un email déjà utilisé
+2. Valider";Erreur: email déjà utilisé;Haute;Fonctionnel;À tester
+ADMIN-003;Administration;Utilisateurs;Désactiver un utilisateur;Connecté en tant qu'Admin;"1. Sélectionner un utilisateur
+2. Cliquer sur 'Désactiver'";Utilisateur désactivé (soft delete), ne peut plus se connecter;Haute;Fonctionnel;À tester
+ADMIN-004;Administration;Utilisateurs;Réinitialiser le mot de passe d'un utilisateur;Connecté en tant qu'Admin;"1. Sélectionner un utilisateur
+2. Cliquer sur 'Réinitialiser mot de passe'";Nouveau mot de passe temporaire envoyé, forcePasswordChange = true;Haute;Fonctionnel;À tester
+ADMIN-005;Administration;Bureaux;Créer un nouveau bureau;Connecté en tant qu'Admin;"1. Aller à /admin/offices
+2. Cliquer sur 'Ajouter'
+3. Remplir: nom, pays, ville, congés annuels par défaut (25j), jours offerts, jours ouvrés
+4. Valider";Bureau créé avec toutes les configurations;Haute;Fonctionnel;À tester
+ADMIN-006;Administration;Bureaux;Supprimer un bureau avec des utilisateurs;Connecté en tant qu'Admin, bureau avec employés;"1. Sélectionner le bureau
+2. Tenter de supprimer";Erreur: impossible de supprimer un bureau avec des utilisateurs/équipes;Haute;Fonctionnel;À tester
+ADMIN-007;Administration;Équipes;Créer une équipe;Connecté en tant qu'Admin;"1. Aller à /admin/teams
+2. Cliquer sur 'Ajouter'
+3. Saisir nom, sélectionner manager, bureau
+4. Valider";Équipe créée, manager assigné;Haute;Fonctionnel;À tester
+ADMIN-008;Administration;Équipes;Un manager ne peut gérer qu'une seule équipe;Connecté en tant qu'Admin, manager déjà assigné à une équipe;"1. Créer une 2ème équipe
+2. Sélectionner le même manager";Erreur: ce manager gère déjà une équipe;Haute;Fonctionnel;À tester
+ADMIN-009;Administration;Équipes;Supprimer une équipe;Connecté en tant qu'Admin;"1. Sélectionner une équipe
+2. Cliquer sur 'Supprimer'";Équipe supprimée, membres dissociés (teamId = null);Haute;Fonctionnel;À tester
+ADMIN-010;Administration;Workflows;Créer un workflow séquentiel;Connecté en tant qu'Admin;"1. Aller à /admin/workflows
+2. Créer workflow mode SEQUENTIAL
+3. Ajouter étape 1: MANAGER
+4. Ajouter étape 2: HR
+5. Associer à une équipe";Workflow créé avec 2 étapes séquentielles, associé à l'équipe;Haute;Fonctionnel;À tester
+ADMIN-011;Administration;Workflows;Dupliquer un workflow existant;Connecté en tant qu'Admin, workflow existant;"1. Sélectionner un workflow
+2. Cliquer sur 'Dupliquer'";Nouveau workflow créé avec les mêmes étapes;Moyenne;Fonctionnel;À tester
+ADMIN-012;Administration;Types de congé;Créer un type de congé par bureau;Connecté en tant qu'Admin;"1. Aller à /admin/leave-types
+2. Ajouter un type: code, libellés FR/EN, déduit du solde, pièce jointe requise
+3. Valider";Type de congé créé pour le bureau sélectionné;Haute;Fonctionnel;À tester
+ADMIN-013;Administration;Types de congé;Supprimer un type avec des demandes existantes;Connecté en tant qu'Admin, type de congé utilisé;"1. Sélectionner un type de congé ayant des demandes liées
+2. Tenter de supprimer";Erreur: impossible de supprimer un type avec des demandes existantes;Haute;Fonctionnel;À tester
+ADMIN-014;Administration;Jours fériés;Ajouter un jour férié;Connecté en tant qu'Admin;"1. Aller à /admin/holidays
+2. Ajouter: date, nom FR/EN, type (NATIONAL/RELIGIOUS/PUBLIC), bureau
+3. Valider";Jour férié créé, pris en compte dans les calculs de jours ouvrés;Haute;Fonctionnel;À tester
+ADMIN-015;Administration;Jours fériés;Vérifier les 10 jours fériés CH (Genève);Seed exécuté;"1. Aller à /admin/holidays
+2. Filtrer par bureau Genève, année 2026";10 jours fériés suisses affichés (Nouvel An, Fête nationale 1er août, Noël, etc.);Haute;Fonctionnel;À tester
+ADMIN-016;Administration;Jours fériés;Vérifier les 16 jours fériés TN (Tunis);Seed exécuté;"1. Aller à /admin/holidays
+2. Filtrer par bureau Tunis, année 2026";16 jours fériés tunisiens affichés;Haute;Fonctionnel;À tester
+ADMIN-017;Administration;Fermetures;Créer une période de fermeture;Connecté en tant qu'Admin;"1. Aller à /admin/closures
+2. Ajouter: dates début/fin, motif, bureau
+3. Valider";Fermeture créée, prise en compte dans les calculs;Moyenne;Fonctionnel;À tester
+ADMIN-018;Administration;Règles exceptionnelles;Configurer les règles de congé exceptionnel;Connecté en tant qu'Admin;"1. Aller à /admin/exceptional-rules
+2. Vérifier les 4 règles: Mariage (3j), Décès (3j), Naissance (1j), Déménagement (1j)";4 règles par bureau correctement configurées;Haute;Fonctionnel;À tester
+ADMIN-019;Administration;Entreprise;Configurer les paramètres SMTP;Connecté en tant qu'Admin;"1. Aller à /admin/company
+2. Configurer les paramètres SMTP (serveur, port, identifiants)
+3. Cliquer sur 'Tester SMTP'";Test d'envoi réussi, email de test reçu;Haute;Fonctionnel;À tester
+ADMIN-020;Administration;Entreprise;Configurer la politique de mot de passe;Connecté en tant qu'Admin;"1. Aller à /admin/company
+2. Modifier: expiration (90j), longueur min (12), historique (5)
+3. Sauvegarder";Politique mise à jour, appliquée aux prochains changements de mot de passe;Haute;Fonctionnel;À tester
+ADMIN-021;Administration;Audit;Consulter le journal d'audit;Connecté en tant qu'Admin;"1. Aller à /admin/audit
+2. Filtrer par type d'action, utilisateur, date";Journal d'audit affiché avec détails: action, utilisateur, IP, date, ancien/nouveau valeur;Moyenne;Fonctionnel;À tester
+SEED-001;Seed Admin;Entreprise;Vérifier la création de l'entreprise;Seed exécuté (npx prisma db seed);"1. Vérifier dans la base: company avec id 'halley-tech-company'";Entreprise 'Halley-Technologies SA' créée;Haute;Fonctionnel;À tester
+SEED-002;Seed Admin;Bureaux;Vérifier la création du bureau Genève;Seed exécuté;"1. Vérifier: office id='office-geneva', pays=CH, ville=Genève, congés annuels=25j, offerts=3j";Bureau Genève créé avec les bons paramètres;Haute;Fonctionnel;À tester
+SEED-003;Seed Admin;Bureaux;Vérifier la création du bureau Tunis;Seed exécuté;"1. Vérifier: office id='office-tunis', pays=TN, ville=Tunis, congés annuels=25j, offerts=2j";Bureau Tunis créé avec les bons paramètres;Haute;Fonctionnel;À tester
+SEED-004;Seed Admin;Types de congé;Vérifier les 8 types de congé par bureau;Seed exécuté;"1. Vérifier 16 entrées (8 types x 2 bureaux)
+2. Types: ANNUAL, OFFERED, SICK, UNPAID, MATERNITY, PATERNITY, EXCEPTIONAL, TELEWORK";16 configurations de types de congé créées;Haute;Fonctionnel;À tester
+SEED-005;Seed Admin;Workflows;Vérifier le workflow Genève (1 étape);Seed exécuté;"1. Vérifier workflow 'wf-geneva', mode SEQUENTIAL
+2. 1 étape: MANAGER (ordre 1, obligatoire)";Workflow Genève avec 1 étape MANAGER;Haute;Fonctionnel;À tester
+SEED-006;Seed Admin;Workflows;Vérifier le workflow Tunis (2 étapes);Seed exécuté;"1. Vérifier workflow 'wf-tunis', mode SEQUENTIAL
+2. Étape 1: MANAGER, Étape 2: HR";Workflow Tunis avec 2 étapes séquentielles;Haute;Fonctionnel;À tester
+SEED-007;Seed Admin;Utilisateur admin;Vérifier la création de l'admin;Seed exécuté;"1. Vérifier: email=hbo@halley-technologies.ch, Haithem BOUAJILA
+2. Rôles: ADMIN, HR, MANAGER, EMPLOYEE
+3. Bureau: Genève, Langue: FR";Admin créé avec tous les rôles et paramètres corrects;Critique;Fonctionnel;À tester
+SEED-008;Seed Admin;Utilisateur admin;Vérifier le mot de passe admin hashé;Seed exécuté;"1. Vérifier que passwordHash commence par '$2a$12$' (bcrypt)
+2. Vérifier passwordHistory contient 1 entrée
+3. Expiration = date du jour + 90 jours";Mot de passe hashé en bcrypt, historique initialisé, expiration correcte;Haute;Sécurité;À tester
+SEED-009;Seed Admin;Soldes;Vérifier les soldes de l'admin;Seed exécuté;"1. Vérifier: ANNUAL = 25j total, 0j utilisé, 0j en attente
+2. Vérifier: OFFERED = 3j total (défaut Genève)";2 soldes créés correctement pour l'année 2026;Haute;Fonctionnel;À tester
+SEED-010;Seed Admin;Règles exceptionnelles;Vérifier les 4 règles par bureau;Seed exécuté;"1. Genève: Mariage(3j), Décès(3j), Naissance(1j), Déménagement(1j)
+2. Tunis: mêmes règles";8 règles exceptionnelles créées (4 x 2 bureaux);Haute;Fonctionnel;À tester
+SEED-011;Seed Admin;Idempotence;Re-exécuter le seed sans erreur;Seed déjà exécuté une première fois;"1. Exécuter npx prisma db seed une 2ème fois
+2. Vérifier qu'il n'y a pas de doublons";Seed idempotent: upsert met à jour sans créer de doublons;Haute;Fonctionnel;À tester
+DASH-001;Dashboard;Employé;Afficher le tableau de bord employé;Employé connecté avec soldes et congés;"1. Aller à /dashboard
+2. Vérifier toutes les sections";Soldes, congés à venir, distribution, demandes récentes, prochains fériés affichés;Haute;Fonctionnel;À tester
+DASH-002;Dashboard;Employé;Indicateur de période d'essai;Employé en période d'essai;"1. Aller à /dashboard
+2. Vérifier la présence de l'indicateur";Indicateur 'Période d'essai' visible avec la date de fin;Moyenne;Fonctionnel;À tester
+DASH-003;Dashboard;Manager;Rapports d'équipe;Manager connecté avec une équipe;"1. Aller à /manager/reports
+2. Vérifier les statistiques d'équipe";Statistiques, distribution des congés, détail par employé;Haute;Fonctionnel;À tester
+DASH-004;Dashboard;HR;Dashboard HR;HR connecté;"1. Aller à /hr/dashboard
+2. Vérifier les statistiques entreprise";Vue d'ensemble: statistiques globales, approbations en attente, distribution;Haute;Fonctionnel;À tester
+DASH-005;Dashboard;Manager;Calendrier d'équipe;Manager connecté;"1. Aller à /manager/calendar
+2. Naviguer entre les mois";Congés approuvés de l'équipe affichés, couleurs par type;Moyenne;Fonctionnel;À tester
+PROFIL-001;Profil;Consultation;Afficher le profil utilisateur;Utilisateur connecté;"1. Aller à /profile
+2. Vérifier les informations";Nom, email, bureau, équipe, date embauche, langue, thème affichés;Moyenne;Fonctionnel;À tester
+PROFIL-002;Profil;Modification;Changer la langue (FR/EN);Utilisateur connecté;"1. Aller à /profile
+2. Changer la langue de FR à EN
+3. Sauvegarder";Interface bascule en anglais, préférence sauvegardée;Moyenne;Fonctionnel;À tester
+PROFIL-003;Profil;Modification;Changer le thème (clair/sombre);Utilisateur connecté;"1. Aller à /profile
+2. Basculer entre thème clair et sombre";Thème appliqué immédiatement;Basse;Fonctionnel;À tester
+PROFIL-004;Profil;Avatar;Télécharger une photo de profil;Utilisateur connecté;"1. Aller à /profile
+2. Cliquer sur l'avatar
+3. Sélectionner une image
+4. Valider";Photo de profil mise à jour, visible dans la sidebar;Basse;Fonctionnel;À tester
+PROFIL-005;Profil;Mot de passe;Changer son mot de passe;Utilisateur connecté;"1. Aller à /profile > Mot de passe
+2. Saisir mot de passe actuel
+3. Saisir nouveau mot de passe conforme
+4. Confirmer et valider";Mot de passe changé, historique mis à jour, nouvelle expiration calculée;Haute;Fonctionnel;À tester
+PROFIL-006;Profil;Notifications;Configurer les préférences de notification;Utilisateur connecté;"1. Aller à /profile > Notifications
+2. Activer/désactiver les emails pour différents événements";Préférences sauvegardées, emails envoyés selon configuration;Moyenne;Fonctionnel;À tester
+NOTIF-001;Notifications;Email;Email de bienvenue à la création d'utilisateur;Nouvel utilisateur créé par admin;"1. Créer un utilisateur
+2. Vérifier la boîte mail du nouvel utilisateur";Email reçu avec identifiants temporaires et lien de connexion;Haute;Fonctionnel;À tester
+NOTIF-002;Notifications;Email;Notification de nouvelle demande au manager;Demande soumise par employé;"1. Soumettre une demande de congé
+2. Vérifier la boîte mail du manager";Manager reçoit un email avec les détails de la demande;Haute;Fonctionnel;À tester
+NOTIF-003;Notifications;Email;Notification d'approbation à l'employé;Demande approuvée par manager;"1. Manager approuve la demande
+2. Vérifier la boîte mail de l'employé";Employé reçoit un email de confirmation d'approbation;Haute;Fonctionnel;À tester
+NOTIF-004;Notifications;Email;Notification d'expiration de mot de passe;Mot de passe expire dans 5 jours;"1. Exécuter le cron /api/cron/password-expiration
+2. Vérifier la boîte mail";Utilisateur reçoit un avertissement d'expiration;Moyenne;Fonctionnel;À tester
+SEC-001;Sécurité;Injection SQL;Protection contre l'injection SQL;Aucune;"1. Tenter des payloads SQL dans les champs de recherche et formulaires
+2. Vérifier les requêtes Prisma";Prisma utilise des requêtes paramétrées, aucune injection possible;Critique;Sécurité;À tester
+SEC-002;Sécurité;XSS;Protection contre le Cross-Site Scripting;Aucune;"1. Saisir du HTML/JS dans les champs texte (commentaires, raison)
+2. Vérifier le rendu";Contenu échappé par React, aucun script exécuté;Critique;Sécurité;À tester
+SEC-003;Sécurité;CSRF;Protection CSRF;Aucune;"1. Tenter une requête POST depuis un site tiers sans token de session";Requête rejetée (401/403), session NextAuth protège;Haute;Sécurité;À tester
+SEC-004;Sécurité;Mots de passe;Les mots de passe sont hashés en base;Seed exécuté;"1. Vérifier la colonne passwordHash en base
+2. Confirmer le format bcrypt ($2a$12$...)";Aucun mot de passe en clair, bcrypt avec coût 12;Critique;Sécurité;À tester
+SEC-005;Sécurité;SMTP;Chiffrement des identifiants SMTP;Configuration SMTP en base;"1. Vérifier le stockage des credentials SMTP en base";Identifiants chiffrés en AES-256-GCM, pas en clair;Haute;Sécurité;À tester
+SEC-006;Sécurité;API;Accès API sans authentification;Aucune session active;"1. Appeler GET /api/leaves sans cookie de session
+2. Appeler POST /api/admin/users sans session";Toutes les API protégées retournent 401;Critique;Sécurité;À tester
+SEC-007;Sécurité;API;Accès API avec rôle insuffisant;Connecté en tant qu'EMPLOYEE;"1. Appeler POST /api/admin/users (réservé ADMIN)
+2. Appeler GET /api/hr/approvals (réservé HR)";API retourne 403 Forbidden;Critique;Sécurité;À tester
+UI-001;Interface;Responsive;Affichage mobile;Navigateur mobile ou viewport 375px;"1. Accéder à /dashboard depuis un mobile
+2. Naviguer entre les pages";Interface adaptée, sidebar repliable, formulaires utilisables;Moyenne;UI/UX;À tester
+UI-002;Interface;Responsive;Affichage tablette;Viewport 768px;"1. Accéder à l'application en mode tablette
+2. Naviguer et tester les formulaires";Interface adaptée, disposition optimisée;Basse;UI/UX;À tester
+UI-003;Interface;Accessibilité;Navigation au clavier;Aucune;"1. Naviguer dans les formulaires avec Tab
+2. Valider avec Enter
+3. Ouvrir les menus avec les raccourcis";Tous les éléments interactifs sont accessibles au clavier;Moyenne;UI/UX;À tester
+UI-004;Interface;i18n;Basculer français/anglais;Utilisateur connecté;"1. Changer la langue dans le profil
+2. Vérifier tous les libellés";Tous les textes traduits correctement en FR et EN;Moyenne;UI/UX;À tester
+UI-005;Interface;Thème;Mode sombre;Utilisateur connecté;"1. Activer le thème sombre
+2. Naviguer dans toutes les pages";Toutes les pages s'affichent correctement en mode sombre, bon contraste;Basse;UI/UX;À tester
+PERF-001;Performance;Pagination;Chargement de grandes listes;Base avec 1000+ demandes de congé;"1. Aller à /leaves ou /admin/audit
+2. Mesurer le temps de chargement
+3. Paginer";Chargement < 2s, pagination fluide;Moyenne;Performance;À tester
+PERF-002;Performance;Rapports;Génération de rapports;Base avec 100+ employés et 500+ demandes;"1. Aller à /hr/reports
+2. Générer un rapport complet";Rapport généré en temps raisonnable (< 5s);Moyenne;Performance;À tester
+INTEG-001;Intégration;Seed + Login;Connexion avec le compte admin seedé;Seed exécuté avec succès;"1. Exécuter npx prisma db seed
+2. Aller à /login
+3. Saisir hbo@halley-technologies.ch / ChangeMe2026!
+4. Se connecter";Connexion réussie, forçage de changement de mot de passe si configuré, accès complet admin;Critique;Intégration;À tester
+INTEG-002;Intégration;Parcours complet;Cycle de vie complet d'une demande de congé;Admin, manager et employé créés;"1. Employé crée un brouillon
+2. Employé soumet la demande
+3. Manager approuve
+4. Vérifier le solde mis à jour
+5. Vérifier l'audit log";Parcours complet sans erreur, soldes cohérents, audit tracé;Critique;Intégration;À tester
+INTEG-003;Intégration;Parcours complet;Cycle refus + ressoumission;Workflow 2 étapes (Tunis);"1. Employé soumet une demande
+2. Manager retourne avec commentaire
+3. Employé modifie et resoumet
+4. Manager approuve
+5. HR approuve";Parcours complet, transitions de statut correctes, solde final correct;Haute;Intégration;À tester

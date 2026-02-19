@@ -372,7 +372,7 @@ export default function NewLeavePage() {
         </div>
       </div>
 
-      {/* Probation alert */}
+      {/* Bug2: Probation alert — only blocks submit, allows draft */}
       {formData.probation && (
         <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4">
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
@@ -382,8 +382,8 @@ export default function NewLeavePage() {
             </p>
             <p className="mt-0.5 text-sm text-red-700">
               {lang === "en"
-                ? `You are on probation until ${formatDateLong(formData.probation.endDate, "en")}. Leave requests are not possible during this period.`
-                : `Vous êtes en période d'essai jusqu'au ${formatDateLong(formData.probation.endDate, "fr")}. Les demandes de congé ne sont pas possibles pendant cette période.`}
+                ? `You are on probation until ${formatDateLong(formData.probation.endDate, "en")}. You cannot submit leave requests during this period, but you can save drafts.`
+                : `Vous êtes en période d'essai jusqu'au ${formatDateLong(formData.probation.endDate, "fr")}. Vous ne pouvez pas soumettre de demandes pendant cette période, mais vous pouvez enregistrer des brouillons.`}
             </p>
           </div>
         </div>
@@ -683,11 +683,11 @@ export default function NewLeavePage() {
           )}
         </div>
 
-        {/* Action buttons */}
+        {/* Action buttons — Bug2: draft allowed during probation, only submit blocked */}
         <div className="flex flex-col-reverse gap-3 border-t border-gray-100 pt-4 sm:flex-row sm:justify-end">
           <button
             type="button"
-            disabled={submitting || !!formData.probation}
+            disabled={submitting}
             onClick={handleSubmit((v) => onSubmit(v, "draft"))}
             className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
