@@ -2,6 +2,27 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
+function safeParseDateParam(value: string | undefined): Date | null {
+  if (!value) return null;
+  const d = new Date(value);
+  if (isNaN(d.getTime())) {
+    console.error(`[hr/reports] Invalid date param: "${value}"`);
+    return null;
+  }
+  return d;
+}
+
+function safeParseEndDateParam(value: string | undefined): Date | null {
+  if (!value) return null;
+  const raw = value.includes("T") ? value : `${value}T23:59:59.999Z`;
+  const d = new Date(raw);
+  if (isNaN(d.getTime())) {
+    console.error(`[hr/reports] Invalid end date param: "${value}"`);
+    return null;
+  }
+  return d;
+}
+
 export async function GET(request: NextRequest) {
   const session = await auth();
   const roles = session?.user?.roles ?? [];
@@ -25,8 +46,11 @@ export async function GET(request: NextRequest) {
     where.status = { in: statuses };
   }
   if (typeId) where.leaveTypeConfigId = typeId;
-  if (from) where.startDate = { ...(where.startDate ?? {}), gte: new Date(from) };
-  if (to) where.endDate = { ...(where.endDate ?? {}), lte: new Date(to + "T23:59:59") };
+
+  const fromDate = safeParseDateParam(from);
+  const toDate = safeParseEndDateParam(to);
+  if (fromDate) where.startDate = { ...(where.startDate ?? {}), gte: fromDate };
+  if (toDate) where.endDate = { ...(where.endDate ?? {}), lte: toDate };
 
   if (officeId || teamId) {
     where.user = {};

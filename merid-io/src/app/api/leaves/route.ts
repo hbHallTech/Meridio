@@ -44,9 +44,25 @@ export async function GET(request: NextRequest) {
   }
 
   if (from || to) {
-    where.startDate = {};
-    if (from) (where.startDate as Prisma.DateTimeFilter).gte = new Date(from);
-    if (to) (where.startDate as Prisma.DateTimeFilter).lte = new Date(to);
+    const fromDate = from ? new Date(from) : null;
+    const toDate = to ? new Date(to) : null;
+
+    // Validate dates before using in Prisma query
+    if (from && (!fromDate || isNaN(fromDate.getTime()))) {
+      console.error(`[leaves] Invalid 'from' date param: "${from}"`);
+    }
+    if (to && (!toDate || isNaN(toDate.getTime()))) {
+      console.error(`[leaves] Invalid 'to' date param: "${to}"`);
+    }
+
+    const validFrom = fromDate && !isNaN(fromDate.getTime()) ? fromDate : null;
+    const validTo = toDate && !isNaN(toDate.getTime()) ? toDate : null;
+
+    if (validFrom || validTo) {
+      where.startDate = {};
+      if (validFrom) (where.startDate as Prisma.DateTimeFilter).gte = validFrom;
+      if (validTo) (where.startDate as Prisma.DateTimeFilter).lte = validTo;
+    }
   }
 
   const orderBy: Prisma.LeaveRequestOrderByWithRelationInput = {};

@@ -2,6 +2,37 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
+/**
+ * Parse a date string safely. Returns a valid Date or null.
+ * Handles both ISO strings (2026-02-01T00:00:00.000Z) and date-only (2026-02-01).
+ */
+function safeParseDateParam(value: string | null): Date | null {
+  if (!value) return null;
+  const d = new Date(value);
+  if (isNaN(d.getTime())) {
+    console.error(`[manager/calendar] Invalid date param: "${value}"`);
+    return null;
+  }
+  return d;
+}
+
+/**
+ * For "to" date params, ensure we include the full end-of-day.
+ * If the string is date-only (YYYY-MM-DD), set to 23:59:59.
+ * If already an ISO datetime, use as-is (FullCalendar already sends correct range).
+ */
+function safeParseEndDateParam(value: string | null): Date | null {
+  if (!value) return null;
+  // If date-only format (no 'T'), append end-of-day time
+  const raw = value.includes("T") ? value : `${value}T23:59:59.999Z`;
+  const d = new Date(raw);
+  if (isNaN(d.getTime())) {
+    console.error(`[manager/calendar] Invalid end date param: "${value}"`);
+    return null;
+  }
+  return d;
+}
+
 export async function GET(request: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -13,8 +44,19 @@ export async function GET(request: NextRequest) {
   }
 
   const { searchParams } = request.nextUrl;
-  const from = searchParams.get("from");
-  const to = searchParams.get("to");
+  const fromParam = searchParams.get("from");
+  const toParam = searchParams.get("to");
+
+  const fromDate = safeParseDateParam(fromParam);
+  const toDate = safeParseEndDateParam(toParam);
+
+  // Log invalid date params for debugging
+  if (fromParam && !fromDate) {
+    console.error(`[manager/calendar] Skipping invalid 'from' param: "${fromParam}"`);
+  }
+  if (toParam && !toDate) {
+    console.error(`[manager/calendar] Skipping invalid 'to' param: "${toParam}"`);
+  }
 
   // Find teams managed by this user
   const managedTeams = await prisma.team.findMany({
@@ -29,10 +71,8 @@ export async function GET(request: NextRequest) {
     status: { in: ["APPROVED", "PENDING_MANAGER", "PENDING_HR"] },
   };
 
-  if (from) where.endDate = { gte: new Date(from) };
-  if (to) {
-    where.startDate = { ...(where.startDate ?? {}), lte: new Date(to + "T23:59:59") };
-  }
+  if (fromDate) where.endDate = { gte: fromDate };
+  if (toDate) where.startDate = { ...(where.startDate ?? {}), lte: toDate };
 
   const items = await prisma.leaveRequest.findMany({
     where,
@@ -51,7 +91,7 @@ export async function GET(request: NextRequest) {
     },
   });
 
-  console.log(`Manager calendar : ${items.length} demandes fetchées`);
+  console.log(`[manager/calendar] ${items.length} leave requests fetched (from=${fromParam}, to=${toParam})`);
 
   const events = items.map((item) => ({
     id: item.id,

@@ -10,6 +10,29 @@ declare module "next-auth" {
   }
 }
 
+/**
+ * Role-based route access control.
+ * Maps route prefixes to the roles allowed to access them.
+ */
+const ROUTE_ROLE_MAP: { prefix: string; roles: UserRole[] }[] = [
+  { prefix: "/admin", roles: ["ADMIN"] },
+  { prefix: "/api/admin", roles: ["ADMIN"] },
+  { prefix: "/manager", roles: ["MANAGER", "ADMIN"] },
+  { prefix: "/api/manager", roles: ["MANAGER", "ADMIN"] },
+  { prefix: "/hr", roles: ["HR", "ADMIN"] },
+  { prefix: "/api/hr", roles: ["HR", "ADMIN"] },
+];
+
+function hasRequiredRole(pathname: string, userRoles: UserRole[]): boolean {
+  for (const route of ROUTE_ROLE_MAP) {
+    if (pathname.startsWith(route.prefix)) {
+      return userRoles.some((r) => route.roles.includes(r));
+    }
+  }
+  // No role restriction for this path
+  return true;
+}
+
 export const authConfig: NextAuthConfig = {
   session: { strategy: "jwt" },
   pages: {
@@ -88,6 +111,20 @@ export const authConfig: NextAuthConfig = {
         return Response.redirect(
           new URL("/auth/change-password", nextUrl.origin)
         );
+      }
+
+      // RBAC: Check role-based access for protected routes
+      const userRoles = (auth?.user?.roles as UserRole[]) ?? [];
+      if (!hasRequiredRole(pathname, userRoles)) {
+        // For API routes, return 403 JSON response
+        if (pathname.startsWith("/api/")) {
+          return Response.json(
+            { error: "Accès non autorisé" },
+            { status: 403 }
+          );
+        }
+        // For page routes, redirect to dashboard
+        return Response.redirect(new URL("/", nextUrl.origin));
       }
 
       return true;
