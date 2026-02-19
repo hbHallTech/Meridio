@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { leaveRequestSchema } from "@/lib/validators";
 import { notifyNewLeaveRequest } from "@/lib/notifications";
+import { parseDateRangeParams } from "@/lib/date-utils";
 import type { Prisma } from "@prisma/client";
 // File uploads now handled by /api/upload (Vercel Blob)
 
@@ -24,10 +25,14 @@ export async function GET(request: NextRequest) {
   // Filters
   const statusFilter = searchParams.get("status"); // comma-separated
   const typeFilter = searchParams.get("type"); // leaveTypeConfigId
-  const from = searchParams.get("from"); // ISO date
-  const to = searchParams.get("to"); // ISO date
   const sortBy = searchParams.get("sortBy") ?? "createdAt";
   const sortOrder = searchParams.get("sortOrder") === "asc" ? "asc" : "desc";
+
+  // Validate date params with Zod — return 400 on invalid input
+  const dateRange = parseDateRangeParams(searchParams, "leaves");
+  if (dateRange.error) {
+    return NextResponse.json({ error: dateRange.error }, { status: 400 });
+  }
 
   const where: Prisma.LeaveRequestWhereInput = { userId };
 
@@ -43,10 +48,10 @@ export async function GET(request: NextRequest) {
     where.leaveTypeConfigId = typeFilter;
   }
 
-  if (from || to) {
+  if (dateRange.from || dateRange.to) {
     where.startDate = {};
-    if (from) (where.startDate as Prisma.DateTimeFilter).gte = new Date(from);
-    if (to) (where.startDate as Prisma.DateTimeFilter).lte = new Date(to);
+    if (dateRange.from) (where.startDate as Prisma.DateTimeFilter).gte = dateRange.from;
+    if (dateRange.to) (where.startDate as Prisma.DateTimeFilter).lte = dateRange.to;
   }
 
   const orderBy: Prisma.LeaveRequestOrderByWithRelationInput = {};

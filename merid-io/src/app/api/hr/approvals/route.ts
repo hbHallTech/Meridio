@@ -1,19 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { requireRoles } from "@/lib/rbac";
 import { LeaveStatus } from "@prisma/client";
 
 export async function GET(request: NextRequest) {
   const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Non authentifie" }, { status: 401 });
-  }
-
-  // Only HR or ADMIN can access
-  const roles = session.user.roles ?? [];
-  if (!roles.includes("HR") && !roles.includes("ADMIN")) {
-    return NextResponse.json({ error: "Acces refuse" }, { status: 403 });
-  }
+  const denied = requireRoles(session?.user, "HR", "ADMIN");
+  if (denied) return denied;
 
   const { searchParams } = request.nextUrl;
   const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));

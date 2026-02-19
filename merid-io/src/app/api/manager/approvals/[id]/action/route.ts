@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { approvalSchema } from "@/lib/validators";
+import { requireRoles, requireManagerOfLeave } from "@/lib/rbac";
 import {
   createAuditLog,
   notifyLeaveApproved,
@@ -17,15 +18,18 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Non authentifie" }, { status: 401 });
-  }
-  const roles = session.user.roles ?? [];
-  if (!roles.includes("MANAGER") && !roles.includes("ADMIN")) {
-    return NextResponse.json({ error: "Acces refuse" }, { status: 403 });
-  }
+
+  // Defense-in-depth: role check (even though middleware also checks)
+  const denied = requireRoles(session?.user, "MANAGER", "ADMIN");
+  if (denied) return denied;
+  // After requireRoles passes, session.user.id is guaranteed
+  const currentUserId = session!.user.id!;
 
   const { id: leaveRequestId } = await params;
+
+  // Defense-in-depth: verify this manager actually manages the requester's team
+  const ownershipDenied = await requireManagerOfLeave(session?.user, leaveRequestId);
+  if (ownershipDenied) return ownershipDenied;
   const body = await request.json();
   const parsed = approvalSchema.safeParse(body);
 
@@ -86,7 +90,7 @@ export async function POST(
       action: action as ApprovalAction,
       comment: comment?.trim() || null,
       decidedAt: now,
-      approverId: session.user.id,
+      approverId: currentUserId,
     },
   });
 
@@ -152,7 +156,7 @@ export async function POST(
 
   // Bug1: Send notification to employee based on action
   const approverUser = await prisma.user.findUnique({
-    where: { id: session.user.id },
+    where: { id: currentUserId },
     select: { firstName: true, lastName: true },
   });
   const approverName = approverUser
@@ -206,7 +210,7 @@ export async function POST(
   }
 
   await createAuditLog({
-    userId: session.user.id,
+    userId: currentUserId,
     action: `MANAGER_APPROVAL_${action}`,
     entityType: "LeaveRequest",
     entityId: leaveRequestId,

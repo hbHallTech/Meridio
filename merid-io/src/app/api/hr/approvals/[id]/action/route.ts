@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { approvalSchema } from "@/lib/validators";
+import { requireRoles, requireHrApproverOfLeave } from "@/lib/rbac";
 import {
   createAuditLog,
   notifyLeaveApproved,
@@ -16,16 +17,18 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Non authentifie" }, { status: 401 });
-  }
 
-  const roles = session.user.roles ?? [];
-  if (!roles.includes("HR") && !roles.includes("ADMIN")) {
-    return NextResponse.json({ error: "Acces refuse" }, { status: 403 });
-  }
+  // Defense-in-depth: role check (even though middleware also checks)
+  const denied = requireRoles(session?.user, "HR", "ADMIN");
+  if (denied) return denied;
+  // After requireRoles passes, session.user.id is guaranteed
+  const currentUserId = session!.user.id!;
 
   const { id: leaveRequestId } = await params;
+
+  // Defense-in-depth: verify this HR user is actually assigned as approver
+  const approverDenied = await requireHrApproverOfLeave(session?.user, leaveRequestId);
+  if (approverDenied) return approverDenied;
   const body = await request.json();
   const parsed = approvalSchema.safeParse(body);
 
@@ -94,7 +97,7 @@ export async function POST(
       action: action as ApprovalAction,
       comment: comment?.trim() || null,
       decidedAt: now,
-      approverId: session.user.id,
+      approverId: currentUserId,
     },
   });
 
@@ -173,7 +176,7 @@ export async function POST(
 
   // Bug1: Send notification to employee based on action
   const approverUser = await prisma.user.findUnique({
-    where: { id: session.user.id },
+    where: { id: currentUserId },
     select: { firstName: true, lastName: true },
   });
   const approverName = approverUser
@@ -212,7 +215,7 @@ export async function POST(
 
   // Audit log
   await createAuditLog({
-    userId: session.user.id,
+    userId: currentUserId,
     action: `HR_APPROVAL_${action}`,
     entityType: "LeaveRequest",
     entityId: leaveRequestId,
