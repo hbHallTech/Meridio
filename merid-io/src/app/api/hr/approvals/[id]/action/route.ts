@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { approvalSchema } from "@/lib/validators";
-import { createAuditLog } from "@/lib/notifications";
+import {
+  createAuditLog,
+  notifyLeaveApproved,
+  notifyLeaveRejected,
+  notifyLeaveNeedsRevision,
+} from "@/lib/notifications";
 import { getRequestIp } from "@/lib/rate-limit";
 import { LeaveStatus, ApprovalAction } from "@prisma/client";
 
@@ -42,12 +47,13 @@ export async function POST(
   }
 
   // Find the leave request
+  // Bug5: Include code to check for EXCEPTIONAL type
   const leaveRequest = await prisma.leaveRequest.findUnique({
     where: { id: leaveRequestId },
     include: {
       approvalSteps: { orderBy: { stepOrder: "asc" } },
       user: { select: { id: true, firstName: true, lastName: true } },
-      leaveTypeConfig: { select: { deductsFromBalance: true, balanceType: true } },
+      leaveTypeConfig: { select: { code: true, label_fr: true, deductsFromBalance: true, balanceType: true } },
     },
   });
 
@@ -113,13 +119,19 @@ export async function POST(
     data: { status: newStatus },
   });
 
-  // Update balance on final decision
-  if (
+  // Bug5: Check for EXCEPTIONAL type — never deduct from balance
+  const isExceptional = leaveRequest.leaveTypeConfig.code === "EXCEPTIONAL";
+  const shouldUpdateBalance =
+    !isExceptional &&
     leaveRequest.leaveTypeConfig.deductsFromBalance &&
-    leaveRequest.leaveTypeConfig.balanceType
-  ) {
+    leaveRequest.leaveTypeConfig.balanceType;
+
+  console.log(`Bug5: HR approval - code=${leaveRequest.leaveTypeConfig.code}, isExceptional=${isExceptional}, shouldUpdateBalance=${!!shouldUpdateBalance}`);
+
+  // Update balance on final decision
+  if (shouldUpdateBalance) {
     const year = leaveRequest.startDate.getFullYear();
-    const balanceType = leaveRequest.leaveTypeConfig.balanceType;
+    const balanceType = leaveRequest.leaveTypeConfig.balanceType!;
 
     if (action === "APPROVED") {
       // Move from pending to used
@@ -147,6 +159,45 @@ export async function POST(
         },
       });
     }
+  }
+
+  // Bug1: Send notification to employee based on action
+  const approverUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { firstName: true, lastName: true },
+  });
+  const approverName = approverUser
+    ? `${approverUser.firstName} ${approverUser.lastName}`
+    : "RH";
+  const startDateStr = leaveRequest.startDate.toISOString().split("T")[0];
+  const endDateStr = leaveRequest.endDate.toISOString().split("T")[0];
+
+  if (action === "APPROVED" && newStatus === LeaveStatus.APPROVED) {
+    notifyLeaveApproved(leaveRequest.userId, {
+      leaveRequestId,
+      leaveType: leaveRequest.leaveTypeConfig.label_fr,
+      startDate: startDateStr,
+      endDate: endDateStr,
+      approverName,
+    }).catch((err) => console.log("Bug1: Error notifying HR approval:", err));
+  } else if (action === "REFUSED") {
+    notifyLeaveRejected(leaveRequest.userId, {
+      leaveRequestId,
+      leaveType: leaveRequest.leaveTypeConfig.label_fr,
+      startDate: startDateStr,
+      endDate: endDateStr,
+      approverName,
+      comment: comment?.trim() || "",
+    }).catch((err) => console.log("Bug1: Error notifying HR rejection:", err));
+  } else if (action === "RETURNED") {
+    notifyLeaveNeedsRevision(leaveRequest.userId, {
+      leaveRequestId,
+      leaveType: leaveRequest.leaveTypeConfig.label_fr,
+      startDate: startDateStr,
+      endDate: endDateStr,
+      approverName,
+      comment: comment?.trim() || "",
+    }).catch((err) => console.log("Bug1: Error notifying HR return:", err));
   }
 
   // Audit log
