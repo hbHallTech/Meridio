@@ -94,11 +94,21 @@ export async function POST(
   let newStatus: LeaveStatus;
 
   if (action === "APPROVED") {
-    // Check if there is an HR step after this
-    const hrStep = leaveRequest.approvalSteps.find(
-      (s) => s.stepType === "HR" && s.action === null && s.id !== managerStep.id
+    // In parallel workflows, check if ALL other MANAGER steps are also approved
+    const pendingManagerSteps = leaveRequest.approvalSteps.filter(
+      (s) => s.stepType === "MANAGER" && s.action === null && s.id !== managerStep.id
     );
-    newStatus = hrStep ? LeaveStatus.PENDING_HR : LeaveStatus.APPROVED;
+
+    if (pendingManagerSteps.length > 0) {
+      // Other managers still need to approve (parallel workflow)
+      newStatus = LeaveStatus.PENDING_MANAGER;
+    } else {
+      // All managers approved — check if there is an HR step after this
+      const hrStep = leaveRequest.approvalSteps.find(
+        (s) => s.stepType === "HR" && s.action === null
+      );
+      newStatus = hrStep ? LeaveStatus.PENDING_HR : LeaveStatus.APPROVED;
+    }
   } else if (action === "REFUSED") {
     newStatus = LeaveStatus.REFUSED;
   } else {

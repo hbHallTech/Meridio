@@ -17,13 +17,16 @@ export async function GET(request: NextRequest) {
   const status = searchParams.get("status") || undefined;
   const from = searchParams.get("from") || undefined;
   const to = searchParams.get("to") || undefined;
+  const teamIdFilter = searchParams.get("teamId") || undefined;
 
   // Find teams managed by this user
   const managedTeams = await prisma.team.findMany({
     where: { managerId: session.user.id },
-    select: { id: true },
+    select: { id: true, name: true },
   });
-  const teamIds = managedTeams.map((t) => t.id);
+  const teamIds = teamIdFilter
+    ? managedTeams.filter((t) => t.id === teamIdFilter).map((t) => t.id)
+    : managedTeams.map((t) => t.id);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where: any = {
@@ -73,9 +76,12 @@ export async function GET(request: NextRequest) {
   const totalDays = items.reduce((s, i) => s + i.totalDays, 0);
   const approvedCount = items.filter((i) => i.status === "APPROVED").length;
 
+  // Build teams filter list from managed teams
+  const teams = managedTeams.map((t) => ({ id: t.id, name: t.name }));
+
   return NextResponse.json({
     items,
-    filters: { leaveTypes },
+    filters: { teams, leaveTypes },
     summary: { totalRequests: items.length, totalDays, approvedCount },
   });
 }

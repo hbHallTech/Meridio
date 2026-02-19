@@ -235,7 +235,7 @@ export default function LeaveDetailPage() {
 
   const canEdit = data.status === "DRAFT" || data.status === "RETURNED";
   const canCancel = ["DRAFT", "PENDING_MANAGER", "PENDING_HR"].includes(data.status);
-  const canSubmit = data.status === "DRAFT";
+  const canSubmit = data.status === "DRAFT" || data.status === "RETURNED";
 
   const startHalf = HALF_DAY_LABELS[data.startHalfDay] ?? HALF_DAY_LABELS.FULL_DAY;
   const endHalf = HALF_DAY_LABELS[data.endHalfDay] ?? HALF_DAY_LABELS.FULL_DAY;
