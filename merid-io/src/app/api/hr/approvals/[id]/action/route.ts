@@ -50,7 +50,6 @@ export async function POST(
   }
 
   // Find the leave request
-  // Bug5: Include code to check for EXCEPTIONAL type
   const leaveRequest = await prisma.leaveRequest.findUnique({
     where: { id: leaveRequestId },
     include: {
@@ -132,14 +131,12 @@ export async function POST(
     data: { status: newStatus },
   });
 
-  // Bug5: Check for EXCEPTIONAL type — never deduct from balance
+  // Exceptional leaves never deduct from balance
   const isExceptional = leaveRequest.leaveTypeConfig.code === "EXCEPTIONAL";
   const shouldUpdateBalance =
     !isExceptional &&
     leaveRequest.leaveTypeConfig.deductsFromBalance &&
     leaveRequest.leaveTypeConfig.balanceType;
-
-  console.log(`Bug5: HR approval - code=${leaveRequest.leaveTypeConfig.code}, isExceptional=${isExceptional}, shouldUpdateBalance=${!!shouldUpdateBalance}`);
 
   // Update balance on final decision
   if (shouldUpdateBalance) {
@@ -174,7 +171,7 @@ export async function POST(
     }
   }
 
-  // Bug1: Send notification to employee based on action
+  // Send notification to employee based on action
   const approverUser = await prisma.user.findUnique({
     where: { id: currentUserId },
     select: { firstName: true, lastName: true },
@@ -192,7 +189,7 @@ export async function POST(
       startDate: startDateStr,
       endDate: endDateStr,
       approverName,
-    }).catch((err) => console.log("Bug1: Error notifying HR approval:", err));
+    }).catch((err) => console.error("[hr/approvals] Error notifying approval:", err));
   } else if (action === "REFUSED") {
     notifyLeaveRejected(leaveRequest.userId, {
       leaveRequestId,
@@ -201,7 +198,7 @@ export async function POST(
       endDate: endDateStr,
       approverName,
       comment: comment?.trim() || "",
-    }).catch((err) => console.log("Bug1: Error notifying HR rejection:", err));
+    }).catch((err) => console.error("[hr/approvals] Error notifying rejection:", err));
   } else if (action === "RETURNED") {
     notifyLeaveNeedsRevision(leaveRequest.userId, {
       leaveRequestId,
@@ -210,7 +207,7 @@ export async function POST(
       endDate: endDateStr,
       approverName,
       comment: comment?.trim() || "",
-    }).catch((err) => console.log("Bug1: Error notifying HR return:", err));
+    }).catch((err) => console.error("[hr/approvals] Error notifying return:", err));
   }
 
   // Audit log

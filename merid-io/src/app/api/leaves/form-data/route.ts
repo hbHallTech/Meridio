@@ -30,12 +30,11 @@ export async function GET() {
     return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 404 });
   }
 
-  // Bug2: Only check probation if trialModeEnabled is true at company level
+  // Only check probation if trialModeEnabled is true at company level
   const company = await prisma.company.findFirst({
     select: { trialModeEnabled: true },
   });
   const trialModeEnabled = company?.trialModeEnabled ?? false;
-  console.log(`Bug2: form-data trialModeEnabled=${trialModeEnabled}`);
 
   const now = new Date();
   const probationEnd = new Date(user.hireDate);
