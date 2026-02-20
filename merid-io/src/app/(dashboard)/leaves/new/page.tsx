@@ -748,7 +748,14 @@ export default function NewLeavePage() {
                   >
                     <div className="flex items-center gap-2 overflow-hidden">
                       <FileText className="h-4 w-4 shrink-0 text-blue-400" />
-                      <span className="truncate text-sm text-blue-700">{fileName}</span>
+                      <a
+                        href={`/api/attachments?url=${encodeURIComponent(url)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="truncate text-sm text-blue-700 hover:underline"
+                      >
+                        {fileName}
+                      </a>
                       <span className="shrink-0 text-xs text-blue-400">
                         {lang === "en" ? "Existing" : "Existant"}
                       </span>
