@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { put } from "@vercel/blob";
+import { logAudit, getIp } from "@/lib/audit";
 import crypto from "crypto";
 import path from "path";
 
@@ -87,6 +88,12 @@ export async function POST(request: NextRequest) {
     });
 
     console.log(`[upload] Success: user=${userId} file=${file.name} size=${file.size} → ${blob.url}`);
+
+    logAudit(userId, "UPLOAD_ATTACHMENT", {
+      ip: getIp(request.headers),
+      entityType: "Attachment",
+      newValue: { name: file.name, size: file.size, type: file.type },
+    });
 
     return NextResponse.json({
       url: blob.url,

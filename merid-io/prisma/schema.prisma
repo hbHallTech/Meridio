@@ -425,19 +425,24 @@ model Notification {
 }
 
 // ============================================================
-// AUDIT LOG
+// AUDIT LOG (immutable — no updates or deletes)
 // ============================================================
 
 model AuditLog {
   id         String   @id @default(cuid())
-  userId     String
-  action     String   // ex: "USER_CREATED", "LEAVE_SUBMITTED", "LEAVE_APPROVED"
-  entityType String   // ex: "User", "LeaveRequest", "Office"
-  entityId   String
+  userId     String?
+  action     String   // ex: "LOGIN_SUCCESS", "CREATE_LEAVE", "RBAC_DENIED"
+  success    Boolean  @default(true)
+  entityType String?  // ex: "User", "LeaveRequest", "Office"
+  entityId   String?
   oldValue   Json?
   newValue   Json?
   ipAddress  String?
   createdAt  DateTime @default(now())
 
-  user       User     @relation(fields: [userId], references: [id])
+  user       User?    @relation(fields: [userId], references: [id])
+
+  @@index([createdAt])
+  @@index([userId])
+  @@index([action])
 }

@@ -296,6 +296,7 @@ export async function notifyLeaveNeedsRevision(
 
 /**
  * Create an audit log entry.
+ * @deprecated Use logAudit() from @/lib/audit instead. Kept for backward compat.
  */
 export async function createAuditLog(params: {
   userId: string;
@@ -306,17 +307,22 @@ export async function createAuditLog(params: {
   newValue?: Prisma.InputJsonValue;
   ipAddress?: string;
 }) {
-  return prisma.auditLog.create({
-    data: {
-      userId: params.userId,
-      action: params.action,
-      entityType: params.entityType,
-      entityId: params.entityId,
-      oldValue: params.oldValue ?? undefined,
-      newValue: params.newValue ?? undefined,
-      ipAddress: params.ipAddress ?? undefined,
-    },
-  });
+  try {
+    return await prisma.auditLog.create({
+      data: {
+        userId: params.userId,
+        action: params.action,
+        entityType: params.entityType,
+        entityId: params.entityId,
+        oldValue: params.oldValue ?? undefined,
+        newValue: params.newValue ?? undefined,
+        ipAddress: params.ipAddress ?? undefined,
+      },
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[audit] Failed: action=${params.action} error=${msg}`);
+  }
 }
 
 // ─── Security-specific notification helpers ───

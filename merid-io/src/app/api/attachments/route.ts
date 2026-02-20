@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { get } from "@vercel/blob";
+import { logAudit, getIp } from "@/lib/audit";
 
 /**
  * GET /api/attachments?url=<blobUrl>
@@ -30,6 +31,12 @@ export async function GET(request: NextRequest) {
 
     // Extract filename from pathname (e.g. "attachments/uuid.pdf" → "uuid.pdf")
     const fileName = blob.pathname.split("/").pop() ?? "download";
+
+    logAudit(session.user.id, "DOWNLOAD_ATTACHMENT", {
+      ip: getIp(request.headers),
+      entityType: "Attachment",
+      newValue: { pathname: blob.pathname, size: blob.size },
+    });
 
     return new Response(stream, {
       headers: {
