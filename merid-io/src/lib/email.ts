@@ -1,11 +1,11 @@
 import nodemailer from "nodemailer";
-import type { Transporter } from "nodemailer";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 
-// Cached transporter (rebuilt when DB config changes)
-let _transporter: Transporter | null = null;
-let _lastConfigHash = "";
+// Serverless-safe timeouts (Vercel functions: 10s hobby / 60s pro)
+const SMTP_CONNECTION_TIMEOUT = 10_000; // 10s to establish TCP + TLS
+const SMTP_GREETING_TIMEOUT = 8_000;   // 8s for SMTP greeting (EHLO)
+const SMTP_SOCKET_TIMEOUT = 15_000;    // 15s for write/read on socket
 
 async function getSmtpConfig() {
   try {
@@ -53,15 +53,16 @@ async function getSmtpConfig() {
   };
 }
 
-async function getTransporter(): Promise<Transporter> {
-  const config = await getSmtpConfig();
-  const configHash = `${config.host}:${config.port}:${config.user}:${config.secure}`;
-
-  if (_transporter && configHash === _lastConfigHash) {
-    return _transporter;
-  }
-
-  _transporter = nodemailer.createTransport({
+/**
+ * Create a fresh transporter for each send.
+ *
+ * Why no caching: On Vercel serverless, containers are frozen/thawed.
+ * A cached transporter holds a stale TCP socket that Office 365 has
+ * already closed → next write fails with ETIMEDOUT.
+ * Fresh connection per send is the only reliable pattern in serverless.
+ */
+function createTransporter(config: Awaited<ReturnType<typeof getSmtpConfig>>) {
+  return nodemailer.createTransport({
     host: config.host,
     port: config.port,
     secure: config.secure || config.port === 465,
@@ -69,6 +70,9 @@ async function getTransporter(): Promise<Transporter> {
       user: config.user,
       pass: config.pass,
     },
+    connectionTimeout: SMTP_CONNECTION_TIMEOUT,
+    greetingTimeout: SMTP_GREETING_TIMEOUT,
+    socketTimeout: SMTP_SOCKET_TIMEOUT,
     // Use STARTTLS for port 587 (standard). No SSLv3 — use modern ciphers.
     ...(config.port !== 465 && {
       tls: {
@@ -76,9 +80,6 @@ async function getTransporter(): Promise<Transporter> {
       },
     }),
   });
-
-  _lastConfigHash = configHash;
-  return _transporter;
 }
 
 /**
@@ -117,7 +118,8 @@ export async function sendEmail({ to, subject, html }: SendEmailOptions) {
     return;
   }
 
-  const transporter = await getTransporter();
+  // Fresh transporter per send — prevents stale socket ETIMEDOUT in serverless
+  const transporter = createTransporter(config);
   const text = htmlToPlainText(html);
 
   try {
@@ -136,6 +138,9 @@ export async function sendEmail({ to, subject, html }: SendEmailOptions) {
     const errMsg = error instanceof Error ? error.message : String(error);
     console.error(`[email] Failed: to=${to} subject="${subject}" error=${errMsg}`);
     throw error;
+  } finally {
+    // Always close the connection — do not leave sockets open in serverless
+    transporter.close();
   }
 }
 
