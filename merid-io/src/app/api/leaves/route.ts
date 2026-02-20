@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { leaveRequestSchema } from "@/lib/validators";
 import { notifyNewLeaveRequest } from "@/lib/notifications";
 import { parseDateRangeParams } from "@/lib/date-utils";
+import { logAudit, getIp } from "@/lib/audit";
 import type { Prisma } from "@prisma/client";
 // File uploads now handled by /api/upload (Vercel Blob)
 
@@ -482,6 +483,13 @@ export async function POST(request: NextRequest) {
       },
     });
   }
+
+  logAudit(userId, "CREATE_LEAVE", {
+    entityType: "LeaveRequest",
+    entityId: leaveRequest.id,
+    ip: getIp(request.headers),
+    newValue: { status, totalDays, startDate: startDate.toISOString(), endDate: endDate.toISOString() },
+  });
 
   return NextResponse.json({ id: leaveRequest.id, status }, { status: 201 });
 }

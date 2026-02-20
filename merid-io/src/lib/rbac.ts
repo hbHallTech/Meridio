@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { logAudit } from "@/lib/audit";
 import type { UserRole } from "@prisma/client";
 
 interface SessionUser {
@@ -27,6 +28,10 @@ export function requireRoles(
     console.warn(
       `[RBAC] Access denied: user=${user.id} roles=[${userRoles}] required=[${requiredRoles}]`
     );
+    logAudit(user.id, "RBAC_DENIED", {
+      success: false,
+      newValue: { userRoles, requiredRoles },
+    });
     return NextResponse.json({ error: "Accès non autorisé" }, { status: 403 });
   }
   return null;
@@ -81,6 +86,12 @@ export async function requireManagerOfLeave(
     console.warn(
       `[RBAC] Manager ownership denied: user=${user.id} is not manager of team=${requesterTeamId} (manager=${team?.managerId}), leaveRequest=${leaveRequestId}`
     );
+    logAudit(user.id, "RBAC_DENIED", {
+      success: false,
+      entityType: "LeaveRequest",
+      entityId: leaveRequestId,
+      newValue: { reason: "not_manager_of_team", teamId: requesterTeamId },
+    });
     return NextResponse.json({ error: "Accès non autorisé" }, { status: 403 });
   }
 
@@ -114,6 +125,12 @@ export async function requireOwnerOfLeave(
     console.warn(
       `[RBAC] Ownership denied: user=${user.id} is not owner of leaveRequest=${leaveRequestId} (owner=${leaveRequest.userId})`
     );
+    logAudit(user.id, "RBAC_DENIED", {
+      success: false,
+      entityType: "LeaveRequest",
+      entityId: leaveRequestId,
+      newValue: { reason: "not_owner" },
+    });
     return NextResponse.json({ error: "Accès non autorisé" }, { status: 403 });
   }
 
@@ -155,6 +172,12 @@ export async function requireHrApproverOfLeave(
     console.warn(
       `[RBAC] HR approval denied: user=${user.id} is not an assigned HR approver for leaveRequest=${leaveRequestId}`
     );
+    logAudit(user.id, "RBAC_DENIED", {
+      success: false,
+      entityType: "LeaveRequest",
+      entityId: leaveRequestId,
+      newValue: { reason: "not_assigned_hr_approver" },
+    });
     return NextResponse.json({ error: "Accès non autorisé" }, { status: 403 });
   }
 
