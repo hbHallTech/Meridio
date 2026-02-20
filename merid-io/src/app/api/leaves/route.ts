@@ -222,26 +222,24 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 404 });
   }
 
-  // Bug2: Check probation only if trialModeEnabled is true at company level
+  // Check probation only if trialModeEnabled is true at company level
   const company = await prisma.company.findFirst({
     select: { trialModeEnabled: true },
   });
   const trialModeEnabled = company?.trialModeEnabled ?? false;
-  console.log(`Bug2: trialModeEnabled=${trialModeEnabled}, action=${action}`);
 
   if (trialModeEnabled) {
     const now = new Date();
     const probationEnd = new Date(user.hireDate);
     probationEnd.setMonth(probationEnd.getMonth() + user.office.probationMonths);
     if (now < probationEnd) {
-      // Bug2: Allow drafts even during probation, only block submit
+      // Allow drafts even during probation, only block submit
       if (action === "submit") {
         return NextResponse.json(
           { error: "Les demandes de congé ne peuvent pas être soumises pendant la période d'essai. Vous pouvez enregistrer un brouillon." },
           { status: 403 }
         );
       }
-      console.log("Bug2: Probation active but allowing draft save");
     }
   }
 
@@ -434,7 +432,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Bug1 + Bug4: Send notifications to approvers based on workflow mode
+  // Send notifications to approvers based on workflow mode
   if (isSubmit && approvalStepsData.length > 0 && workflowConfig) {
     const employeeName = `${user.firstName} ${user.lastName}`;
     const notifyParams = {
@@ -447,12 +445,11 @@ export async function POST(request: NextRequest) {
     };
 
     if (workflowConfig.mode === "PARALLEL") {
-      // Bug4: PARALLEL mode → notify ALL approvers simultaneously
+      // PARALLEL mode → notify ALL approvers simultaneously
       const allApproverIds = approvalStepsData.map((s) => s.approverId);
       const uniqueApproverIds = [...new Set(allApproverIds)];
-      console.log(`Bug4: Parallel workflow - notifying all ${uniqueApproverIds.length} approvers simultaneously`);
       notifyNewLeaveRequest(uniqueApproverIds, notifyParams).catch((err) =>
-        console.log("Bug4: Error sending parallel notifications:", err)
+        console.error("[leaves] Error sending parallel notifications:", err)
       );
     } else {
       // SEQUENTIAL mode → notify only first step approver
@@ -461,9 +458,8 @@ export async function POST(request: NextRequest) {
         .filter((s) => s.stepOrder === firstStepOrder)
         .map((s) => s.approverId);
       const uniqueFirstApprovers = [...new Set(firstStepApprovers)];
-      console.log(`Bug4: Sequential workflow - notifying first step (${uniqueFirstApprovers.length} approver(s))`);
       notifyNewLeaveRequest(uniqueFirstApprovers, notifyParams).catch((err) =>
-        console.log("Bug4: Error sending sequential notifications:", err)
+        console.error("[leaves] Error sending sequential notifications:", err)
       );
     }
   }

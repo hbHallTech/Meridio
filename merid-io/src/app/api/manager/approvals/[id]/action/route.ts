@@ -51,7 +51,6 @@ export async function POST(
     include: {
       approvalSteps: { orderBy: { stepOrder: "asc" } },
       user: { select: { id: true, firstName: true, lastName: true, teamId: true } },
-      // Bug5: Include code to check for EXCEPTIONAL type
       leaveTypeConfig: { select: { code: true, label_fr: true, deductsFromBalance: true, balanceType: true } },
     },
   });
@@ -124,14 +123,12 @@ export async function POST(
     data: { status: newStatus },
   });
 
-  // Bug5: Check for EXCEPTIONAL type — never deduct from balance
+  // Exceptional leaves never deduct from balance
   const isExceptional = leaveRequest.leaveTypeConfig.code === "EXCEPTIONAL";
   const shouldUpdateBalance =
     !isExceptional &&
     leaveRequest.leaveTypeConfig.deductsFromBalance &&
     leaveRequest.leaveTypeConfig.balanceType;
-
-  console.log(`Bug5: Manager approval - code=${leaveRequest.leaveTypeConfig.code}, isExceptional=${isExceptional}, shouldUpdateBalance=${!!shouldUpdateBalance}`);
 
   // Update balance on final decision (no HR step after)
   if (newStatus !== LeaveStatus.PENDING_HR && shouldUpdateBalance) {
@@ -154,7 +151,7 @@ export async function POST(
     }
   }
 
-  // Bug1: Send notification to employee based on action
+  // Send notification to employee based on action
   const approverUser = await prisma.user.findUnique({
     where: { id: currentUserId },
     select: { firstName: true, lastName: true },
@@ -172,9 +169,9 @@ export async function POST(
       startDate: startDateStr,
       endDate: endDateStr,
       approverName,
-    }).catch((err) => console.log("Bug1: Error notifying approval:", err));
+    }).catch((err) => console.error("[manager/approvals] Error notifying approval:", err));
   } else if (action === "APPROVED" && newStatus === LeaveStatus.PENDING_HR) {
-    // Bug4: Notify HR approver(s) for next step
+    // Notify HR approver(s) for next step
     const hrSteps = leaveRequest.approvalSteps.filter(
       (s) => s.stepType === "HR" && s.action === null && s.id !== managerStep.id
     );
@@ -187,7 +184,7 @@ export async function POST(
         startDate: startDateStr,
         endDate: endDateStr,
         totalDays: leaveRequest.totalDays,
-      }).catch((err) => console.log("Bug1: Error notifying HR step:", err));
+      }).catch((err) => console.error("[manager/approvals] Error notifying HR step:", err));
     }
   } else if (action === "REFUSED") {
     notifyLeaveRejected(leaveRequest.userId, {
@@ -197,7 +194,7 @@ export async function POST(
       endDate: endDateStr,
       approverName,
       comment: comment?.trim() || "",
-    }).catch((err) => console.log("Bug1: Error notifying rejection:", err));
+    }).catch((err) => console.error("[manager/approvals] Error notifying rejection:", err));
   } else if (action === "RETURNED") {
     notifyLeaveNeedsRevision(leaveRequest.userId, {
       leaveRequestId,
@@ -206,7 +203,7 @@ export async function POST(
       endDate: endDateStr,
       approverName,
       comment: comment?.trim() || "",
-    }).catch((err) => console.log("Bug1: Error notifying return:", err));
+    }).catch((err) => console.error("[manager/approvals] Error notifying return:", err));
   }
 
   await createAuditLog({

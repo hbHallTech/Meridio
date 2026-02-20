@@ -453,7 +453,7 @@ export default function NewLeavePage() {
         </div>
       </div>
 
-      {/* Bug2: Probation alert — only blocks submit, allows draft */}
+      {/* Probation alert — only blocks submit, allows draft */}
       {formData.probation && (
         <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4">
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
@@ -801,7 +801,7 @@ export default function NewLeavePage() {
           )}
         </div>
 
-        {/* Action buttons — Bug2: draft allowed during probation, only submit blocked */}
+        {/* Action buttons */}
         <div className="flex flex-col-reverse gap-3 border-t border-gray-100 pt-4 sm:flex-row sm:justify-end">
           <button
             type="button"
