@@ -164,7 +164,7 @@ export default function ManagerApprovalsPage() {
                       <td className="whitespace-nowrap px-6 py-4 text-gray-500">{new Date(item.createdAt).toLocaleDateString(lang === "en" ? "en-GB" : "fr-FR", { day: "numeric", month: "short", year: "numeric" })}</td>
                       <td className="whitespace-nowrap px-6 py-4">
                         <div className="flex items-center gap-1">
-                          <Link href={`/leaves/${item.id}`} className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600" title={lang === "en" ? "View" : "Voir"}><Eye className="h-4 w-4" /></Link>
+                          <Link href={`/leaves/${item.id}?from=manager`} className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600" title={lang === "en" ? "View" : "Voir"}><Eye className="h-4 w-4" /></Link>
                           <button onClick={() => openModal(item.id, "APPROVED")} disabled={actionLoading === item.id} className="rounded-md p-1.5 text-gray-400 hover:bg-green-50 hover:text-green-600 disabled:opacity-50" title={lang === "en" ? "Approve" : "Approuver"}><CheckCircle className="h-4 w-4" /></button>
                           <button onClick={() => openModal(item.id, "RETURNED")} disabled={actionLoading === item.id} className="rounded-md p-1.5 text-gray-400 hover:bg-amber-50 hover:text-amber-600 disabled:opacity-50" title={lang === "en" ? "Return" : "Renvoyer"}><RotateCcw className="h-4 w-4" /></button>
                           <button onClick={() => openModal(item.id, "REFUSED")} disabled={actionLoading === item.id} className="rounded-md p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50" title={lang === "en" ? "Refuse" : "Refuser"}><XCircle className="h-4 w-4" /></button>

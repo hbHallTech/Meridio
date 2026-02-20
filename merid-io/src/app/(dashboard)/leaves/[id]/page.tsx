@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { useToast } from "@/components/ui/toast";
@@ -163,14 +163,21 @@ function formatDateTime(dateStr: string, lang: string): string {
 export default function LeaveDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { data: session } = useSession();
   const { addToast } = useToast();
   const lang = session?.user?.language ?? "fr";
   const id = params.id as string;
+  const from = searchParams.get("from"); // "manager" | "hr" | null
 
   const [data, setData] = useState<LeaveDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+
+  // Approval modal state
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalAction, setModalAction] = useState<"APPROVED" | "REFUSED" | "RETURNED">("APPROVED");
+  const [modalComment, setModalComment] = useState("");
 
   useEffect(() => {
     fetch(`/api/leaves/${id}`)
@@ -180,7 +187,39 @@ export default function LeaveDetailPage() {
       .finally(() => setLoading(false));
   }, [id]);
 
-  const handleAction = async (action: "cancel" | "submit") => {
+  // Determine viewer's role context
+  const currentUserId = session?.user?.id;
+  const isOwner = data ? data.user.id === currentUserId : false;
+
+  // Check if the current user is an approver on a pending step
+  const pendingApproverStep = data?.approvalSteps.find(
+    (s) => s.approver.id === currentUserId && s.action === null
+  );
+  const isApprover = !!pendingApproverStep;
+  const approverStepType = pendingApproverStep?.stepType; // "MANAGER" | "HR"
+
+  // Determine the API endpoint for approval actions based on step type
+  const approvalApiBase =
+    approverStepType === "HR"
+      ? `/api/hr/approvals/${id}/action`
+      : `/api/manager/approvals/${id}/action`;
+
+  // Can the approver take action? Only if the status matches their step
+  const canApprove =
+    isApprover &&
+    ((approverStepType === "MANAGER" && data?.status === "PENDING_MANAGER") ||
+      (approverStepType === "HR" && data?.status === "PENDING_HR"));
+
+  // Back link based on context
+  const backHref =
+    from === "manager"
+      ? "/manager/approvals"
+      : from === "hr"
+        ? "/hr/approvals"
+        : "/leaves";
+
+  // Owner actions (cancel, submit, edit)
+  const handleOwnerAction = async (action: "cancel" | "submit") => {
     setActionLoading(true);
     try {
       const res = await fetch(`/api/leaves/${id}`, {
@@ -201,6 +240,57 @@ export default function LeaveDetailPage() {
             : lang === "en" ? "Request submitted" : "Demande soumise",
       });
       router.push("/leaves");
+    } catch {
+      addToast({ type: "error", title: lang === "en" ? "Network error" : "Erreur réseau" });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Approval action handler
+  const openApprovalModal = (action: "APPROVED" | "REFUSED" | "RETURNED") => {
+    setModalAction(action);
+    setModalComment("");
+    setModalOpen(true);
+  };
+
+  const handleApprovalAction = async () => {
+    if ((modalAction === "REFUSED" || modalAction === "RETURNED") && !modalComment.trim()) {
+      addToast({
+        type: "error",
+        title: lang === "en" ? "Comment required" : "Commentaire requis",
+        message:
+          lang === "en"
+            ? "Please provide a reason for refusal or return."
+            : "Veuillez fournir un motif pour le refus ou le renvoi.",
+      });
+      return;
+    }
+
+    setActionLoading(true);
+    try {
+      const res = await fetch(approvalApiBase, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: modalAction,
+          comment: modalComment.trim() || undefined,
+        }),
+      });
+      const result = await res.json();
+      if (!res.ok) {
+        addToast({ type: "error", title: lang === "en" ? "Error" : "Erreur", message: result.error });
+        return;
+      }
+
+      const labels = {
+        APPROVED: lang === "en" ? "Request approved" : "Demande approuvée",
+        REFUSED: lang === "en" ? "Request refused" : "Demande refusée",
+        RETURNED: lang === "en" ? "Request returned" : "Demande renvoyée",
+      };
+      addToast({ type: "success", title: labels[modalAction] });
+      setModalOpen(false);
+      router.push(backHref);
     } catch {
       addToast({ type: "error", title: lang === "en" ? "Network error" : "Erreur réseau" });
     } finally {
@@ -233,9 +323,9 @@ export default function LeaveDetailPage() {
   };
   const StatusIcon = statusCfg.icon;
 
-  const canEdit = data.status === "DRAFT" || data.status === "RETURNED";
-  const canCancel = ["DRAFT", "PENDING_MANAGER", "PENDING_HR"].includes(data.status);
-  const canSubmit = data.status === "DRAFT" || data.status === "RETURNED";
+  const canEdit = isOwner && (data.status === "DRAFT" || data.status === "RETURNED");
+  const canCancel = isOwner && ["DRAFT", "PENDING_MANAGER", "PENDING_HR"].includes(data.status);
+  const canSubmit = isOwner && (data.status === "DRAFT" || data.status === "RETURNED");
 
   const startHalf = HALF_DAY_LABELS[data.startHalfDay] ?? HALF_DAY_LABELS.FULL_DAY;
   const endHalf = HALF_DAY_LABELS[data.endHalfDay] ?? HALF_DAY_LABELS.FULL_DAY;
@@ -246,7 +336,7 @@ export default function LeaveDetailPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <Link
-            href="/leaves"
+            href={backHref}
             className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 text-gray-500 transition-colors hover:bg-gray-50"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -268,6 +358,24 @@ export default function LeaveDetailPage() {
           {lang === "en" ? statusCfg.label_en : statusCfg.label_fr}
         </span>
       </div>
+
+      {/* Employee info — shown when viewing as approver */}
+      {!isOwner && (
+        <div className="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#1B3A5C] text-white text-sm font-semibold">
+            {data.user.firstName.charAt(0)}
+            {data.user.lastName.charAt(0)}
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-gray-900">
+              {data.user.firstName} {data.user.lastName}
+            </p>
+            <p className="text-xs text-gray-500">
+              {lang === "en" ? "Employee" : "Employé"}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Main info card */}
       <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
@@ -435,7 +543,7 @@ export default function LeaveDetailPage() {
             <div className="absolute left-0 top-0 bottom-0 w-px bg-gray-200" />
 
             <div className="space-y-6">
-              {data.approvalSteps.map((step, idx) => {
+              {data.approvalSteps.map((step) => {
                 const actionCfg = step.action ? ACTION_CONFIG[step.action] : null;
                 const ActionIcon = actionCfg?.icon ?? Clock;
                 const isPending = !step.action;
@@ -485,7 +593,11 @@ export default function LeaveDetailPage() {
                       <div className="mt-1 flex items-center gap-2 text-xs text-gray-500">
                         <User className="h-3 w-3" />
                         <span>
-                          {step.approver.firstName} {step.approver.lastName}
+                          {isPending
+                            ? lang === "en"
+                              ? `Awaiting ${step.approver.firstName} ${step.approver.lastName}`
+                              : `En attente de ${step.approver.firstName} ${step.approver.lastName}`
+                            : `${step.approver.firstName} ${step.approver.lastName}`}
                         </span>
                         {step.decidedAt && (
                           <>
@@ -501,7 +613,7 @@ export default function LeaveDetailPage() {
                         </div>
                       )}
 
-                      {isPending && (
+                      {isPending && !step.decidedAt && (
                         <p className="mt-1 text-xs italic text-gray-400">
                           {lang === "en" ? "Awaiting decision" : "En attente de décision"}
                         </p>
@@ -515,8 +627,48 @@ export default function LeaveDetailPage() {
         )}
       </div>
 
-      {/* Action buttons */}
-      {(canEdit || canSubmit || canCancel) && (
+      {/* Approver action buttons — shown only when current user is the pending approver */}
+      {canApprove && (
+        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+          <h2 className="text-lg font-semibold text-gray-900">
+            {lang === "en" ? "Your Decision" : "Votre décision"}
+          </h2>
+          <p className="mt-1 text-sm text-gray-500">
+            {lang === "en"
+              ? "Review the request above and take action."
+              : "Examinez la demande ci-dessus et prenez une décision."}
+          </p>
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+            <button
+              onClick={() => openApprovalModal("APPROVED")}
+              disabled={actionLoading}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-green-600 px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+            >
+              <CheckCircle className="h-4 w-4" />
+              {lang === "en" ? "Approve" : "Approuver"}
+            </button>
+            <button
+              onClick={() => openApprovalModal("RETURNED")}
+              disabled={actionLoading}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-500 px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+            >
+              <RotateCcw className="h-4 w-4" />
+              {lang === "en" ? "Return for revision" : "Renvoyer pour révision"}
+            </button>
+            <button
+              onClick={() => openApprovalModal("REFUSED")}
+              disabled={actionLoading}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-red-600 px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+            >
+              <XCircle className="h-4 w-4" />
+              {lang === "en" ? "Refuse" : "Refuser"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Owner action buttons — only shown to the leave owner */}
+      {isOwner && (canEdit || canSubmit || canCancel) && (
         <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
           {canEdit && (
             <Link
@@ -530,7 +682,7 @@ export default function LeaveDetailPage() {
 
           {canCancel && (
             <button
-              onClick={() => handleAction("cancel")}
+              onClick={() => handleOwnerAction("cancel")}
               disabled={actionLoading}
               className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-5 py-2.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
             >
@@ -545,7 +697,7 @@ export default function LeaveDetailPage() {
 
           {canSubmit && (
             <button
-              onClick={() => handleAction("submit")}
+              onClick={() => handleOwnerAction("submit")}
               disabled={actionLoading}
               className="inline-flex items-center justify-center gap-2 rounded-lg px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
               style={{ backgroundColor: "#1B3A5C" }}
@@ -558,6 +710,86 @@ export default function LeaveDetailPage() {
               {lang === "en" ? "Submit" : "Soumettre"}
             </button>
           )}
+        </div>
+      )}
+
+      {/* Approval action modal */}
+      {modalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+            <h3 className="text-lg font-semibold text-gray-900">
+              {modalAction === "APPROVED"
+                ? lang === "en" ? "Approve request" : "Approuver la demande"
+                : modalAction === "REFUSED"
+                  ? lang === "en" ? "Refuse request" : "Refuser la demande"
+                  : lang === "en" ? "Return request" : "Renvoyer la demande"}
+            </h3>
+
+            <p className="mt-2 text-sm text-gray-500">
+              {modalAction === "APPROVED"
+                ? lang === "en"
+                  ? "Are you sure you want to approve this leave request?"
+                  : "Êtes-vous sûr de vouloir approuver cette demande de congé ?"
+                : modalAction === "REFUSED"
+                  ? lang === "en"
+                    ? "Please provide a reason for refusing this request."
+                    : "Veuillez fournir un motif de refus."
+                  : lang === "en"
+                    ? "Please explain what needs to be revised."
+                    : "Veuillez expliquer ce qui doit être révisé."}
+            </p>
+
+            <textarea
+              value={modalComment}
+              onChange={(e) => setModalComment(e.target.value)}
+              placeholder={
+                lang === "en"
+                  ? modalAction === "APPROVED"
+                    ? "Comment (optional)"
+                    : "Comment (required)"
+                  : modalAction === "APPROVED"
+                    ? "Commentaire (optionnel)"
+                    : "Commentaire (requis)"
+              }
+              rows={3}
+              className="mt-4 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-[#1B3A5C] focus:outline-none focus:ring-1 focus:ring-[#1B3A5C]"
+            />
+
+            {(modalAction === "REFUSED" || modalAction === "RETURNED") && !modalComment.trim() && (
+              <p className="mt-1 flex items-center gap-1 text-xs text-amber-600">
+                <AlertTriangle className="h-3 w-3" />
+                {lang === "en" ? "A comment is required." : "Un commentaire est requis."}
+              </p>
+            )}
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => setModalOpen(false)}
+                className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+              >
+                {lang === "en" ? "Cancel" : "Annuler"}
+              </button>
+              <button
+                onClick={handleApprovalAction}
+                disabled={actionLoading}
+                className={`rounded-lg px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50 ${
+                  modalAction === "APPROVED"
+                    ? "bg-green-600"
+                    : modalAction === "REFUSED"
+                      ? "bg-red-600"
+                      : "bg-amber-500"
+                }`}
+              >
+                {actionLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : modalAction === "APPROVED"
+                  ? lang === "en" ? "Approve" : "Approuver"
+                  : modalAction === "REFUSED"
+                    ? lang === "en" ? "Refuse" : "Refuser"
+                    : lang === "en" ? "Return" : "Renvoyer"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
