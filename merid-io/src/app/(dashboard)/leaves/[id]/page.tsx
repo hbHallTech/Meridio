@@ -380,23 +380,34 @@ export default function LeaveDetailPage() {
               {lang === "en" ? "Attachments" : "Justificatifs"}
             </p>
             <ul className="mt-3 space-y-2">
-              {data.attachmentUrls.map((url, idx) => (
-                <li
-                  key={idx}
-                  className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2"
-                >
-                  <div className="flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-gray-400" />
-                    <span className="text-sm text-gray-700">{url}</span>
-                  </div>
-                  <button
-                    className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                    title={lang === "en" ? "Download" : "Télécharger"}
+              {data.attachmentUrls.map((url, idx) => {
+                const fileName = url.split("/").pop() ?? `piece-jointe-${idx + 1}`;
+                const proxyUrl = `/api/attachments?url=${encodeURIComponent(url)}`;
+                return (
+                  <li
+                    key={idx}
+                    className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2"
                   >
-                    <Download className="h-4 w-4" />
-                  </button>
-                </li>
-              ))}
+                    <a
+                      href={proxyUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 truncate hover:underline"
+                    >
+                      <FileText className="h-4 w-4 text-gray-400" />
+                      <span className="truncate text-sm text-blue-700">{fileName}</span>
+                    </a>
+                    <a
+                      href={proxyUrl}
+                      download={fileName}
+                      className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                      title={lang === "en" ? "Download" : "Télécharger"}
+                    >
+                      <Download className="h-4 w-4" />
+                    </a>
+                  </li>
+                );
+              })}
             </ul>
           </div>
         )}
