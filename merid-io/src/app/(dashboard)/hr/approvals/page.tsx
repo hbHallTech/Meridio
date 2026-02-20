@@ -336,7 +336,7 @@ export default function HRApprovalsPage() {
                       <td className="whitespace-nowrap px-6 py-4">
                         <div className="flex items-center gap-1">
                           <Link
-                            href={`/leaves/${item.id}`}
+                            href={`/leaves/${item.id}?from=hr`}
                             className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
                             title={lang === "en" ? "View" : "Voir"}
                           >
