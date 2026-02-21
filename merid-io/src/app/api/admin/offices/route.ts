@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { officeSchema } from "@/lib/validators";
+import { logAudit, getIp } from "@/lib/audit";
 
 export async function GET() {
   const session = await auth();
@@ -49,6 +50,13 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    logAudit(session.user.id, "OFFICE_CREATED", {
+      entityType: "Office",
+      entityId: office.id,
+      ip: getIp(request.headers),
+      newValue: { name: parsed.name },
+    });
+
     return NextResponse.json(office, { status: 201 });
   } catch (error) {
     if (error instanceof Error && error.name === "ZodError") {
@@ -90,6 +98,13 @@ export async function PATCH(request: NextRequest) {
         company: { select: { name: true } },
         _count: { select: { users: true, teams: true } },
       },
+    });
+
+    logAudit(session.user.id, "OFFICE_UPDATED", {
+      entityType: "Office",
+      entityId: id,
+      ip: getIp(request.headers),
+      newValue: { name: parsed.name },
     });
 
     return NextResponse.json(office);
@@ -136,6 +151,13 @@ export async function DELETE(request: NextRequest) {
     }
 
     await prisma.office.delete({ where: { id } });
+
+    logAudit(session.user.id, "OFFICE_DELETED", {
+      entityType: "Office",
+      entityId: id,
+      ip: getIp(request.headers),
+      oldValue: { name: office.name },
+    });
 
     return NextResponse.json({ success: true });
   } catch {

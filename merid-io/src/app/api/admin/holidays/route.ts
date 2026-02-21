@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { logAudit, getIp } from "@/lib/audit";
 
 export async function GET(request: NextRequest) {
   const session = await auth();
@@ -59,6 +60,13 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    logAudit(session.user.id, "HOLIDAY_CREATED", {
+      entityType: "PublicHoliday",
+      entityId: holiday.id,
+      ip: getIp(request.headers),
+      newValue: { name_fr, date, officeId },
+    });
+
     return NextResponse.json(holiday, { status: 201 });
   } catch (error: unknown) {
     if (error && typeof error === "object" && "code" in error && (error as { code: string }).code === "P2002") {
@@ -97,6 +105,13 @@ export async function PATCH(request: NextRequest) {
       },
     });
 
+    logAudit(session.user.id, "HOLIDAY_UPDATED", {
+      entityType: "PublicHoliday",
+      entityId: id,
+      ip: getIp(request.headers),
+      newValue: { name_fr, date, officeId },
+    });
+
     return NextResponse.json(holiday);
   } catch (error: unknown) {
     if (error && typeof error === "object" && "code" in error && (error as { code: string }).code === "P2002") {
@@ -121,6 +136,12 @@ export async function DELETE(request: NextRequest) {
     }
 
     await prisma.publicHoliday.delete({ where: { id } });
+
+    logAudit(session.user.id, "HOLIDAY_DELETED", {
+      entityType: "PublicHoliday",
+      entityId: id,
+      ip: getIp(request.headers),
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {

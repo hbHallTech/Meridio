@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { verify2FASchema } from "@/lib/validators";
+import { logAudit, getIp } from "@/lib/audit";
 
 export async function POST(request: NextRequest) {
   const session = await auth();
@@ -40,6 +41,12 @@ export async function POST(request: NextRequest) {
   }
 
   if (user.twoFactorCode !== parsed.data.code) {
+    logAudit(session.user.id, "2FA_FAILED", {
+      success: false,
+      entityType: "User",
+      entityId: session.user.id,
+      ip: getIp(request.headers),
+    });
     return NextResponse.json({ error: "Code invalide" }, { status: 400 });
   }
 
@@ -47,6 +54,12 @@ export async function POST(request: NextRequest) {
   await prisma.user.update({
     where: { id: user.id },
     data: { twoFactorCode: null, twoFactorExpiry: null },
+  });
+
+  logAudit(session.user.id, "2FA_VERIFIED", {
+    entityType: "User",
+    entityId: session.user.id,
+    ip: getIp(request.headers),
   });
 
   return NextResponse.json({ verified: true });

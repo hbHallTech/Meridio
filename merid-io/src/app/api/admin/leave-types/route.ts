@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { leaveTypeConfigSchema } from "@/lib/validators";
+import { logAudit, getIp } from "@/lib/audit";
 
 export async function GET() {
   const session = await auth();
@@ -54,6 +55,13 @@ export async function POST(request: NextRequest) {
       include: {
         office: { select: { id: true, name: true } },
       },
+    });
+
+    logAudit(session.user.id, "LEAVE_TYPE_CREATED", {
+      entityType: "LeaveTypeConfig",
+      entityId: leaveType.id,
+      ip: getIp(request.headers),
+      newValue: { code: validated.code, label_fr: validated.label_fr },
     });
 
     return NextResponse.json(leaveType, { status: 201 });
@@ -112,6 +120,13 @@ export async function PATCH(request: NextRequest) {
       },
     });
 
+    logAudit(session.user.id, "LEAVE_TYPE_UPDATED", {
+      entityType: "LeaveTypeConfig",
+      entityId: id,
+      ip: getIp(request.headers),
+      newValue: { code: validated.code, label_fr: validated.label_fr },
+    });
+
     return NextResponse.json(leaveType);
   } catch (error: unknown) {
     if (error && typeof error === "object" && "issues" in error) {
@@ -151,6 +166,12 @@ export async function DELETE(request: NextRequest) {
     }
 
     await prisma.leaveTypeConfig.delete({ where: { id } });
+
+    logAudit(session.user.id, "LEAVE_TYPE_DELETED", {
+      entityType: "LeaveTypeConfig",
+      entityId: id,
+      ip: getIp(request.headers),
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {
