@@ -117,7 +117,7 @@ export async function PATCH(request: NextRequest) {
     } else if (tab === "advanced") {
       const advFields = [
         "enforce2FA", "inactivityTimeoutMin", "auditRetentionDays",
-        "trialModeEnabled", "privacyPolicyUrl",
+        "trialModeEnabled", "documentsModuleEnabled", "privacyPolicyUrl",
       ];
       for (const f of advFields) {
         if (fields[f] !== undefined) {
