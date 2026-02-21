@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
@@ -34,10 +34,15 @@ export default function ManagerCalendarPage() {
   const [teams, setTeams] = useState<TeamInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedTeam, setSelectedTeam] = useState("");
+  const currentRangeRef = useRef<string>("");
 
   const fetchEvents = useCallback(
     async (from?: string, to?: string) => {
-      setLoading(true);
+      // Deduplicate: skip if same date range was already fetched
+      const rangeKey = `${from ?? ""}_${to ?? ""}`;
+      if (rangeKey === currentRangeRef.current) return;
+      currentRangeRef.current = rangeKey;
+
       const p = new URLSearchParams();
       if (from) p.set("from", from);
       if (to) p.set("to", to);
@@ -47,7 +52,6 @@ export default function ManagerCalendarPage() {
           const data = await res.json();
           setEvents(data.events ?? []);
           setTeams(data.teams ?? []);
-          console.log(`Manager calendar : ${(data.events ?? []).length} demandes fetchées`);
         }
       } catch (err) {
         console.error("Calendar fetch error:", err);
@@ -58,18 +62,15 @@ export default function ManagerCalendarPage() {
     []
   );
 
-  useEffect(() => {
-    fetchEvents();
-  }, [fetchEvents]);
-
-  const handleDatesSet = (arg: { startStr: string; endStr: string }) => {
-    fetchEvents(arg.startStr, arg.endStr);
-  };
+  const handleDatesSet = useCallback(
+    (arg: { startStr: string; endStr: string }) => {
+      fetchEvents(arg.startStr, arg.endStr);
+    },
+    [fetchEvents]
+  );
 
   const filteredEvents = selectedTeam
     ? events.filter((e) => {
-        // Filter by team — we need to match userId to team, but since API already scopes by manager's teams,
-        // we just show all or filter client-side if team info is available
         return true;
       })
     : events;
@@ -128,42 +129,41 @@ export default function ManagerCalendarPage() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-        {loading ? (
-          <div className="flex h-96 items-center justify-center">
+      <div className="relative rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+        {loading && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-white/80">
             <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
           </div>
-        ) : (
-          <FullCalendar
-            plugins={[dayGridPlugin, interactionPlugin]}
-            initialView="dayGridMonth"
-            events={calendarEvents}
-            locale={lang}
-            datesSet={handleDatesSet}
-            headerToolbar={{
-              left: "prev,next today",
-              center: "title",
-              right: "dayGridMonth,dayGridWeek",
-            }}
-            height="auto"
-            eventDisplay="block"
-            dayMaxEvents={3}
-            eventContent={(arg) => {
-              const props = arg.event.extendedProps;
-              const isPending = props.status !== "APPROVED";
-              return (
-                <div className="overflow-hidden px-1 py-0.5">
-                  <p className="truncate text-xs font-medium">
-                    {arg.event.title}
-                  </p>
-                  <p className="truncate text-[10px] opacity-80">
-                    {props.totalDays}j{isPending ? (lang === "en" ? " (pending)" : " (en attente)") : ""}
-                  </p>
-                </div>
-              );
-            }}
-          />
         )}
+        <FullCalendar
+          plugins={[dayGridPlugin, interactionPlugin]}
+          initialView="dayGridMonth"
+          events={calendarEvents}
+          locale={lang}
+          datesSet={handleDatesSet}
+          headerToolbar={{
+            left: "prev,next today",
+            center: "title",
+            right: "dayGridMonth,dayGridWeek",
+          }}
+          height="auto"
+          eventDisplay="block"
+          dayMaxEvents={3}
+          eventContent={(arg) => {
+            const props = arg.event.extendedProps;
+            const isPending = props.status !== "APPROVED";
+            return (
+              <div className="overflow-hidden px-1 py-0.5">
+                <p className="truncate text-xs font-medium">
+                  {arg.event.title}
+                </p>
+                <p className="truncate text-[10px] opacity-80">
+                  {props.totalDays}j{isPending ? (lang === "en" ? " (pending)" : " (en attente)") : ""}
+                </p>
+              </div>
+            );
+          }}
+        />
       </div>
 
       {/* Legend */}
