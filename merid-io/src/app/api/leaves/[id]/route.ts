@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { leaveRequestSchema } from "@/lib/validators";
 import { requireOwnerOfLeave } from "@/lib/rbac";
-import { createAuditLog } from "@/lib/notifications";
+import { createAuditLog, notifyNewLeaveRequest, notifyLeaveSubmitted } from "@/lib/notifications";
 import { getRequestIp } from "@/lib/rate-limit";
 
 // ─── GET: leave request detail ───
@@ -145,6 +145,8 @@ export async function PATCH(
       const submitter = await prisma.user.findUnique({
         where: { id: session.user.id },
         select: {
+          firstName: true,
+          lastName: true,
           officeId: true,
           teamId: true,
           team: { select: { id: true, managerId: true } },
@@ -153,18 +155,19 @@ export async function PATCH(
 
       // Resolve workflow by team (or fallback to office)
       let workflowSteps: { stepOrder: number; stepType: "MANAGER" | "HR"; isRequired: boolean }[] = [];
+      let workflowMode: "SEQUENTIAL" | "PARALLEL" = "SEQUENTIAL";
       if (submitter?.teamId) {
         const wf = await prisma.workflowConfig.findFirst({
           where: { isActive: true, teams: { some: { id: submitter.teamId } } },
           include: { steps: { orderBy: { stepOrder: "asc" } } },
         });
-        if (wf) workflowSteps = wf.steps;
+        if (wf) { workflowSteps = wf.steps; workflowMode = wf.mode as "SEQUENTIAL" | "PARALLEL"; }
       } else if (submitter?.officeId) {
         const wf = await prisma.workflowConfig.findFirst({
           where: { isActive: true, officeId: submitter.officeId },
           include: { steps: { orderBy: { stepOrder: "asc" } } },
         });
-        if (wf) workflowSteps = wf.steps;
+        if (wf) { workflowSteps = wf.steps; workflowMode = wf.mode as "SEQUENTIAL" | "PARALLEL"; }
       }
 
       // Delete old approval steps if resubmitting a RETURNED request
@@ -180,9 +183,8 @@ export async function PATCH(
       });
 
       // Create approval steps from workflow
+      const approvalStepsData: { leaveRequestId: string; approverId: string; stepType: "MANAGER" | "HR"; stepOrder: number }[] = [];
       if (workflowSteps.length > 0 && submitter) {
-        const approvalStepsData: { leaveRequestId: string; approverId: string; stepType: "MANAGER" | "HR"; stepOrder: number }[] = [];
-
         for (const step of workflowSteps) {
           if (step.stepType === "MANAGER" && submitter.team?.managerId) {
             approvalStepsData.push({
@@ -242,6 +244,45 @@ export async function PATCH(
           leaveType: lt.code,
         },
       }).catch(() => {});
+
+      // Notify approvers based on workflow mode
+      if (approvalStepsData.length > 0 && submitter) {
+        const employeeName = `${submitter.firstName} ${submitter.lastName}`;
+        const startDateStr = leaveRequest.startDate.toISOString().split("T")[0];
+        const endDateStr = leaveRequest.endDate.toISOString().split("T")[0];
+        const notifyParams = {
+          leaveRequestId: id,
+          employeeName,
+          leaveType: lt.label_fr ?? lt.code,
+          startDate: startDateStr,
+          endDate: endDateStr,
+          totalDays: leaveRequest.totalDays,
+        };
+
+        if (workflowMode === "PARALLEL") {
+          const allApproverIds = [...new Set(approvalStepsData.map((s) => s.approverId))];
+          notifyNewLeaveRequest(allApproverIds, notifyParams).catch((err) =>
+            console.error("[leaves] Error sending parallel notifications:", err)
+          );
+        } else {
+          const firstStepOrder = Math.min(...approvalStepsData.map((s) => s.stepOrder));
+          const firstApprovers = [...new Set(approvalStepsData.filter((s) => s.stepOrder === firstStepOrder).map((s) => s.approverId))];
+          notifyNewLeaveRequest(firstApprovers, notifyParams).catch((err) =>
+            console.error("[leaves] Error sending sequential notifications:", err)
+          );
+        }
+
+        // Send confirmation to employee
+        notifyLeaveSubmitted(session.user.id, {
+          leaveRequestId: id,
+          leaveType: lt.label_fr ?? lt.code,
+          startDate: startDateStr,
+          endDate: endDateStr,
+          totalDays: leaveRequest.totalDays,
+        }).catch((err) =>
+          console.error("[leaves] Error sending submission confirmation:", err)
+        );
+      }
 
       return NextResponse.json({ status: "PENDING_MANAGER" });
     }

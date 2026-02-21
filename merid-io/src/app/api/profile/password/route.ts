@@ -7,7 +7,7 @@ import {
   buildPasswordHistory,
   calculatePasswordExpiresAt,
 } from "@/lib/password";
-import { notifyPasswordChanged, createAuditLog } from "@/lib/notifications";
+import { notifyPasswordChanged, isNotificationEnabled, createAuditLog } from "@/lib/notifications";
 import { assertSessionActive } from "@/lib/session-guard";
 import { getRequestIp } from "@/lib/rate-limit";
 import bcrypt from "bcryptjs";
@@ -92,9 +92,12 @@ export async function POST(request: NextRequest) {
     },
   });
 
-  // In-app notification + email
+  // In-app notification + email (gated by preferences)
   await notifyPasswordChanged(session.user.id).catch(() => {});
-  await sendPasswordChangedEmail(user.email, user.firstName).catch(() => {});
+  const pwdEmailEnabled = await isNotificationEnabled("PASSWORD_CHANGED", session.user.id);
+  if (pwdEmailEnabled) {
+    await sendPasswordChangedEmail(user.email, user.firstName).catch(() => {});
+  }
 
   // Audit log
   await createAuditLog({

@@ -13,6 +13,7 @@ import {
 import {
   notifyPasswordExpiringSoon,
   notifyPasswordAutoReset,
+  isNotificationEnabled,
   createAuditLog,
 } from "@/lib/notifications";
 
@@ -62,11 +63,14 @@ export async function GET(request: NextRequest) {
     );
 
     await notifyPasswordExpiringSoon(user.id, daysLeft).catch(() => {});
-    await sendPasswordExpiringSoonEmail(
-      user.email,
-      user.firstName,
-      daysLeft
-    ).catch(() => {});
+    const expiringEmailEnabled = await isNotificationEnabled("PASSWORD_EXPIRING", user.id);
+    if (expiringEmailEnabled) {
+      await sendPasswordExpiringSoonEmail(
+        user.email,
+        user.firstName,
+        daysLeft
+      ).catch(() => {});
+    }
 
     alertsSent++;
   }

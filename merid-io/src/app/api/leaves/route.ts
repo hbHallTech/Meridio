@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { leaveRequestSchema } from "@/lib/validators";
-import { notifyNewLeaveRequest } from "@/lib/notifications";
+import { notifyNewLeaveRequest, notifyLeaveSubmitted } from "@/lib/notifications";
 import { parseDateRangeParams } from "@/lib/date-utils";
 import { logAudit, getIp } from "@/lib/audit";
 import type { Prisma } from "@prisma/client";
@@ -462,6 +462,17 @@ export async function POST(request: NextRequest) {
         console.error("[leaves] Error sending sequential notifications:", err)
       );
     }
+
+    // Send confirmation email to the employee
+    notifyLeaveSubmitted(userId, {
+      leaveRequestId: leaveRequest.id,
+      leaveType: leaveType.label_fr,
+      startDate: data.startDate,
+      endDate: data.endDate,
+      totalDays,
+    }).catch((err) =>
+      console.error("[leaves] Error sending submission confirmation:", err)
+    );
   }
 
   // If submitted (not draft), update pending days on balance (exceptional leaves are exempt)
