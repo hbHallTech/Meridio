@@ -16,7 +16,7 @@ interface CreateNotificationParams {
  * Check if a notification type is enabled at company level.
  * Also checks user-level preference if userId is provided.
  */
-async function isNotificationEnabled(type: string, userId?: string): Promise<boolean> {
+export async function isNotificationEnabled(type: string, userId?: string): Promise<boolean> {
   try {
     const company = await prisma.company.findFirst({ select: { id: true } });
     if (!company) {
@@ -76,6 +76,52 @@ interface LeaveNotifyParams {
   startDate: string;
   endDate: string;
   totalDays: number;
+}
+
+/**
+ * Notify the employee that their leave request was submitted successfully.
+ */
+export async function notifyLeaveSubmitted(
+  employeeId: string,
+  params: { leaveRequestId: string; leaveType: string; startDate: string; endDate: string; totalDays: number }
+) {
+  const enabled = await isNotificationEnabled("NEW_REQUEST", employeeId);
+  if (!enabled) return;
+
+  const employee = await prisma.user.findUnique({
+    where: { id: employeeId },
+    select: { email: true, firstName: true },
+  });
+  if (!employee) return;
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
+  const results = await Promise.allSettled([
+    createNotification({
+      userId: employeeId,
+      type: "NEW_REQUEST",
+      title_fr: "Demande de conge soumise",
+      title_en: "Leave request submitted",
+      body_fr: `Votre demande de ${params.leaveType} du ${params.startDate} au ${params.endDate} (${params.totalDays}j) a ete soumise avec succes.`,
+      body_en: `Your ${params.leaveType} request from ${params.startDate} to ${params.endDate} (${params.totalDays}d) was submitted successfully.`,
+      data: { leaveRequestId: params.leaveRequestId },
+    }),
+    sendEmail({
+      to: employee.email,
+      subject: `Meridio - Votre demande de conge a ete soumise`,
+      html: `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:'Segoe UI',Arial,sans-serif;background-color:#f4f6f8;margin:0;padding:20px;"><div style="max-width:600px;margin:0 auto;background:white;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);"><div style="background-color:#1B3A5C;padding:24px;text-align:center;"><h1 style="color:white;margin:0;font-size:24px;">Halley-Technologies</h1><p style="color:#00BCD4;margin:4px 0 0;font-size:14px;">Meridio - Gestion des conges</p></div><div style="padding:32px 24px;"><h2 style="color:#1B3A5C;margin-top:0;">Bonjour ${employee.firstName},</h2><p>Votre demande de conge a ete <strong style="color:#1B3A5C;">soumise avec succes</strong> et est en attente d'approbation.</p><table style="width:100%;border-collapse:collapse;margin:16px 0;"><tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Type</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${params.leaveType}</td></tr><tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Du</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${params.startDate}</td></tr><tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Au</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${params.endDate}</td></tr><tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Duree</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${params.totalDays} jour(s)</td></tr></table><div style="text-align:center;margin:24px 0;"><a href="${appUrl}/leaves/${params.leaveRequestId}" style="display:inline-block;background-color:#1B3A5C;color:white;padding:12px 32px;border-radius:6px;text-decoration:none;font-weight:600;">Voir ma demande</a></div></div><div style="background-color:#f8f9fa;padding:16px 24px;text-align:center;font-size:12px;color:#6b7280;"><p style="margin:0;">Cet email a ete envoye automatiquement par Meridio.</p></div></div></body></html>`,
+    }),
+  ]);
+
+  const emailResult = results[1].status === "fulfilled" ? "success" : "fail";
+  console.log(`[notifications] SUBMITTED confirmation to ${employee.email}: ${emailResult}`);
+
+  if (results[1].status === "fulfilled" && results[0].status === "fulfilled") {
+    await prisma.notification.update({
+      where: { id: results[0].value.id },
+      data: { sentByEmail: true },
+    }).catch(() => {});
+  }
 }
 
 /**
@@ -328,6 +374,9 @@ export async function createAuditLog(params: {
 // ─── Security-specific notification helpers ───
 
 export async function notifyAccountLocked(userId: string, minutesLocked: number) {
+  const enabled = await isNotificationEnabled("ACCOUNT_LOCKED", userId);
+  if (!enabled) return;
+
   return createNotification({
     userId,
     type: "ACCOUNT_LOCKED",
@@ -343,9 +392,12 @@ export async function notifyNewLoginDetected(
   ip: string,
   userAgent: string
 ) {
+  const enabled = await isNotificationEnabled("NEW_LOGIN", userId);
+  if (!enabled) return;
+
   return createNotification({
     userId,
-    type: "NEW_LOGIN_DETECTED",
+    type: "NEW_LOGIN",
     title_fr: "Nouvelle connexion detectee",
     title_en: "New login detected",
     body_fr: `Une connexion depuis un nouvel appareil a ete detectee (IP: ${ip}).`,
@@ -355,9 +407,12 @@ export async function notifyNewLoginDetected(
 }
 
 export async function notifyPasswordExpiringSoon(userId: string, daysLeft: number) {
+  const enabled = await isNotificationEnabled("PASSWORD_EXPIRING", userId);
+  if (!enabled) return;
+
   return createNotification({
     userId,
-    type: "PASSWORD_EXPIRING_SOON",
+    type: "PASSWORD_EXPIRING",
     title_fr: "Mot de passe bientot expire",
     title_en: "Password expiring soon",
     body_fr: `Votre mot de passe expirera dans ${daysLeft} jour(s). Veuillez le changer.`,
@@ -368,7 +423,7 @@ export async function notifyPasswordExpiringSoon(userId: string, daysLeft: numbe
 export async function notifyPasswordAutoReset(userId: string) {
   return createNotification({
     userId,
-    type: "PASSWORD_EXPIRED",
+    type: "PASSWORD_EXPIRING",
     title_fr: "Mot de passe expire - reinitialise",
     title_en: "Password expired - reset",
     body_fr: "Votre mot de passe a expire et a ete reinitialise automatiquement. Un email contenant votre nouveau mot de passe temporaire vous a ete envoye.",
@@ -377,6 +432,9 @@ export async function notifyPasswordAutoReset(userId: string) {
 }
 
 export async function notifyPasswordChanged(userId: string) {
+  const enabled = await isNotificationEnabled("PASSWORD_CHANGED", userId);
+  if (!enabled) return;
+
   return createNotification({
     userId,
     type: "PASSWORD_CHANGED",

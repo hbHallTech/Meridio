@@ -7,6 +7,7 @@ import { getDeviceInfo, isNewDevice, type DeviceInfo } from "@/lib/device";
 import {
   notifyAccountLocked,
   notifyNewLoginDetected,
+  isNotificationEnabled,
   createAuditLog,
 } from "@/lib/notifications";
 import {
@@ -164,18 +165,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               LOCK_DURATION_MINUTES
             ).catch(() => {});
 
-            // Notify admins by email
-            const admins = await prisma.user.findMany({
-              where: { roles: { has: "ADMIN" }, isActive: true },
-              select: { email: true, firstName: true },
-            });
-            for (const admin of admins) {
-              await sendAccountLockedEmail(
-                admin.email,
-                admin.firstName,
-                `${user.firstName} ${user.lastName}`,
-                user.email
-              ).catch(() => {});
+            // Notify admins by email (gated by company-level preference)
+            const lockedEmailEnabled = await isNotificationEnabled("ACCOUNT_LOCKED");
+            if (lockedEmailEnabled) {
+              const admins = await prisma.user.findMany({
+                where: { roles: { has: "ADMIN" }, isActive: true },
+                select: { email: true, firstName: true },
+              });
+              for (const admin of admins) {
+                await sendAccountLockedEmail(
+                  admin.email,
+                  admin.firstName,
+                  `${user.firstName} ${user.lastName}`,
+                  user.email
+                ).catch(() => {});
+              }
             }
           }
 
@@ -273,12 +277,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             deviceInfo.userAgent
           ).catch(() => {});
 
-          await sendNewDeviceLoginEmail(
-            user.email,
-            user.firstName,
-            deviceInfo.ip,
-            deviceInfo.userAgent
-          ).catch(() => {});
+          const loginEmailEnabled = await isNotificationEnabled("NEW_LOGIN", user.id);
+          if (loginEmailEnabled) {
+            await sendNewDeviceLoginEmail(
+              user.email,
+              user.firstName,
+              deviceInfo.ip,
+              deviceInfo.userAgent
+            ).catch(() => {});
+          }
 
           await createAuditLog({
             userId: user.id,
