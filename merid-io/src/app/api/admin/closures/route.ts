@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { logAudit, getIp } from "@/lib/audit";
 
 export async function GET() {
   const session = await auth();
@@ -50,6 +51,13 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    logAudit(session.user.id, "CLOSURE_CREATED", {
+      entityType: "CompanyClosure",
+      entityId: closure.id,
+      ip: getIp(request.headers),
+      newValue: { reason_fr, startDate, endDate, officeId },
+    });
+
     return NextResponse.json(closure, { status: 201 });
   } catch (error) {
     console.error("POST /api/admin/closures error:", error);
@@ -89,6 +97,13 @@ export async function PATCH(request: NextRequest) {
       },
     });
 
+    logAudit(session.user.id, "CLOSURE_UPDATED", {
+      entityType: "CompanyClosure",
+      entityId: id,
+      ip: getIp(request.headers),
+      newValue: { reason_fr, startDate, endDate, officeId },
+    });
+
     return NextResponse.json(closure);
   } catch (error) {
     console.error("PATCH /api/admin/closures error:", error);
@@ -110,6 +125,12 @@ export async function DELETE(request: NextRequest) {
     }
 
     await prisma.companyClosure.delete({ where: { id } });
+
+    logAudit(session.user.id, "CLOSURE_DELETED", {
+      entityType: "CompanyClosure",
+      entityId: id,
+      ip: getIp(request.headers),
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {

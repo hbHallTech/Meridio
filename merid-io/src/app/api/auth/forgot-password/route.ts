@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { forgotPasswordSchema } from "@/lib/validators";
 import { sendPasswordResetEmail } from "@/lib/email";
+import { logAudit, getIp } from "@/lib/audit";
 import crypto from "crypto";
 
 export async function POST(request: NextRequest) {
@@ -40,6 +41,12 @@ export async function POST(request: NextRequest) {
   });
 
   await sendPasswordResetEmail(user.email, token, user.firstName);
+
+  logAudit(user.id, "PASSWORD_RESET_REQUESTED", {
+    entityType: "User",
+    entityId: user.id,
+    ip: getIp(request.headers),
+  });
 
   return successResponse;
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { logAudit, getIp } from "@/lib/audit";
 
 export async function POST(request: NextRequest) {
   const session = await auth();
@@ -39,6 +40,13 @@ export async function POST(request: NextRequest) {
   await prisma.company.update({
     where: { id: companyId },
     data: { logoUrl: dataUri },
+  });
+
+  logAudit(session.user.id, "COMPANY_LOGO_UPDATED", {
+    entityType: "Company",
+    entityId: companyId,
+    ip: getIp(request.headers),
+    newValue: { fileType: file.type, fileSize: file.size },
   });
 
   return NextResponse.json({ logoUrl: dataUri });

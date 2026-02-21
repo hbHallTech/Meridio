@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { send2FACode } from "@/lib/email";
+import { logAudit } from "@/lib/audit";
 import crypto from "crypto";
 
 export async function POST() {
@@ -34,6 +35,11 @@ export async function POST() {
   });
 
   await send2FACode(user.email, code, user.firstName);
+
+  logAudit(session.user.id, "2FA_CODE_SENT", {
+    entityType: "User",
+    entityId: session.user.id,
+  });
 
   return NextResponse.json({ message: "Code envoyé" });
 }
