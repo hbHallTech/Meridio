@@ -245,7 +245,8 @@ export async function PATCH(
         },
       }).catch(() => {});
 
-      // Notify approvers based on workflow mode
+      // Notify approvers + confirmation to employee
+      // MUST be awaited — fire-and-forget is unreliable in Vercel serverless
       if (approvalStepsData.length > 0 && submitter) {
         const employeeName = `${submitter.firstName} ${submitter.lastName}`;
         const startDateStr = leaveRequest.startDate.toISOString().split("T")[0];
@@ -259,29 +260,34 @@ export async function PATCH(
           totalDays: leaveRequest.totalDays,
         };
 
+        let approverIds: string[];
         if (workflowMode === "PARALLEL") {
-          const allApproverIds = [...new Set(approvalStepsData.map((s) => s.approverId))];
-          notifyNewLeaveRequest(allApproverIds, notifyParams).catch((err) =>
-            console.error("[leaves] Error sending parallel notifications:", err)
-          );
+          approverIds = [...new Set(approvalStepsData.map((s) => s.approverId))];
         } else {
           const firstStepOrder = Math.min(...approvalStepsData.map((s) => s.stepOrder));
-          const firstApprovers = [...new Set(approvalStepsData.filter((s) => s.stepOrder === firstStepOrder).map((s) => s.approverId))];
-          notifyNewLeaveRequest(firstApprovers, notifyParams).catch((err) =>
-            console.error("[leaves] Error sending sequential notifications:", err)
-          );
+          approverIds = [...new Set(
+            approvalStepsData
+              .filter((s) => s.stepOrder === firstStepOrder)
+              .map((s) => s.approverId)
+          )];
         }
 
-        // Send confirmation to employee
-        notifyLeaveSubmitted(session.user.id, {
-          leaveRequestId: id,
-          leaveType: lt.label_fr ?? lt.code,
-          startDate: startDateStr,
-          endDate: endDateStr,
-          totalDays: leaveRequest.totalDays,
-        }).catch((err) =>
-          console.error("[leaves] Error sending submission confirmation:", err)
-        );
+        const notifResults = await Promise.allSettled([
+          notifyNewLeaveRequest(approverIds, notifyParams),
+          notifyLeaveSubmitted(session.user.id, {
+            leaveRequestId: id,
+            leaveType: lt.label_fr ?? lt.code,
+            startDate: startDateStr,
+            endDate: endDateStr,
+            totalDays: leaveRequest.totalDays,
+          }),
+        ]);
+
+        for (const r of notifResults) {
+          if (r.status === "rejected") {
+            console.error("[leaves] Notification error:", r.reason);
+          }
+        }
       }
 
       return NextResponse.json({ status: "PENDING_MANAGER" });

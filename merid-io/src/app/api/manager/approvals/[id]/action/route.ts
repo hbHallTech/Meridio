@@ -162,14 +162,17 @@ export async function POST(
   const startDateStr = leaveRequest.startDate.toISOString().split("T")[0];
   const endDateStr = leaveRequest.endDate.toISOString().split("T")[0];
 
+  // Await notification to ensure delivery in serverless environment
+  let notificationPromise: Promise<void> | null = null;
+
   if (action === "APPROVED" && newStatus === LeaveStatus.APPROVED) {
-    notifyLeaveApproved(leaveRequest.userId, {
+    notificationPromise = notifyLeaveApproved(leaveRequest.userId, {
       leaveRequestId,
       leaveType: leaveRequest.leaveTypeConfig.label_fr,
       startDate: startDateStr,
       endDate: endDateStr,
       approverName,
-    }).catch((err) => console.error("[manager/approvals] Error notifying approval:", err));
+    });
   } else if (action === "APPROVED" && newStatus === LeaveStatus.PENDING_HR) {
     // Notify HR approver(s) for next step
     const hrSteps = leaveRequest.approvalSteps.filter(
@@ -177,36 +180,39 @@ export async function POST(
     );
     if (hrSteps.length > 0) {
       const hrApproverIds = hrSteps.map((s) => s.approverId);
-      notifyNewLeaveRequest(hrApproverIds, {
+      notificationPromise = notifyNewLeaveRequest(hrApproverIds, {
         leaveRequestId,
         employeeName: `${leaveRequest.user.firstName} ${leaveRequest.user.lastName}`,
         leaveType: leaveRequest.leaveTypeConfig.label_fr,
         startDate: startDateStr,
         endDate: endDateStr,
         totalDays: leaveRequest.totalDays,
-      }).catch((err) => console.error("[manager/approvals] Error notifying HR step:", err));
+      });
     }
   } else if (action === "REFUSED") {
-    notifyLeaveRejected(leaveRequest.userId, {
+    notificationPromise = notifyLeaveRejected(leaveRequest.userId, {
       leaveRequestId,
       leaveType: leaveRequest.leaveTypeConfig.label_fr,
       startDate: startDateStr,
       endDate: endDateStr,
       approverName,
       comment: comment?.trim() || "",
-    }).catch((err) => console.error("[manager/approvals] Error notifying rejection:", err));
+    });
   } else if (action === "RETURNED") {
-    notifyLeaveNeedsRevision(leaveRequest.userId, {
+    notificationPromise = notifyLeaveNeedsRevision(leaveRequest.userId, {
       leaveRequestId,
       leaveType: leaveRequest.leaveTypeConfig.label_fr,
       startDate: startDateStr,
       endDate: endDateStr,
       approverName,
       comment: comment?.trim() || "",
-    }).catch((err) => console.error("[manager/approvals] Error notifying return:", err));
+    });
   }
 
-  await createAuditLog({
+  // Run notification + audit log in parallel, await both before response
+  await Promise.allSettled([
+    notificationPromise,
+    createAuditLog({
     userId: currentUserId,
     action: `MANAGER_APPROVAL_${action}`,
     entityType: "LeaveRequest",
@@ -219,7 +225,8 @@ export async function POST(
       employeeName: `${leaveRequest.user.firstName} ${leaveRequest.user.lastName}`,
       userAgent,
     },
-  }).catch(() => {});
+  }),
+  ]);
 
   return NextResponse.json({ success: true, newStatus });
 }
