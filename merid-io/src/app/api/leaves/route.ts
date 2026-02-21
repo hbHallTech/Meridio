@@ -432,7 +432,8 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Send notifications to approvers based on workflow mode
+  // Send notifications to approvers + confirmation to employee
+  // MUST be awaited — fire-and-forget is unreliable in Vercel serverless
   if (isSubmit && approvalStepsData.length > 0 && workflowConfig) {
     const employeeName = `${user.firstName} ${user.lastName}`;
     const notifyParams = {
@@ -444,35 +445,34 @@ export async function POST(request: NextRequest) {
       totalDays,
     };
 
+    let approverIds: string[];
     if (workflowConfig.mode === "PARALLEL") {
-      // PARALLEL mode → notify ALL approvers simultaneously
-      const allApproverIds = approvalStepsData.map((s) => s.approverId);
-      const uniqueApproverIds = [...new Set(allApproverIds)];
-      notifyNewLeaveRequest(uniqueApproverIds, notifyParams).catch((err) =>
-        console.error("[leaves] Error sending parallel notifications:", err)
-      );
+      approverIds = [...new Set(approvalStepsData.map((s) => s.approverId))];
     } else {
-      // SEQUENTIAL mode → notify only first step approver
       const firstStepOrder = Math.min(...approvalStepsData.map((s) => s.stepOrder));
-      const firstStepApprovers = approvalStepsData
-        .filter((s) => s.stepOrder === firstStepOrder)
-        .map((s) => s.approverId);
-      const uniqueFirstApprovers = [...new Set(firstStepApprovers)];
-      notifyNewLeaveRequest(uniqueFirstApprovers, notifyParams).catch((err) =>
-        console.error("[leaves] Error sending sequential notifications:", err)
-      );
+      approverIds = [...new Set(
+        approvalStepsData
+          .filter((s) => s.stepOrder === firstStepOrder)
+          .map((s) => s.approverId)
+      )];
     }
 
-    // Send confirmation email to the employee
-    notifyLeaveSubmitted(userId, {
-      leaveRequestId: leaveRequest.id,
-      leaveType: leaveType.label_fr,
-      startDate: data.startDate,
-      endDate: data.endDate,
-      totalDays,
-    }).catch((err) =>
-      console.error("[leaves] Error sending submission confirmation:", err)
-    );
+    const notificationResults = await Promise.allSettled([
+      notifyNewLeaveRequest(approverIds, notifyParams),
+      notifyLeaveSubmitted(userId, {
+        leaveRequestId: leaveRequest.id,
+        leaveType: leaveType.label_fr,
+        startDate: data.startDate,
+        endDate: data.endDate,
+        totalDays,
+      }),
+    ]);
+
+    for (const r of notificationResults) {
+      if (r.status === "rejected") {
+        console.error("[leaves] Notification error:", r.reason);
+      }
+    }
   }
 
   // If submitted (not draft), update pending days on balance (exceptional leaves are exempt)

@@ -182,36 +182,41 @@ export async function POST(
   const startDateStr = leaveRequest.startDate.toISOString().split("T")[0];
   const endDateStr = leaveRequest.endDate.toISOString().split("T")[0];
 
+  // Await notification to ensure delivery in serverless environment
+  let notificationPromise: Promise<void> | null = null;
+
   if (action === "APPROVED" && newStatus === LeaveStatus.APPROVED) {
-    notifyLeaveApproved(leaveRequest.userId, {
+    notificationPromise = notifyLeaveApproved(leaveRequest.userId, {
       leaveRequestId,
       leaveType: leaveRequest.leaveTypeConfig.label_fr,
       startDate: startDateStr,
       endDate: endDateStr,
       approverName,
-    }).catch((err) => console.error("[hr/approvals] Error notifying approval:", err));
+    });
   } else if (action === "REFUSED") {
-    notifyLeaveRejected(leaveRequest.userId, {
+    notificationPromise = notifyLeaveRejected(leaveRequest.userId, {
       leaveRequestId,
       leaveType: leaveRequest.leaveTypeConfig.label_fr,
       startDate: startDateStr,
       endDate: endDateStr,
       approverName,
       comment: comment?.trim() || "",
-    }).catch((err) => console.error("[hr/approvals] Error notifying rejection:", err));
+    });
   } else if (action === "RETURNED") {
-    notifyLeaveNeedsRevision(leaveRequest.userId, {
+    notificationPromise = notifyLeaveNeedsRevision(leaveRequest.userId, {
       leaveRequestId,
       leaveType: leaveRequest.leaveTypeConfig.label_fr,
       startDate: startDateStr,
       endDate: endDateStr,
       approverName,
       comment: comment?.trim() || "",
-    }).catch((err) => console.error("[hr/approvals] Error notifying return:", err));
+    });
   }
 
-  // Audit log
-  await createAuditLog({
+  // Run notification + audit log in parallel, await both before response
+  await Promise.allSettled([
+    notificationPromise,
+    createAuditLog({
     userId: currentUserId,
     action: `HR_APPROVAL_${action}`,
     entityType: "LeaveRequest",
@@ -224,7 +229,8 @@ export async function POST(
       employeeName: `${leaveRequest.user.firstName} ${leaveRequest.user.lastName}`,
       userAgent,
     },
-  }).catch(() => {});
+  }),
+  ]);
 
   return NextResponse.json({
     success: true,
