@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 
-// Allow up to 60s on Vercel Pro (hobby is capped at 10s regardless)
-export const maxDuration = 60;
+// Allow up to 300s on Vercel Pro (hobby is capped at 10s regardless)
+// Email download + PDF extraction + optional OCR can take a while
+export const maxDuration = 300;
 
 /**
  * POST /api/admin/import-documents

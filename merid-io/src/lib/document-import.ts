@@ -301,13 +301,23 @@ export function parsePayslipText(text: string): ParsedMetadata {
 
 // ─── OCR Fallback for image-based PDFs ───
 // Dynamically imported to avoid module-load issues in serverless
+// Has a 20s timeout to prevent freezing serverless functions
+
+const OCR_TIMEOUT = 20_000; // 20 seconds max for OCR
 
 async function ocrFromBuffer(pdfBuffer: Buffer): Promise<string> {
   const Tesseract = (await import("tesseract.js")).default;
-  const { data } = await Tesseract.recognize(pdfBuffer, "fra+eng", {
+  const ocrPromise = Tesseract.recognize(pdfBuffer, "fra+eng", {
     logger: () => {}, // Suppress progress logs
   });
-  return data.text;
+
+  const result = await Promise.race([
+    ocrPromise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("OCR timeout")), OCR_TIMEOUT)
+    ),
+  ]);
+  return result.data.text;
 }
 
 // ─── Extract text from PDF (built-in first, OCR fallback) ───
@@ -319,15 +329,17 @@ export async function extractTextFromPdf(buffer: Buffer): Promise<{ text: string
     if (text && text.length > 50) {
       return { text, usedOcr: false };
     }
-  } catch {
-    // Built-in extraction failed, fall through to OCR
+    console.log(`[imap-import] Built-in extraction: only ${text.length} chars, trying OCR...`);
+  } catch (e) {
+    console.log(`[imap-import] Built-in extraction failed:`, e instanceof Error ? e.message : e);
   }
 
-  // OCR fallback for image-based / scanned PDFs
+  // OCR fallback for image-based / scanned PDFs (with timeout)
   try {
     const text = await ocrFromBuffer(buffer);
     return { text: text.trim(), usedOcr: true };
-  } catch {
+  } catch (e) {
+    console.warn(`[imap-import] OCR failed:`, e instanceof Error ? e.message : e);
     return { text: "", usedOcr: true };
   }
 }
@@ -373,6 +385,55 @@ async function findEmployee(
   }
 
   return null;
+}
+
+// ─── MIME structure PDF part finder ───
+// Traverses ImapFlow bodyStructure tree to find PDF attachment MIME parts
+
+interface PdfPartInfo {
+  part: string;    // MIME part number (e.g., "2", "1.2")
+  filename: string;
+  size: number;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function findPdfParts(bodyStructure: any): PdfPartInfo[] {
+  const parts: PdfPartInfo[] = [];
+  if (!bodyStructure) return parts;
+
+  function walk(node: Record<string, unknown>, prefix?: string) {
+    const type = String(node.type || "").toLowerCase();
+    const disposition = String(node.disposition || "").toLowerCase();
+    const filename =
+      (node.dispositionParameters as Record<string, string>)?.filename ||
+      (node.parameters as Record<string, string>)?.name ||
+      "";
+
+    const partNum = prefix || String(node.part || "");
+
+    // Check if this part is a PDF
+    if (
+      type === "application/pdf" ||
+      (filename && /\.pdf$/i.test(filename))
+    ) {
+      parts.push({
+        part: partNum,
+        filename: filename || "document.pdf",
+        size: Number(node.size) || 0,
+      });
+    }
+
+    // Recurse into child nodes (multipart messages)
+    const children = node.childNodes as Record<string, unknown>[] | undefined;
+    if (Array.isArray(children)) {
+      for (const child of children) {
+        walk(child, child.part ? String(child.part) : undefined);
+      }
+    }
+  }
+
+  walk(bodyStructure);
+  return parts;
 }
 
 // ─── Raw TCP/TLS connectivity test ───
@@ -487,20 +548,7 @@ export async function processIncomingEmails(): Promise<ImportResult> {
 
   console.log(`[imap-import] Config: host=${host}, port=${port}, user=${user}, secure=${secure}`);
 
-  // Step 1: Test raw TCP+TLS connectivity before using ImapFlow
-  const t0 = Date.now();
-  try {
-    await testImapConnectivity(host, port, secure);
-    console.log(`[imap-import] Raw TLS connectivity OK (${Date.now() - t0}ms)`);
-  } catch (connTestErr) {
-    const elapsed = Date.now() - t0;
-    const errMsg = connTestErr instanceof Error ? connTestErr.message : String(connTestErr);
-    console.error(`[imap-import] Raw connectivity test FAILED after ${elapsed}ms:`, errMsg);
-    result.errors.push(`Connexion IMAP impossible vers ${host}:${port} — ${errMsg}`);
-    return result;
-  }
-
-  // Step 2: Connect via ImapFlow
+  // Connect via ImapFlow
   const { ImapFlow } = await import("imapflow");
 
   const client = new ImapFlow({
@@ -530,10 +578,9 @@ export async function processIncomingEmails(): Promise<ImportResult> {
     const lock = await client.getMailboxLock("INBOX");
 
     try {
-      // Fetch unseen messages
+      // Fetch metadata only (NOT source) — avoids downloading full message body upfront
       const messages = client.fetch({ seen: false }, {
         envelope: true,
-        source: true,
         bodyStructure: true,
       });
 
@@ -547,45 +594,56 @@ export async function processIncomingEmails(): Promise<ImportResult> {
         };
 
         try {
-          // Download full message to extract attachments
-          const downloadMsg = await client.download(msg.seq.toString(), undefined, { uid: false });
-          if (!downloadMsg) {
-            detail.error = "Could not download message";
+          // Find PDF attachment parts from MIME structure (without downloading content)
+          const pdfParts = findPdfParts(msg.bodyStructure);
+          console.log(`[imap-import] Message ${msg.seq}: ${detail.subject} — ${pdfParts.length} PDF part(s) found`);
+
+          if (pdfParts.length === 0) {
+            // No PDF attachments, skip without downloading
             result.details.push(detail);
             result.processed++;
             continue;
           }
 
-          // Parse raw email content for PDF attachments
-          const rawContent = await streamToBuffer(downloadMsg.content);
-          const attachments = extractPdfAttachments(rawContent);
-          detail.attachments = attachments.length;
+          detail.attachments = pdfParts.length;
 
-          if (attachments.length === 0) {
-            // No PDF attachments, skip
-            result.details.push(detail);
-            result.processed++;
-            continue;
-          }
-
-          for (const att of attachments) {
+          for (const pdfPart of pdfParts) {
             try {
+              // Download only the specific PDF MIME part (not the entire message)
+              console.log(`[imap-import] Downloading part ${pdfPart.part} (${pdfPart.filename})...`);
+              const t2 = Date.now();
+              const downloadMsg = await client.download(msg.seq.toString(), pdfPart.part, { uid: false });
+              if (!downloadMsg) {
+                detail.error = `Could not download part ${pdfPart.part}`;
+                continue;
+              }
+              const pdfBuffer = await streamToBuffer(downloadMsg.content);
+              console.log(`[imap-import] Downloaded ${pdfPart.filename}: ${pdfBuffer.length} bytes (${Date.now() - t2}ms)`);
+
+              // Verify PDF magic bytes
+              if (pdfBuffer.length < 5 || pdfBuffer[0] !== 0x25 || pdfBuffer[1] !== 0x50) {
+                detail.error = `${pdfPart.filename} is not a valid PDF`;
+                continue;
+              }
+
               // Extract text from PDF
-              const { text, usedOcr } = await extractTextFromPdf(att.content);
+              const t3 = Date.now();
+              const { text, usedOcr } = await extractTextFromPdf(pdfBuffer);
+              console.log(`[imap-import] Text extraction: ${text.length} chars, OCR=${usedOcr} (${Date.now() - t3}ms)`);
 
               if (!text || text.length < 20) {
                 // OCR failed or empty PDF
                 await logAudit(null, "EMAIL_IMPORT_OCR_FAILURE", {
                   entityType: "Document",
                   newValue: {
-                    filename: att.filename,
+                    filename: pdfPart.filename,
                     from: detail.from,
                     subject: detail.subject,
                     usedOcr,
                   },
                 });
-                detail.error = `OCR extraction failed for ${att.filename}`;
-                await notifyHrImportFailure(att.filename, detail.from, detail.subject, "OCR extraction produced no usable text");
+                detail.error = `OCR extraction failed for ${pdfPart.filename}`;
+                await notifyHrImportFailure(pdfPart.filename, detail.from, detail.subject, "OCR extraction produced no usable text");
                 continue;
               }
 
@@ -595,9 +653,9 @@ export async function processIncomingEmails(): Promise<ImportResult> {
               // Find matching employee
               const employee = await findEmployee(metadata);
               if (!employee) {
-                detail.error = `No matching employee for ${att.filename} (name: ${metadata.employeeName}, email: ${metadata.employeeEmail})`;
+                detail.error = `No matching employee for ${pdfPart.filename} (name: ${metadata.employeeName}, email: ${metadata.employeeEmail})`;
                 await notifyHrImportFailure(
-                  att.filename,
+                  pdfPart.filename,
                   detail.from,
                   detail.subject,
                   `Could not match employee: ${metadata.employeeName || "unknown"}`
@@ -608,7 +666,7 @@ export async function processIncomingEmails(): Promise<ImportResult> {
               // Upload PDF to Vercel Blob
               const ext = ".pdf";
               const blobPath = `documents/${employee.id}/${crypto.randomUUID()}${ext}`;
-              const blob = await put(blobPath, att.content, {
+              const blob = await put(blobPath, pdfBuffer, {
                 access: "private",
                 addRandomSuffix: false,
               });
@@ -627,10 +685,10 @@ export async function processIncomingEmails(): Promise<ImportResult> {
               const document = await prisma.document.create({
                 data: {
                   userId: employee.id,
-                  name: att.filename || docName,
+                  name: pdfPart.filename || docName,
                   type: metadata.documentType,
                   filePath: blob.url,
-                  fileSize: att.content.length,
+                  fileSize: pdfBuffer.length,
                   mimeType: "application/pdf",
                   metadata: {
                     ...(metadata.month ? { mois: metadata.month } : {}),
@@ -660,7 +718,7 @@ export async function processIncomingEmails(): Promise<ImportResult> {
               result.created++;
             } catch (attErr) {
               const errMsg = attErr instanceof Error ? attErr.message : String(attErr);
-              detail.error = `Error processing ${att.filename}: ${errMsg}`;
+              detail.error = `Error processing ${pdfPart.filename}: ${errMsg}`;
               result.errors.push(detail.error);
             }
           }
