@@ -9,7 +9,7 @@ interface DialogProps {
   title: string;
   description?: string;
   children: ReactNode;
-  maxWidth?: "sm" | "md" | "lg" | "xl";
+  maxWidth?: "sm" | "md" | "lg" | "xl" | "4xl";
 }
 
 const widthMap = {
@@ -17,6 +17,7 @@ const widthMap = {
   md: "max-w-md",
   lg: "max-w-lg",
   xl: "max-w-xl",
+  "4xl": "max-w-4xl",
 };
 
 export function Dialog({ open, onClose, title, description, children, maxWidth = "md" }: DialogProps) {
