@@ -20,6 +20,8 @@ import {
   ChevronRight,
   Archive,
   Users,
+  FilePlus,
+  ChevronDown,
 } from "lucide-react";
 
 // ─── Types ───
@@ -168,6 +170,10 @@ export default function HRDocumentsPage() {
 
   // Module state
   const [moduleDisabled, setModuleDisabled] = useState(false);
+
+  // Generation
+  const [genMenuOpen, setGenMenuOpen] = useState(false);
+  const [generating, setGenerating] = useState(false);
 
   // ─── Fetch employees ───
   useEffect(() => {
@@ -488,6 +494,39 @@ export default function HRDocumentsPage() {
     }
   };
 
+  // ─── Generate attestation for selected employee ───
+  const handleGenerate = async (type: "ATTESTATION_TRAVAIL" | "CERTIFICAT_TRAVAIL") => {
+    if (!selectedEmployeeId) return;
+    setGenMenuOpen(false);
+    setGenerating(true);
+    try {
+      const res = await fetch("/api/documents/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, userId: selectedEmployeeId }),
+      });
+      if (res.ok) {
+        const result = await res.json();
+        addToast({
+          type: "success",
+          title: lang === "en" ? "Document generated" : "Document généré",
+          message: result.document?.name,
+        });
+        fetchDocuments();
+      } else {
+        const err = await res.json();
+        addToast({ type: "error", title: err.error || "Erreur" });
+      }
+    } catch {
+      addToast({
+        type: "error",
+        title: lang === "en" ? "Network error" : "Erreur réseau",
+      });
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   // ─── Download ───
   const handleDownload = (doc: DocumentItem) => {
     const a = document.createElement("a");
@@ -601,17 +640,62 @@ export default function HRDocumentsPage() {
               </div>
             )}
             {selectedEmployeeId && (
-              <button
-                onClick={() => {
-                  resetUploadForm();
-                  setUploadOpen(true);
-                }}
-                className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 whitespace-nowrap"
-                style={{ backgroundColor: "#1B3A5C" }}
-              >
-                <Plus className="h-4 w-4" />
-                {lang === "en" ? "Upload" : "Téléverser"}
-              </button>
+              <div className="flex items-center gap-2">
+                {/* Generate dropdown */}
+                <div className="relative">
+                  <button
+                    onClick={() => setGenMenuOpen(!genMenuOpen)}
+                    disabled={generating}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#1B3A5C] px-3 py-2 text-sm font-medium text-[#1B3A5C] transition-colors hover:bg-[#1B3A5C]/5 disabled:opacity-50 whitespace-nowrap"
+                    aria-haspopup="true"
+                    aria-expanded={genMenuOpen}
+                  >
+                    {generating ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <FilePlus className="h-4 w-4" />
+                    )}
+                    {lang === "en" ? "Generate" : "Générer"}
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  </button>
+                  {genMenuOpen && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-10"
+                        onClick={() => setGenMenuOpen(false)}
+                      />
+                      <div className="absolute right-0 z-20 mt-1 w-56 rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+                        <button
+                          onClick={() => handleGenerate("ATTESTATION_TRAVAIL")}
+                          className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50"
+                        >
+                          <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: "#8B5CF6" }} />
+                          {lang === "en" ? "Work Certificate" : "Attestation de travail"}
+                        </button>
+                        <button
+                          onClick={() => handleGenerate("CERTIFICAT_TRAVAIL")}
+                          className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50"
+                        >
+                          <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: "#06B6D4" }} />
+                          {lang === "en" ? "Employment Certificate" : "Certificat de travail"}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+                {/* Upload */}
+                <button
+                  onClick={() => {
+                    resetUploadForm();
+                    setUploadOpen(true);
+                  }}
+                  className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 whitespace-nowrap"
+                  style={{ backgroundColor: "#1B3A5C" }}
+                >
+                  <Plus className="h-4 w-4" />
+                  {lang === "en" ? "Upload" : "Téléverser"}
+                </button>
+              </div>
             )}
           </div>
         </div>
