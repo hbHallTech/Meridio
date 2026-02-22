@@ -31,6 +31,7 @@ import {
   X,
   ClipboardList,
   Wallet,
+  FileText,
 } from "lucide-react";
 import { MeridioLogo, MeridioIcon } from "@/components/MeridioLogo";
 
@@ -110,6 +111,7 @@ export function Sidebar({
         { href: "/leaves", label: t("leaves"), icon: CalendarDays },
         { href: "/leaves/new", label: t("newLeave"), icon: PlusCircle },
         { href: "/profile", label: t("profile"), icon: User },
+        { href: "/mes-documents", label: t("documents"), icon: FileText },
       ],
     },
     {

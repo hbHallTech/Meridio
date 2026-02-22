@@ -68,7 +68,8 @@
     "company": "Entreprise",
     "audit": "Audit",
     "delegations": "Délégations",
-    "exceptionalRules": "Règles exceptionnelles"
+    "exceptionalRules": "Règles exceptionnelles",
+    "documents": "Mes documents"
   },
   "leaves": {
     "title": "Mes demandes de congé",
