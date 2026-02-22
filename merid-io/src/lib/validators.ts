@@ -163,6 +163,28 @@ export const documentListQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).default(0),
 });
 
+// ─── Document Templates ───
+
+export const templateCreateSchema = z.object({
+  name: z.string().min(1, "Le nom est requis").max(255),
+  type: z.enum(["FICHE_PAIE", "ATTESTATION_TRAVAIL", "CERTIFICAT_TRAVAIL", "CONTRAT", "AUTRE"]),
+  subject: z.string().max(500).optional(),
+  content: z.string().min(1, "Le contenu est requis"),
+  variables: z.array(z.string()).optional(),
+  isActive: z.boolean().optional(),
+  isDefault: z.boolean().optional(),
+});
+
+export const templateUpdateSchema = z.object({
+  name: z.string().min(1).max(255).optional(),
+  type: z.enum(["FICHE_PAIE", "ATTESTATION_TRAVAIL", "CERTIFICAT_TRAVAIL", "CONTRAT", "AUTRE"]).optional(),
+  subject: z.string().max(500).optional().nullable(),
+  content: z.string().min(1).optional(),
+  variables: z.array(z.string()).optional(),
+  isActive: z.boolean().optional(),
+  isDefault: z.boolean().optional(),
+});
+
 export type LoginInput = z.infer<typeof loginSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
@@ -178,3 +200,5 @@ export type ApprovalInput = z.infer<typeof approvalSchema>;
 export type DocumentCreateInput = z.infer<typeof documentCreateSchema>;
 export type DocumentUpdateInput = z.infer<typeof documentUpdateSchema>;
 export type DocumentListQuery = z.infer<typeof documentListQuerySchema>;
+export type TemplateCreateInput = z.infer<typeof templateCreateSchema>;
+export type TemplateUpdateInput = z.infer<typeof templateUpdateSchema>;
