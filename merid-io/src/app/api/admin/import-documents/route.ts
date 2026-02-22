@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 
+// Allow up to 30s on Vercel Pro (hobby is capped at 10s regardless)
+export const maxDuration = 30;
+
 /**
  * POST /api/admin/import-documents
  *
@@ -18,16 +21,32 @@ export async function POST() {
     return NextResponse.json({ error: "Accès réservé Admin/RH" }, { status: 403 });
   }
 
+  // Quick check: if IMAP credentials are missing, return immediately
+  // without loading the heavy import module
+  if (!process.env.DOCS_IMAP_HOST || !process.env.DOCS_IMAP_USER || !process.env.DOCS_IMAP_PASS) {
+    return NextResponse.json({
+      success: false,
+      error: "Configuration IMAP manquante (DOCS_IMAP_HOST, DOCS_IMAP_USER, DOCS_IMAP_PASS)",
+      processed: 0,
+      created: 0,
+      errors: ["IMAP credentials not configured"],
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   try {
     // Dynamic import to avoid pulling heavy deps at module load time
     const { processIncomingEmails } = await import("@/lib/document-import");
 
-    // Route-level timeout: 25 seconds (Vercel hobby = 10s, pro = 60s)
-    const ROUTE_TIMEOUT = 25_000;
+    // Route-level timeout: 9 seconds (Vercel hobby = 10s hard limit)
+    const ROUTE_TIMEOUT = 9_000;
     const result = await Promise.race([
       processIncomingEmails(),
       new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("Import timeout — the operation took too long. Check IMAP settings.")), ROUTE_TIMEOUT)
+        setTimeout(
+          () => reject(new Error("Import timeout — vérifiez la configuration IMAP (hôte, port, identifiants)")),
+          ROUTE_TIMEOUT
+        )
       ),
     ]);
 

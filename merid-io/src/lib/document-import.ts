@@ -376,7 +376,7 @@ async function findEmployee(
 
 // ─── IMAP connection + email processing ───
 
-const IMAP_CONNECT_TIMEOUT = 15_000; // 15 seconds
+const IMAP_CONNECT_TIMEOUT = 7_000; // 7 seconds (must be under Vercel's function timeout)
 
 export async function processIncomingEmails(): Promise<ImportResult> {
   const host = process.env.DOCS_IMAP_HOST;
