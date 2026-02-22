@@ -67,6 +67,10 @@ export type AuditAction =
   | "TEMPLATE_CREATED"
   | "TEMPLATE_UPDATED"
   | "TEMPLATE_DELETED"
+  // Email Import
+  | "EMAIL_IMPORT_SUCCESS"
+  | "EMAIL_IMPORT_FAILURE"
+  | "EMAIL_IMPORT_OCR_FAILURE"
   // Auth / 2FA
   | "2FA_CODE_SENT"
   | "2FA_VERIFIED"

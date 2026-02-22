@@ -163,6 +163,8 @@ export default function HRDocumentsPage() {
   // Viewer
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerDoc, setViewerDoc] = useState<DocumentItem | null>(null);
+  const [viewerUrl, setViewerUrl] = useState<string | null>(null);
+  const [viewerLoading, setViewerLoading] = useState(false);
 
   // Module state
   const [moduleDisabled, setModuleDisabled] = useState(false);
@@ -450,9 +452,40 @@ export default function HRDocumentsPage() {
   };
 
   // ─── View document ───
-  const handleView = (doc: DocumentItem) => {
+  const handleView = async (doc: DocumentItem) => {
     setViewerDoc(doc);
     setViewerOpen(true);
+    setViewerUrl(null);
+    setViewerLoading(true);
+
+    try {
+      const res = await fetch(`/api/documents/${doc.id}/download`);
+      if (res.ok) {
+        const blob = await res.blob();
+        setViewerUrl(URL.createObjectURL(blob));
+      } else {
+        addToast({
+          type: "error",
+          title: lang === "en" ? "Cannot load document" : "Impossible de charger le document",
+        });
+      }
+    } catch {
+      addToast({
+        type: "error",
+        title: lang === "en" ? "Network error" : "Erreur réseau",
+      });
+    } finally {
+      setViewerLoading(false);
+    }
+  };
+
+  const closeViewer = () => {
+    setViewerOpen(false);
+    setViewerDoc(null);
+    if (viewerUrl) {
+      URL.revokeObjectURL(viewerUrl);
+      setViewerUrl(null);
+    }
   };
 
   // ─── Download ───
@@ -1192,10 +1225,7 @@ export default function HRDocumentsPage() {
       {viewerDoc && (
         <Dialog
           open={viewerOpen}
-          onClose={() => {
-            setViewerOpen(false);
-            setViewerDoc(null);
-          }}
+          onClose={closeViewer}
           title={viewerDoc.name}
           maxWidth="4xl"
         >
@@ -1222,11 +1252,24 @@ export default function HRDocumentsPage() {
               </button>
             </div>
             <div className="relative h-[60vh] w-full overflow-hidden rounded-lg border border-gray-200 bg-gray-100">
-              <iframe
-                src={`/api/documents/${viewerDoc.id}/download`}
-                className="h-full w-full"
-                title={viewerDoc.name}
-              />
+              {viewerLoading ? (
+                <div className="flex h-full items-center justify-center">
+                  <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+                </div>
+              ) : viewerUrl ? (
+                <iframe
+                  src={viewerUrl}
+                  className="h-full w-full"
+                  title={viewerDoc.name}
+                />
+              ) : (
+                <div className="flex h-full flex-col items-center justify-center text-gray-400">
+                  <FileText className="h-12 w-12" />
+                  <p className="mt-2 text-sm">
+                    {lang === "en" ? "Unable to load preview" : "Impossible de charger l'aperçu"}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </Dialog>
