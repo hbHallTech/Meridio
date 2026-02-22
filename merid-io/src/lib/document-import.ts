@@ -11,12 +11,62 @@
  */
 
 import { ImapFlow } from "imapflow";
-import { PDFParse } from "pdf-parse";
 import Tesseract from "tesseract.js";
 import { prisma } from "@/lib/prisma";
 import { put } from "@vercel/blob";
 import { logAudit } from "@/lib/audit";
 import crypto from "crypto";
+
+// ─── DOM polyfills for pdfjs-dist (used by pdf-parse) in serverless ───
+// pdfjs-dist requires DOMMatrix, ImageData, Path2D at module evaluation.
+// These stubs are sufficient for text extraction (no rendering).
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function ensurePdfjsPolyfills() {
+  const g = globalThis as any;
+  if (typeof g.DOMMatrix === "undefined") {
+    g.DOMMatrix = class DOMMatrix {
+      a = 1; b = 0; c = 0; d = 1; e = 0; f = 0;
+      m11 = 1; m12 = 0; m13 = 0; m14 = 0;
+      m21 = 0; m22 = 1; m23 = 0; m24 = 0;
+      m31 = 0; m32 = 0; m33 = 1; m34 = 0;
+      m41 = 0; m42 = 0; m43 = 0; m44 = 1;
+      is2D = true; isIdentity = true;
+      inverse() { return new g.DOMMatrix(); }
+      multiply() { return new g.DOMMatrix(); }
+      scale() { return new g.DOMMatrix(); }
+      translate() { return new g.DOMMatrix(); }
+      transformPoint(p: any) { return p ?? { x: 0, y: 0 }; }
+    };
+  }
+  if (typeof g.ImageData === "undefined") {
+    g.ImageData = class ImageData {
+      data: Uint8ClampedArray;
+      width: number;
+      height: number;
+      constructor(sw: number, sh: number) {
+        this.width = sw;
+        this.height = sh;
+        this.data = new Uint8ClampedArray(sw * sh * 4);
+      }
+    };
+  }
+  if (typeof g.Path2D === "undefined") {
+    g.Path2D = class Path2D {
+      addPath() {}
+      closePath() {}
+      moveTo() {}
+      lineTo() {}
+      bezierCurveTo() {}
+      quadraticCurveTo() {}
+      arc() {}
+      arcTo() {}
+      ellipse() {}
+      rect() {}
+    };
+  }
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 // ─── Types ───
 
@@ -190,7 +240,11 @@ async function ocrFromBuffer(pdfBuffer: Buffer): Promise<string> {
 
 export async function extractTextFromPdf(buffer: Buffer): Promise<{ text: string; usedOcr: boolean }> {
   try {
-    // Try text extraction first (fast, accurate for digital PDFs)
+    // Ensure DOM polyfills are available before loading pdfjs-dist
+    ensurePdfjsPolyfills();
+
+    // Dynamic import to avoid module-evaluation crash in serverless
+    const { PDFParse } = await import("pdf-parse");
     const parser = new PDFParse({ data: new Uint8Array(buffer) });
     const result = await parser.getText();
     const text = result.text?.trim();
