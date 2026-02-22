@@ -16,6 +16,10 @@ import {
   Plug,
   ToggleLeft,
   Star,
+  Mail,
+  Play,
+  CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
 
 // ─── Types ───
@@ -146,6 +150,13 @@ export default function DocumentsSettingsPage() {
 
   // ─── Integration tab state ───
   const [integrationSaving, setIntegrationSaving] = useState(false);
+  const [importRunning, setImportRunning] = useState(false);
+  const [importResult, setImportResult] = useState<{
+    success: boolean;
+    processed: number;
+    created: number;
+    errors: string[];
+  } | null>(null);
 
   // ─── Fetch company config ───
   const fetchConfig = useCallback(async () => {
@@ -265,6 +276,47 @@ export default function DocumentsSettingsPage() {
       });
     } finally {
       setIntegrationSaving(false);
+    }
+  };
+
+  // ─── Manual email import trigger ───
+  const handleManualImport = async () => {
+    setImportRunning(true);
+    setImportResult(null);
+    try {
+      const res = await fetch("/api/cron/import-documents");
+      const data = await res.json();
+      setImportResult({
+        success: data.success ?? false,
+        processed: data.processed ?? 0,
+        created: data.created ?? 0,
+        errors: data.errors ?? [],
+      });
+      if (data.success && data.created > 0) {
+        addToast({
+          type: "success",
+          title: lang === "en"
+            ? `${data.created} document(s) imported`
+            : `${data.created} document(s) importé(s)`,
+        });
+      } else if (data.success && data.created === 0) {
+        addToast({
+          type: "info",
+          title: lang === "en" ? "No new documents found" : "Aucun nouveau document trouvé",
+        });
+      } else {
+        addToast({
+          type: "error",
+          title: data.error || (lang === "en" ? "Import failed" : "Échec de l'import"),
+        });
+      }
+    } catch {
+      addToast({
+        type: "error",
+        title: lang === "en" ? "Network error" : "Erreur réseau",
+      });
+    } finally {
+      setImportRunning(false);
     }
   };
 
@@ -770,6 +822,90 @@ export default function DocumentsSettingsPage() {
       {/* ═══ Integration Tab ═══ */}
       {activeTab === "integration" && config && (
         <div className="space-y-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+          {/* Email import section */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+              <Mail className="h-4 w-4" />
+              {lang === "en" ? "Automatic Email Import" : "Import automatique par e-mail"}
+            </h3>
+            <p className="text-xs text-gray-500 mb-4">
+              {lang === "en"
+                ? "The system polls an IMAP mailbox every hour for emails with PDF attachments. Documents are automatically created using OCR text extraction."
+                : "Le système interroge une boîte IMAP toutes les heures pour les e-mails avec pièces jointes PDF. Les documents sont créés automatiquement via extraction OCR."}
+            </p>
+
+            <div className="rounded-lg bg-gray-50 border border-gray-200 p-4 space-y-3">
+              <h4 className="text-xs font-semibold text-gray-600">
+                {lang === "en" ? "IMAP Configuration (Environment Variables)" : "Configuration IMAP (Variables d'environnement)"}
+              </h4>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-md bg-white border border-gray-200 px-3 py-2">
+                  <span className="block text-[10px] font-medium text-gray-400 uppercase tracking-wide">DOCS_IMAP_HOST</span>
+                  <span className="text-xs font-mono text-gray-600">
+                    {lang === "en" ? "IMAP server hostname" : "Nom d'hôte du serveur IMAP"}
+                  </span>
+                </div>
+                <div className="rounded-md bg-white border border-gray-200 px-3 py-2">
+                  <span className="block text-[10px] font-medium text-gray-400 uppercase tracking-wide">DOCS_IMAP_PORT</span>
+                  <span className="text-xs font-mono text-gray-600">
+                    {lang === "en" ? "Port (default: 993)" : "Port (défaut : 993)"}
+                  </span>
+                </div>
+                <div className="rounded-md bg-white border border-gray-200 px-3 py-2">
+                  <span className="block text-[10px] font-medium text-gray-400 uppercase tracking-wide">DOCS_IMAP_USER</span>
+                  <span className="text-xs font-mono text-gray-600">
+                    {lang === "en" ? "IMAP username/email" : "Utilisateur/e-mail IMAP"}
+                  </span>
+                </div>
+                <div className="rounded-md bg-white border border-gray-200 px-3 py-2">
+                  <span className="block text-[10px] font-medium text-gray-400 uppercase tracking-wide">DOCS_IMAP_PASS</span>
+                  <span className="text-xs font-mono text-gray-600">
+                    {lang === "en" ? "IMAP password" : "Mot de passe IMAP"}
+                  </span>
+                </div>
+              </div>
+              <p className="text-[11px] text-gray-400">
+                {lang === "en"
+                  ? "These variables must be set in your deployment environment. The cron job runs automatically every hour."
+                  : "Ces variables doivent être définies dans votre environnement de déploiement. Le cron s'exécute automatiquement toutes les heures."}
+              </p>
+            </div>
+
+            {/* Manual import trigger */}
+            <div className="mt-4 flex items-center gap-3">
+              <button
+                onClick={handleManualImport}
+                disabled={importRunning}
+                className="inline-flex items-center gap-2 rounded-lg border border-[#1B3A5C] px-4 py-2 text-sm font-medium text-[#1B3A5C] transition-colors hover:bg-[#1B3A5C]/5 disabled:opacity-50"
+              >
+                {importRunning ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Play className="h-4 w-4" />
+                )}
+                {lang === "en" ? "Run Import Now" : "Lancer l'import maintenant"}
+              </button>
+              {importResult && (
+                <div className={`flex items-center gap-2 text-sm ${importResult.success ? "text-emerald-600" : "text-red-600"}`}>
+                  {importResult.success ? (
+                    <CheckCircle2 className="h-4 w-4" />
+                  ) : (
+                    <AlertCircle className="h-4 w-4" />
+                  )}
+                  <span>
+                    {importResult.success
+                      ? lang === "en"
+                        ? `${importResult.processed} processed, ${importResult.created} created`
+                        : `${importResult.processed} traité(s), ${importResult.created} créé(s)`
+                      : importResult.errors[0] || (lang === "en" ? "Import failed" : "Échec")}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="border-t border-gray-100 pt-5" />
+
           {/* Notification email */}
           <div>
             <h3 className="text-sm font-semibold text-gray-700 mb-3">

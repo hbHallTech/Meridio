@@ -117,6 +117,8 @@ export default function MesDocumentsPage() {
   // PDF Viewer
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerDoc, setViewerDoc] = useState<DocumentItem | null>(null);
+  const [viewerUrl, setViewerUrl] = useState<string | null>(null);
+  const [viewerLoading, setViewerLoading] = useState(false);
 
   // Module availability
   const [moduleDisabled, setModuleDisabled] = useState(false);
@@ -189,13 +191,36 @@ export default function MesDocumentsPage() {
   const handleView = async (doc: DocumentItem) => {
     setViewerDoc(doc);
     setViewerOpen(true);
+    setViewerUrl(null);
+    setViewerLoading(true);
+
+    // Fetch PDF as blob for reliable iframe rendering
+    try {
+      const res = await fetch(`/api/documents/${doc.id}/download`);
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        setViewerUrl(url);
+      } else {
+        addToast({
+          type: "error",
+          title: lang === "en" ? "Cannot load document" : "Impossible de charger le document",
+        });
+      }
+    } catch {
+      addToast({
+        type: "error",
+        title: lang === "en" ? "Network error" : "Erreur réseau",
+      });
+    } finally {
+      setViewerLoading(false);
+    }
 
     // Auto-update status NOUVEAU → OUVERT via GET /api/documents/:id
     if (doc.status === "NOUVEAU") {
       try {
         const res = await fetch(`/api/documents/${doc.id}`);
         if (res.ok) {
-          // Update local state to reflect status change
           setData((prev) => {
             if (!prev) return prev;
             return {
@@ -209,6 +234,15 @@ export default function MesDocumentsPage() {
       } catch {
         // Silent — status update is best-effort
       }
+    }
+  };
+
+  const closeViewer = () => {
+    setViewerOpen(false);
+    setViewerDoc(null);
+    if (viewerUrl) {
+      URL.revokeObjectURL(viewerUrl);
+      setViewerUrl(null);
     }
   };
 
@@ -605,10 +639,7 @@ export default function MesDocumentsPage() {
       {viewerDoc && (
         <Dialog
           open={viewerOpen}
-          onClose={() => {
-            setViewerOpen(false);
-            setViewerDoc(null);
-          }}
+          onClose={closeViewer}
           title={viewerDoc.name}
           maxWidth="4xl"
         >
@@ -635,13 +666,26 @@ export default function MesDocumentsPage() {
                 {lang === "en" ? "Download" : "Télécharger"}
               </button>
             </div>
-            {/* PDF iframe */}
+            {/* PDF viewer */}
             <div className="relative h-[60vh] w-full overflow-hidden rounded-lg border border-gray-200 bg-gray-100">
-              <iframe
-                src={`/api/documents/${viewerDoc.id}/download`}
-                className="h-full w-full"
-                title={viewerDoc.name}
-              />
+              {viewerLoading ? (
+                <div className="flex h-full items-center justify-center">
+                  <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+                </div>
+              ) : viewerUrl ? (
+                <iframe
+                  src={viewerUrl}
+                  className="h-full w-full"
+                  title={viewerDoc.name}
+                />
+              ) : (
+                <div className="flex h-full flex-col items-center justify-center text-gray-400">
+                  <FileText className="h-12 w-12" />
+                  <p className="mt-2 text-sm">
+                    {lang === "en" ? "Unable to load preview" : "Impossible de charger l'aperçu"}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </Dialog>
