@@ -239,6 +239,7 @@ export default function DocumentsSettingsPage() {
         addToast({
           type: "success",
           title: lang === "en" ? "Settings saved" : "Paramètres enregistrés",
+          message: lang === "en" ? "Your changes have been saved successfully." : "Vos modifications ont été enregistrées avec succès.",
         });
       } else {
         const err = await res.json();
@@ -277,9 +278,15 @@ export default function DocumentsSettingsPage() {
         }),
       });
       if (res.ok) {
+        // Update local state: mark password as configured if one was sent
+        if (docsImapPass) {
+          setConfig((prev) => prev ? { ...prev, docsImapPassConfigured: true } : prev);
+          setDocsImapPass("");
+        }
         addToast({
           type: "success",
           title: lang === "en" ? "Integration saved" : "Intégration enregistrée",
+          message: lang === "en" ? "Your changes have been saved successfully." : "Vos modifications ont été enregistrées avec succès.",
         });
       } else {
         const err = await res.json();

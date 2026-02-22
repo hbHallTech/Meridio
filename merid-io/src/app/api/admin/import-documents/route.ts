@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 
-// Allow up to 30s on Vercel Pro (hobby is capped at 10s regardless)
-export const maxDuration = 30;
+// Allow up to 60s on Vercel Pro (hobby is capped at 10s regardless)
+export const maxDuration = 60;
 
 /**
  * POST /api/admin/import-documents
@@ -25,13 +25,13 @@ export async function POST() {
     // Dynamic import to avoid pulling heavy deps at module load time
     const { processIncomingEmails } = await import("@/lib/document-import");
 
-    // Route-level timeout: 9 seconds (Vercel hobby = 10s hard limit)
-    const ROUTE_TIMEOUT = 9_000;
+    // Route-level timeout: 55 seconds (maxDuration=60 gives us headroom)
+    const ROUTE_TIMEOUT = 55_000;
     const result = await Promise.race([
       processIncomingEmails(),
       new Promise<never>((_, reject) =>
         setTimeout(
-          () => reject(new Error("Import timeout — vérifiez la configuration IMAP (hôte, port, identifiants)")),
+          () => reject(new Error("Import timeout — la connexion IMAP prend trop de temps. Vérifiez l'hôte, le port et les identifiants.")),
           ROUTE_TIMEOUT
         )
       ),
