@@ -125,6 +125,44 @@ export const approvalSchema = z.object({
   comment: z.string().optional(),
 });
 
+// ─── Documents Module ───
+
+export const documentCreateSchema = z.object({
+  userId: z.string().min(1, "L'identifiant employé est requis"),
+  name: z.string().min(1, "Le nom du document est requis").max(255),
+  type: z.enum(["FICHE_PAIE", "ATTESTATION_TRAVAIL", "CERTIFICAT_TRAVAIL", "CONTRAT", "AUTRE"]),
+  metadata: z
+    .object({
+      mois: z.string().optional(),
+      annee: z.string().optional(),
+    })
+    .passthrough()
+    .optional(),
+});
+
+export const documentUpdateSchema = z.object({
+  name: z.string().min(1).max(255).optional(),
+  type: z.enum(["FICHE_PAIE", "ATTESTATION_TRAVAIL", "CERTIFICAT_TRAVAIL", "CONTRAT", "AUTRE"]).optional(),
+  status: z.enum(["NOUVEAU", "OUVERT", "ARCHIVE"]).optional(),
+  metadata: z
+    .object({
+      mois: z.string().optional(),
+      annee: z.string().optional(),
+    })
+    .passthrough()
+    .optional(),
+});
+
+export const documentListQuerySchema = z.object({
+  type: z.enum(["FICHE_PAIE", "ATTESTATION_TRAVAIL", "CERTIFICAT_TRAVAIL", "CONTRAT", "AUTRE"]).optional(),
+  status: z.enum(["NOUVEAU", "OUVERT", "ARCHIVE"]).optional(),
+  mois: z.string().regex(/^\d{2}$/, "Format mois: 01-12").optional(),
+  annee: z.string().regex(/^\d{4}$/, "Format année: YYYY").optional(),
+  search: z.string().max(100).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+
 export type LoginInput = z.infer<typeof loginSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
@@ -137,3 +175,6 @@ export type LeaveTypeConfigInput = z.infer<typeof leaveTypeConfigSchema>;
 export type OfficeInput = z.infer<typeof officeSchema>;
 export type DelegationInput = z.infer<typeof delegationSchema>;
 export type ApprovalInput = z.infer<typeof approvalSchema>;
+export type DocumentCreateInput = z.infer<typeof documentCreateSchema>;
+export type DocumentUpdateInput = z.infer<typeof documentUpdateSchema>;
+export type DocumentListQuery = z.infer<typeof documentListQuerySchema>;
