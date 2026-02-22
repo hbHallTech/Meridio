@@ -10,63 +10,11 @@
  *   DOCS_IMPORT_CRON_SECRET (for securing the cron endpoint)
  */
 
-import { ImapFlow } from "imapflow";
-import Tesseract from "tesseract.js";
 import { prisma } from "@/lib/prisma";
 import { put } from "@vercel/blob";
 import { logAudit } from "@/lib/audit";
 import crypto from "crypto";
-
-// ─── DOM polyfills for pdfjs-dist (used by pdf-parse) in serverless ───
-// pdfjs-dist requires DOMMatrix, ImageData, Path2D at module evaluation.
-// These stubs are sufficient for text extraction (no rendering).
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
-function ensurePdfjsPolyfills() {
-  const g = globalThis as any;
-  if (typeof g.DOMMatrix === "undefined") {
-    g.DOMMatrix = class DOMMatrix {
-      a = 1; b = 0; c = 0; d = 1; e = 0; f = 0;
-      m11 = 1; m12 = 0; m13 = 0; m14 = 0;
-      m21 = 0; m22 = 1; m23 = 0; m24 = 0;
-      m31 = 0; m32 = 0; m33 = 1; m34 = 0;
-      m41 = 0; m42 = 0; m43 = 0; m44 = 1;
-      is2D = true; isIdentity = true;
-      inverse() { return new g.DOMMatrix(); }
-      multiply() { return new g.DOMMatrix(); }
-      scale() { return new g.DOMMatrix(); }
-      translate() { return new g.DOMMatrix(); }
-      transformPoint(p: any) { return p ?? { x: 0, y: 0 }; }
-    };
-  }
-  if (typeof g.ImageData === "undefined") {
-    g.ImageData = class ImageData {
-      data: Uint8ClampedArray;
-      width: number;
-      height: number;
-      constructor(sw: number, sh: number) {
-        this.width = sw;
-        this.height = sh;
-        this.data = new Uint8ClampedArray(sw * sh * 4);
-      }
-    };
-  }
-  if (typeof g.Path2D === "undefined") {
-    g.Path2D = class Path2D {
-      addPath() {}
-      closePath() {}
-      moveTo() {}
-      lineTo() {}
-      bezierCurveTo() {}
-      quadraticCurveTo() {}
-      arc() {}
-      arcTo() {}
-      ellipse() {}
-      rect() {}
-    };
-  }
-}
-/* eslint-enable @typescript-eslint/no-explicit-any */
+import { inflateSync } from "zlib";
 
 // ─── Types ───
 
@@ -113,6 +61,131 @@ const MONTH_MAP: Record<string, string> = {
   "may": "05", "june": "06", "july": "07", "august": "08",
   "september": "09", "october": "10", "november": "11", "december": "12",
 };
+
+// ─── Built-in lightweight PDF text extractor ───
+// Parses PDF streams directly using Node.js zlib — no pdfjs-dist or DOM required.
+
+export function extractTextFromPdfBuffer(buffer: Buffer): string {
+  const textChunks: string[] = [];
+
+  // Find all stream objects and extract text operators
+  const pdfStr = buffer.toString("latin1");
+
+  // Match stream...endstream blocks
+  const streamRegex = /stream\r?\n([\s\S]*?)endstream/g;
+  let streamMatch;
+
+  while ((streamMatch = streamRegex.exec(pdfStr)) !== null) {
+    let content = streamMatch[1];
+
+    // Check if stream is FlateDecode compressed
+    // Look backwards for the object dictionary to check /Filter
+    const beforeStream = pdfStr.slice(Math.max(0, streamMatch.index - 500), streamMatch.index);
+    const isCompressed = /\/Filter\s*\/FlateDecode/i.test(beforeStream);
+
+    if (isCompressed) {
+      try {
+        // Convert latin1 string back to bytes for decompression
+        const compressedBytes = Buffer.from(content, "latin1");
+        const decompressed = inflateSync(compressedBytes);
+        content = decompressed.toString("latin1");
+      } catch {
+        // Decompression failed — skip this stream
+        continue;
+      }
+    }
+
+    // Extract text from content stream operators
+    extractTextOperators(content, textChunks);
+  }
+
+  // Join chunks with appropriate spacing
+  let result = "";
+  for (const chunk of textChunks) {
+    if (!chunk) continue;
+    // Add space between chunks unless it's a newline
+    if (result && !result.endsWith("\n") && !chunk.startsWith("\n")) {
+      result += " ";
+    }
+    result += chunk;
+  }
+
+  return result.trim();
+}
+
+/** Decode PDF string escape sequences */
+function decodePdfString(s: string): string {
+  return s
+    .replace(/\\n/g, "\n")
+    .replace(/\\r/g, "\r")
+    .replace(/\\t/g, "\t")
+    .replace(/\\b/g, "\b")
+    .replace(/\\f/g, "\f")
+    .replace(/\\\(/g, "(")
+    .replace(/\\\)/g, ")")
+    .replace(/\\\\/g, "\\")
+    .replace(/\\(\d{1,3})/g, (_m, oct) => String.fromCharCode(parseInt(oct, 8)));
+}
+
+/** Decode hex string to text */
+function decodeHexString(hex: string): string {
+  try {
+    return Buffer.from(hex, "hex").toString("latin1");
+  } catch {
+    return "";
+  }
+}
+
+/** Extract text from PDF content stream operators */
+function extractTextOperators(content: string, chunks: string[]) {
+  // Tj with parenthesized string: (text) Tj
+  const tjParenMatches = content.matchAll(/\(([^)]*)\)\s*Tj/g);
+  for (const m of tjParenMatches) {
+    chunks.push(decodePdfString(m[1]));
+  }
+
+  // Tj with hex string: <hex> Tj
+  const tjHexMatches = content.matchAll(/<([0-9A-Fa-f]+)>\s*Tj/g);
+  for (const m of tjHexMatches) {
+    const text = decodeHexString(m[1]);
+    if (text && /\S/.test(text)) {
+      chunks.push(text);
+    }
+  }
+
+  // TJ array with mixed strings: [(text) -kern <hex> ...] TJ
+  const tjArrayMatches = content.matchAll(/\[([^\]]*)\]\s*TJ/g);
+  for (const m of tjArrayMatches) {
+    const arrayContent = m[1];
+    const combined: string[] = [];
+
+    // Match both (paren) and <hex> strings
+    const stringParts = arrayContent.matchAll(/\(([^)]*)\)|<([0-9A-Fa-f]+)>/g);
+    for (const p of stringParts) {
+      if (p[1] !== undefined) {
+        combined.push(decodePdfString(p[1]));
+      } else if (p[2] !== undefined) {
+        combined.push(decodeHexString(p[2]));
+      }
+    }
+    if (combined.length > 0) {
+      chunks.push(combined.join(""));
+    }
+  }
+
+  // ' operator: (text) ' — move to next line and show text
+  const quoteParenMatches = content.matchAll(/\(([^)]*)\)\s*'/g);
+  for (const m of quoteParenMatches) {
+    chunks.push("\n" + decodePdfString(m[1]));
+  }
+
+  // ' operator with hex: <hex> '
+  const quoteHexMatches = content.matchAll(/<([0-9A-Fa-f]+)>\s*'/g);
+  for (const m of quoteHexMatches) {
+    const text = decodeHexString(m[1]);
+    if (text) chunks.push("\n" + text);
+  }
+}
 
 // ─── Text-based metadata extraction ───
 
@@ -226,34 +299,27 @@ export function parsePayslipText(text: string): ParsedMetadata {
 }
 
 // ─── OCR Fallback for image-based PDFs ───
+// Dynamically imported to avoid module-load issues in serverless
 
 async function ocrFromBuffer(pdfBuffer: Buffer): Promise<string> {
-  // tesseract.js can process image buffers directly
-  // For PDF, we attempt to OCR the raw buffer (works for single-page image PDFs)
+  const Tesseract = (await import("tesseract.js")).default;
   const { data } = await Tesseract.recognize(pdfBuffer, "fra+eng", {
     logger: () => {}, // Suppress progress logs
   });
   return data.text;
 }
 
-// ─── Extract text from PDF (text-based first, OCR fallback) ───
+// ─── Extract text from PDF (built-in first, OCR fallback) ───
 
 export async function extractTextFromPdf(buffer: Buffer): Promise<{ text: string; usedOcr: boolean }> {
+  // Try built-in text extraction first (fast, zero external deps)
   try {
-    // Ensure DOM polyfills are available before loading pdfjs-dist
-    ensurePdfjsPolyfills();
-
-    // Dynamic import to avoid module-evaluation crash in serverless
-    const { PDFParse } = await import("pdf-parse");
-    const parser = new PDFParse({ data: new Uint8Array(buffer) });
-    const result = await parser.getText();
-    const text = result.text?.trim();
-    await parser.destroy().catch(() => {});
+    const text = extractTextFromPdfBuffer(buffer);
     if (text && text.length > 50) {
       return { text, usedOcr: false };
     }
   } catch {
-    // pdf-parse failed, fall through to OCR
+    // Built-in extraction failed, fall through to OCR
   }
 
   // OCR fallback for image-based / scanned PDFs
@@ -310,6 +376,8 @@ async function findEmployee(
 
 // ─── IMAP connection + email processing ───
 
+const IMAP_CONNECT_TIMEOUT = 15_000; // 15 seconds
+
 export async function processIncomingEmails(): Promise<ImportResult> {
   const host = process.env.DOCS_IMAP_HOST;
   const port = parseInt(process.env.DOCS_IMAP_PORT || "993", 10);
@@ -335,6 +403,9 @@ export async function processIncomingEmails(): Promise<ImportResult> {
     return result;
   }
 
+  // Dynamic import of ImapFlow to avoid bundling issues
+  const { ImapFlow } = await import("imapflow");
+
   const client = new ImapFlow({
     host,
     port,
@@ -344,7 +415,13 @@ export async function processIncomingEmails(): Promise<ImportResult> {
   });
 
   try {
-    await client.connect();
+    // Connect with timeout to prevent hanging
+    await Promise.race([
+      client.connect(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error(`IMAP connection timeout after ${IMAP_CONNECT_TIMEOUT / 1000}s — check DOCS_IMAP_HOST/PORT`)), IMAP_CONNECT_TIMEOUT)
+      ),
+    ]);
 
     const lock = await client.getMailboxLock("INBOX");
 

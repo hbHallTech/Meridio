@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { processIncomingEmails } from "@/lib/document-import";
 
 /**
  * Hourly cron job for automatic email document import.
@@ -22,6 +21,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // Dynamic import to avoid pulling heavy deps at module load time
+    const { processIncomingEmails } = await import("@/lib/document-import");
     const result = await processIncomingEmails();
 
     return NextResponse.json({

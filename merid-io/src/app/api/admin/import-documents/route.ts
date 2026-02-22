@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { processIncomingEmails } from "@/lib/document-import";
 
 /**
  * POST /api/admin/import-documents
  *
  * Manual trigger for the email import pipeline.
- * Requires ADMIN role (session-authenticated, for use from the settings UI).
+ * Requires ADMIN or HR role (session-authenticated, for use from the settings UI).
  */
 export async function POST() {
   const session = await auth();
@@ -15,12 +14,22 @@ export async function POST() {
   }
 
   const roles = session.user.roles ?? [];
-  if (!roles.includes("ADMIN")) {
-    return NextResponse.json({ error: "Accès réservé Admin" }, { status: 403 });
+  if (!roles.includes("ADMIN") && !roles.includes("HR")) {
+    return NextResponse.json({ error: "Accès réservé Admin/RH" }, { status: 403 });
   }
 
   try {
-    const result = await processIncomingEmails();
+    // Dynamic import to avoid pulling heavy deps at module load time
+    const { processIncomingEmails } = await import("@/lib/document-import");
+
+    // Route-level timeout: 25 seconds (Vercel hobby = 10s, pro = 60s)
+    const ROUTE_TIMEOUT = 25_000;
+    const result = await Promise.race([
+      processIncomingEmails(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Import timeout — the operation took too long. Check IMAP settings.")), ROUTE_TIMEOUT)
+      ),
+    ]);
 
     return NextResponse.json({
       success: true,
@@ -29,10 +38,14 @@ export async function POST() {
     });
   } catch (error) {
     console.error("[admin/import-documents] Error:", error);
+    const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: message,
+        processed: 0,
+        created: 0,
+        errors: [message],
         timestamp: new Date().toISOString(),
       },
       { status: 500 }

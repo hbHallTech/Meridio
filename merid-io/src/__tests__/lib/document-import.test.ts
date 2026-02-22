@@ -1,4 +1,5 @@
-import { parsePayslipText, extractTextFromPdf } from "@/lib/document-import";
+import { parsePayslipText, extractTextFromPdf, extractTextFromPdfBuffer } from "@/lib/document-import";
+import { PDFDocument, StandardFonts } from "pdf-lib";
 
 // ═══════════════════════════════════════════════════════════
 // parsePayslipText — Metadata extraction from French payslips
@@ -182,12 +183,78 @@ describe("parsePayslipText", () => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// extractTextFromPdf — skipped in unit tests (requires Tesseract.js
-// worker download + network access). Covered by integration tests.
+// extractTextFromPdfBuffer — Built-in PDF text extraction
+// ═══════════════════════════════════════════════════════════
+
+describe("extractTextFromPdfBuffer", () => {
+  it("should extract text from a PDF generated with pdf-lib", async () => {
+    // Create a simple PDF with text
+    const pdfDoc = await PDFDocument.create();
+    const page = pdfDoc.addPage();
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    page.drawText("Bulletin de Paie - Janvier 2026", {
+      x: 50,
+      y: 700,
+      size: 14,
+      font,
+    });
+    page.drawText("Employe: DUPONT Jean", {
+      x: 50,
+      y: 680,
+      size: 11,
+      font,
+    });
+    const pdfBytes = await pdfDoc.save();
+    const buffer = Buffer.from(pdfBytes);
+
+    const text = extractTextFromPdfBuffer(buffer);
+    // Should extract some text (pdf-lib uses Tj operators)
+    expect(text.length).toBeGreaterThan(0);
+    expect(text).toContain("Bulletin");
+    expect(text).toContain("DUPONT");
+  });
+
+  it("should return empty string for non-text PDFs", () => {
+    // A minimal PDF without text streams
+    const minimalPdf = Buffer.from(
+      "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Count 0/Kids[]>>endobj\nxref\n0 3\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \ntrailer<</Size 3/Root 1 0 R>>\nstartxref\n109\n%%EOF"
+    );
+    const text = extractTextFromPdfBuffer(minimalPdf);
+    expect(text).toBe("");
+  });
+
+  it("should handle invalid PDF gracefully", () => {
+    const garbage = Buffer.from("not a pdf file at all");
+    const text = extractTextFromPdfBuffer(garbage);
+    expect(text).toBe("");
+  });
+});
+
+// ═══════════════════════════════════════════════════════════
+// extractTextFromPdf — async wrapper with OCR fallback
 // ═══════════════════════════════════════════════════════════
 
 describe("extractTextFromPdf", () => {
   it("should be exported as a function", () => {
     expect(typeof extractTextFromPdf).toBe("function");
+  });
+
+  it("should extract text from a text-based PDF without OCR", async () => {
+    const pdfDoc = await PDFDocument.create();
+    const page = pdfDoc.addPage();
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    // Write enough text to pass the 50-char threshold
+    page.drawText("Bulletin de Paie Janvier 2026 - Halley Technologies Sarl", {
+      x: 50,
+      y: 700,
+      size: 14,
+      font,
+    });
+    const pdfBytes = await pdfDoc.save();
+    const buffer = Buffer.from(pdfBytes);
+
+    const result = await extractTextFromPdf(buffer);
+    expect(result.usedOcr).toBe(false);
+    expect(result.text).toContain("Bulletin");
   });
 });
