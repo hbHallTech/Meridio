@@ -375,9 +375,65 @@ async function findEmployee(
   return null;
 }
 
-// ─── IMAP connection + email processing ───
+// ─── Raw TCP/TLS connectivity test ───
 
-const IMAP_CONNECT_TIMEOUT = 30_000; // 30 seconds — some IMAP servers (Infomaniak, etc.) need time for TLS handshake
+async function testImapConnectivity(host: string, port: number, secure: boolean): Promise<void> {
+  const net = await import("net");
+  const tls = await import("tls");
+  const dns = await import("dns");
+
+  // Step A: DNS resolution
+  const t0 = Date.now();
+  const addresses = await new Promise<string[]>((resolve, reject) => {
+    dns.resolve4(host, (err, addrs) => {
+      if (err) reject(new Error(`DNS resolution failed for ${host}: ${err.code}`));
+      else resolve(addrs);
+    });
+  });
+  console.log(`[imap-import] DNS resolved ${host} → ${addresses.join(", ")} (${Date.now() - t0}ms)`);
+
+  // Step B: Raw TCP/TLS connection test
+  return new Promise<void>((resolve, reject) => {
+    const timeout = 15_000; // 15s for raw connection test
+
+    if (secure) {
+      // Direct TLS (port 993)
+      const socket = tls.connect(
+        { host, port, rejectUnauthorized: false, timeout },
+        () => {
+          console.log(`[imap-import] TLS handshake OK — cipher: ${socket.getCipher()?.name}, protocol: ${socket.getProtocol()}`);
+          socket.destroy();
+          resolve();
+        }
+      );
+      socket.on("error", (err) => {
+        socket.destroy();
+        reject(new Error(`TLS connection to ${host}:${port} failed: ${err.message}`));
+      });
+      socket.setTimeout(timeout, () => {
+        socket.destroy();
+        reject(new Error(`TLS connection to ${host}:${port} timed out after ${timeout / 1000}s`));
+      });
+    } else {
+      // Plain TCP (port 143, then STARTTLS)
+      const socket = net.connect({ host, port, timeout }, () => {
+        console.log(`[imap-import] TCP connection OK to ${host}:${port}`);
+        socket.destroy();
+        resolve();
+      });
+      socket.on("error", (err) => {
+        socket.destroy();
+        reject(new Error(`TCP connection to ${host}:${port} failed: ${err.message}`));
+      });
+      socket.setTimeout(timeout, () => {
+        socket.destroy();
+        reject(new Error(`TCP connection to ${host}:${port} timed out after ${timeout / 1000}s`));
+      });
+    }
+  });
+}
+
+// ─── IMAP connection + email processing ───
 
 export async function processIncomingEmails(): Promise<ImportResult> {
   const result: ImportResult = { processed: 0, created: 0, errors: [], details: [] };
@@ -408,13 +464,16 @@ export async function processIncomingEmails(): Promise<ImportResult> {
   if (company.docsImapPassEncrypted) {
     try {
       pass = decrypt(company.docsImapPassEncrypted);
-    } catch {
+      console.log(`[imap-import] Password decrypted OK (length: ${pass.length})`);
+    } catch (decryptErr) {
+      console.warn(`[imap-import] Decryption failed, using raw value:`, decryptErr);
       // If decryption fails (ENCRYPTION_KEY changed), try using as-is (dev mode)
       pass = company.docsImapPassEncrypted;
     }
   }
   if (!pass) {
     pass = process.env.DOCS_IMAP_PASS;
+    if (pass) console.log(`[imap-import] Using DOCS_IMAP_PASS env var`);
   }
 
   if (!host || !user || !pass) {
@@ -426,7 +485,22 @@ export async function processIncomingEmails(): Promise<ImportResult> {
     };
   }
 
-  // Dynamic import of ImapFlow to avoid bundling issues
+  console.log(`[imap-import] Config: host=${host}, port=${port}, user=${user}, secure=${secure}`);
+
+  // Step 1: Test raw TCP+TLS connectivity before using ImapFlow
+  const t0 = Date.now();
+  try {
+    await testImapConnectivity(host, port, secure);
+    console.log(`[imap-import] Raw TLS connectivity OK (${Date.now() - t0}ms)`);
+  } catch (connTestErr) {
+    const elapsed = Date.now() - t0;
+    const errMsg = connTestErr instanceof Error ? connTestErr.message : String(connTestErr);
+    console.error(`[imap-import] Raw connectivity test FAILED after ${elapsed}ms:`, errMsg);
+    result.errors.push(`Connexion IMAP impossible vers ${host}:${port} — ${errMsg}`);
+    return result;
+  }
+
+  // Step 2: Connect via ImapFlow
   const { ImapFlow } = await import("imapflow");
 
   const client = new ImapFlow({
@@ -434,17 +508,24 @@ export async function processIncomingEmails(): Promise<ImportResult> {
     port,
     secure,
     auth: { user, pass },
-    logger: false,
+    logger: {
+      debug: (obj: Record<string, unknown>) => console.log(`[imap-debug]`, obj.msg || ""),
+      info: (obj: Record<string, unknown>) => console.log(`[imap-info]`, obj.msg || ""),
+      warn: (obj: Record<string, unknown>) => console.warn(`[imap-warn]`, obj.msg || ""),
+      error: (obj: Record<string, unknown>) => console.error(`[imap-error]`, obj.msg || ""),
+    },
+    tls: {
+      rejectUnauthorized: false, // Accept self-signed certs (some corporate IMAP servers)
+    },
+    connectionTimeout: 30_000,  // 30s TCP connect
+    greetingTimeout: 30_000,    // 30s for server greeting
   });
 
   try {
-    // Connect with timeout to prevent hanging
-    await Promise.race([
-      client.connect(),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error(`IMAP connection timeout after ${IMAP_CONNECT_TIMEOUT / 1000}s — check DOCS_IMAP_HOST/PORT`)), IMAP_CONNECT_TIMEOUT)
-      ),
-    ]);
+    console.log(`[imap-import] Connecting via ImapFlow...`);
+    const t1 = Date.now();
+    await client.connect();
+    console.log(`[imap-import] ImapFlow connected OK (${Date.now() - t1}ms)`);
 
     const lock = await client.getMailboxLock("INBOX");
 
