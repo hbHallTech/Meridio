@@ -285,6 +285,13 @@ export default function DocumentsSettingsPage() {
     setImportResult(null);
     try {
       const res = await fetch("/api/admin/import-documents", { method: "POST" });
+
+      // Handle non-JSON responses (Vercel timeout page, server crash, etc.)
+      const contentType = res.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) {
+        throw new Error(`Server error (${res.status})`);
+      }
+
       const data = await res.json();
       setImportResult({
         success: data.success ?? false,
@@ -310,10 +317,13 @@ export default function DocumentsSettingsPage() {
           title: data.error || (lang === "en" ? "Import failed" : "Échec de l'import"),
         });
       }
-    } catch {
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "";
       addToast({
         type: "error",
-        title: lang === "en" ? "Network error" : "Erreur réseau",
+        title: message.includes("Server error")
+          ? (lang === "en" ? message : `Erreur serveur — vérifiez les paramètres IMAP`)
+          : (lang === "en" ? "Network error" : "Erreur réseau"),
       });
     } finally {
       setImportRunning(false);
