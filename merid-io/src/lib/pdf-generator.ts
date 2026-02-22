@@ -167,45 +167,58 @@ export async function generateAttestationPdf(data: AttestationData): Promise<Uin
 
   if (data.companyLogoUrl) {
     try {
-      // SSRF protection: only allow HTTPS URLs with public hostnames
-      const logoUrlObj = new URL(data.companyLogoUrl);
-      const blockedPatterns = /^(localhost|127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.|0\.|::1|\[::)/;
-      if (logoUrlObj.protocol !== "https:" || blockedPatterns.test(logoUrlObj.hostname)) {
-        throw new Error("Invalid logo URL");
-      }
-      const logoRes = await fetch(data.companyLogoUrl, { signal: AbortSignal.timeout(5000) });
-      if (logoRes.ok) {
-        const logoBytes = new Uint8Array(await logoRes.arrayBuffer());
-        const contentType = logoRes.headers.get("content-type") || "";
+      let logoBytes: Uint8Array;
+      let contentType = "";
 
-        let logoImage;
-        if (contentType.includes("png") || data.companyLogoUrl.endsWith(".png")) {
-          logoImage = await pdfDoc.embedPng(logoBytes);
-        } else {
-          // Default to JPEG for jpg/jpeg/other
-          logoImage = await pdfDoc.embedJpg(logoBytes);
+      if (data.companyLogoUrl.startsWith("data:")) {
+        // Data URI — extract bytes directly (no network request needed)
+        const match = data.companyLogoUrl.match(/^data:([^;]+);base64,(.+)$/);
+        if (!match) throw new Error("Invalid data URI");
+        contentType = match[1];
+        logoBytes = Uint8Array.from(Buffer.from(match[2], "base64"));
+      } else {
+        // External URL — SSRF protection: only allow HTTPS with public hostnames
+        const logoUrlObj = new URL(data.companyLogoUrl);
+        const blockedPatterns = /^(localhost|127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.|0\.|::1|\[::)/;
+        if (logoUrlObj.protocol !== "https:" || blockedPatterns.test(logoUrlObj.hostname)) {
+          throw new Error("Invalid logo URL");
         }
-
-        // Scale logo to fit within max bounds while preserving aspect ratio
-        const scale = Math.min(
-          logoMaxWidth / logoImage.width,
-          logoMaxHeight / logoImage.height,
-          1 // never upscale
-        );
-        const drawWidth = logoImage.width * scale;
-        const drawHeight = logoImage.height * scale;
-
-        page.drawImage(logoImage, {
-          x: margin,
-          y: y - drawHeight + 10,
-          width: drawWidth,
-          height: drawHeight,
-        });
-
-        logoWidth = drawWidth + 15; // gap between logo and text
+        const logoRes = await fetch(data.companyLogoUrl, { signal: AbortSignal.timeout(5000) });
+        if (!logoRes.ok) throw new Error(`Logo fetch failed: ${logoRes.status}`);
+        logoBytes = new Uint8Array(await logoRes.arrayBuffer());
+        contentType = logoRes.headers.get("content-type") || "";
       }
+
+      let logoImage;
+      if (contentType.includes("png") || data.companyLogoUrl.endsWith(".png")) {
+        logoImage = await pdfDoc.embedPng(logoBytes);
+      } else if (contentType.includes("svg")) {
+        // SVG not supported by pdf-lib — skip
+        throw new Error("SVG not supported");
+      } else {
+        // Default to JPEG for jpg/jpeg/webp/other
+        logoImage = await pdfDoc.embedJpg(logoBytes);
+      }
+
+      // Scale logo to fit within max bounds while preserving aspect ratio
+      const scale = Math.min(
+        logoMaxWidth / logoImage.width,
+        logoMaxHeight / logoImage.height,
+        1 // never upscale
+      );
+      const drawWidth = logoImage.width * scale;
+      const drawHeight = logoImage.height * scale;
+
+      page.drawImage(logoImage, {
+        x: margin,
+        y: y - drawHeight + 10,
+        width: drawWidth,
+        height: drawHeight,
+      });
+
+      logoWidth = drawWidth + 15; // gap between logo and text
     } catch {
-      // Logo fetch failed — continue without logo
+      // Logo embedding failed — continue without logo
     }
   }
 

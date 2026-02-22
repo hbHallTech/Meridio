@@ -141,4 +141,32 @@ describe("generateAttestationPdf", () => {
     expect(pdfBytes).toBeInstanceOf(Uint8Array);
     expect(pdfBytes.length).toBeGreaterThan(500);
   });
+
+  it("should embed logo from data URI (PNG)", async () => {
+    // Minimal valid 1x1 white PNG as data URI
+    const pngDataUri =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==";
+    const data: AttestationData = {
+      ...baseData,
+      companyLogoUrl: pngDataUri,
+    };
+
+    const pdfBytes = await generateAttestationPdf(data);
+    expect(pdfBytes).toBeInstanceOf(Uint8Array);
+    // PDF with embedded image should be larger than without
+    const noLogoPdf = await generateAttestationPdf(baseData);
+    expect(pdfBytes.length).toBeGreaterThan(noLogoPdf.length);
+  });
+
+  it("should handle invalid data URI gracefully", async () => {
+    const data: AttestationData = {
+      ...baseData,
+      companyLogoUrl: "data:invalid",
+    };
+
+    // Should not throw — falls back to no logo
+    const pdfBytes = await generateAttestationPdf(data);
+    expect(pdfBytes).toBeInstanceOf(Uint8Array);
+    expect(pdfBytes.length).toBeGreaterThan(500);
+  });
 });
