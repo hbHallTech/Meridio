@@ -13,11 +13,11 @@ import { processIncomingEmails } from "@/lib/document-import";
  *   Authorization: Bearer <DOCS_IMPORT_CRON_SECRET>
  */
 export async function GET(request: NextRequest) {
-  // Verify cron secret
+  // Verify cron secret (fail-secure: reject if not configured)
   const authHeader = request.headers.get("authorization");
   const cronSecret = process.env.DOCS_IMPORT_CRON_SECRET;
 
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

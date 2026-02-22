@@ -136,7 +136,6 @@ export const documentCreateSchema = z.object({
       mois: z.string().optional(),
       annee: z.string().optional(),
     })
-    .passthrough()
     .optional(),
 });
 
@@ -149,7 +148,6 @@ export const documentUpdateSchema = z.object({
       mois: z.string().optional(),
       annee: z.string().optional(),
     })
-    .passthrough()
     .optional(),
 });
 

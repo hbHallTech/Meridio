@@ -39,6 +39,7 @@ export async function POST(request: NextRequest) {
       country: true,
       contactFirstName: true,
       contactLastName: true,
+      logoUrl: true,
     },
   });
 
@@ -129,6 +130,7 @@ export async function POST(request: NextRequest) {
     companyLegalForm: company.legalForm ? ` (${company.legalForm})` : null,
     contactFirstName: company.contactFirstName,
     contactLastName: company.contactLastName,
+    companyLogoUrl: company.logoUrl,
     documentType: type,
     templateContent: template?.content ?? null,
     generatedDate: new Date(),

@@ -66,7 +66,12 @@ export async function GET(
     ip: getIp(request.headers),
     entityType: "Document",
     entityId: id,
-    newValue: { name: document.name, type: document.type },
+    newValue: {
+      name: document.name,
+      type: document.type,
+      accessType: isOwner ? "owner" : "privileged",
+      targetUserId: document.userId,
+    },
   });
 
   return NextResponse.json({

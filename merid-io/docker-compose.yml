@@ -32,6 +32,14 @@ services:
       SMTP_USER: "${SMTP_USER:-}"
       SMTP_PASSWORD: "${SMTP_PASSWORD:-}"
       SMTP_FROM: "${SMTP_FROM:-}"
+      # ── Documents Module ──
+      BLOB_READ_WRITE_TOKEN: "${BLOB_READ_WRITE_TOKEN:-}"
+      DOCS_IMAP_HOST: "${DOCS_IMAP_HOST:-}"
+      DOCS_IMAP_PORT: "${DOCS_IMAP_PORT:-993}"
+      DOCS_IMAP_USER: "${DOCS_IMAP_USER:-}"
+      DOCS_IMAP_PASS: "${DOCS_IMAP_PASS:-}"
+      DOCS_IMPORT_CRON_SECRET: "${DOCS_IMPORT_CRON_SECRET:-}"
+      CRON_SECRET: "${CRON_SECRET:-}"
     depends_on:
       db:
         condition: service_healthy
