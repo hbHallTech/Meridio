@@ -28,6 +28,7 @@ export interface AttestationData {
   companyLegalForm: string | null;
   contactFirstName: string | null;
   contactLastName: string | null;
+  companyLogoUrl: string | null;
 
   // Document
   documentType: "ATTESTATION_TRAVAIL" | "CERTIFICAT_TRAVAIL";
@@ -159,12 +160,62 @@ export async function generateAttestationPdf(data: AttestationData): Promise<Uin
   let page = pdfDoc.addPage([pageWidth, pageHeight]);
   let y = pageHeight - margin;
 
-  // ─── Company header ───
+  // ─── Company logo ───
+  const logoMaxHeight = 50;
+  const logoMaxWidth = 140;
+  let logoWidth = 0;
+
+  if (data.companyLogoUrl) {
+    try {
+      // SSRF protection: only allow HTTPS URLs with public hostnames
+      const logoUrlObj = new URL(data.companyLogoUrl);
+      const blockedPatterns = /^(localhost|127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.|0\.|::1|\[::)/;
+      if (logoUrlObj.protocol !== "https:" || blockedPatterns.test(logoUrlObj.hostname)) {
+        throw new Error("Invalid logo URL");
+      }
+      const logoRes = await fetch(data.companyLogoUrl, { signal: AbortSignal.timeout(5000) });
+      if (logoRes.ok) {
+        const logoBytes = new Uint8Array(await logoRes.arrayBuffer());
+        const contentType = logoRes.headers.get("content-type") || "";
+
+        let logoImage;
+        if (contentType.includes("png") || data.companyLogoUrl.endsWith(".png")) {
+          logoImage = await pdfDoc.embedPng(logoBytes);
+        } else {
+          // Default to JPEG for jpg/jpeg/other
+          logoImage = await pdfDoc.embedJpg(logoBytes);
+        }
+
+        // Scale logo to fit within max bounds while preserving aspect ratio
+        const scale = Math.min(
+          logoMaxWidth / logoImage.width,
+          logoMaxHeight / logoImage.height,
+          1 // never upscale
+        );
+        const drawWidth = logoImage.width * scale;
+        const drawHeight = logoImage.height * scale;
+
+        page.drawImage(logoImage, {
+          x: margin,
+          y: y - drawHeight + 10,
+          width: drawWidth,
+          height: drawHeight,
+        });
+
+        logoWidth = drawWidth + 15; // gap between logo and text
+      }
+    } catch {
+      // Logo fetch failed — continue without logo
+    }
+  }
+
+  // ─── Company header (text next to logo) ───
   const companyNameStr = data.companyName;
   const companyAddr = companyFullAddress(data);
+  const textX = margin + logoWidth;
 
   page.drawText(companyNameStr, {
-    x: margin,
+    x: textX,
     y,
     size: 13,
     font: helveticaBold,
@@ -174,7 +225,7 @@ export async function generateAttestationPdf(data: AttestationData): Promise<Uin
 
   if (companyAddr) {
     page.drawText(companyAddr, {
-      x: margin,
+      x: textX,
       y,
       size: 9,
       font: helvetica,
@@ -185,7 +236,7 @@ export async function generateAttestationPdf(data: AttestationData): Promise<Uin
 
   if (data.companyLegalForm) {
     page.drawText(data.companyLegalForm, {
-      x: margin,
+      x: textX,
       y,
       size: 9,
       font: helvetica,

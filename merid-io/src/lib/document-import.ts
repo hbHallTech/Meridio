@@ -133,17 +133,23 @@ export function parsePayslipText(text: string): ParsedMetadata {
 
   // ── Extract employee name ──
   // Look for patterns like "Employé: Nom Prénom", "Salarié : NOM Prénom", "M./Mme NOM"
-  const namePatterns = [
-    /(?:employ[ée]|salari[ée]|collaborateur)\s*[:]\s*(.+)/i,
-    /(?:nom\s+(?:et\s+)?pr[ée]nom)\s*[:]\s*(.+)/i,
-    /\b(?:M\.|Mme|Mr|Mrs)\s+([A-ZÉÈÊÀÙÛÔÂ][a-zéèêàùûôâ]+(?:\s+[A-ZÉÈÊÀÙÛÔÂ][a-zéèêàùûôâ]+)+)/,
-  ];
-
-  for (const pattern of namePatterns) {
-    const nameMatch = pattern.exec(normalized);
-    if (nameMatch) {
-      result.employeeName = nameMatch[1].trim();
+  // Match exactly "LASTNAME Firstname" or "LASTNAME First Second" after label
+  // Uses line-based matching (not normalized) to avoid cross-line capture
+  for (const line of lines) {
+    const labelPattern = /(?:employ[ée]|salari[ée]|collaborateur|nom\s+(?:et\s+)?pr[ée]nom)\s*[:]\s*(.+)/i;
+    const labelMatch = labelPattern.exec(line);
+    if (labelMatch) {
+      result.employeeName = labelMatch[1].trim();
       break;
+    }
+  }
+
+  // M./Mme pattern on normalized text (only if label match didn't find a name)
+  if (!result.employeeName) {
+    const titlePattern = /\b(?:M\.|Mme|Mr|Mrs)\s+([A-ZÉÈÊÀÙÛÔÂ][a-zéèêàùûôâ]+(?:\s+[A-ZÉÈÊÀÙÛÔÂ][a-zéèêàùûôâ]+)+)/;
+    const titleMatch = titlePattern.exec(normalized);
+    if (titleMatch) {
+      result.employeeName = titleMatch[1].trim();
     }
   }
 
