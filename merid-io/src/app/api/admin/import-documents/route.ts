@@ -25,21 +25,25 @@ export async function POST() {
     // Dynamic import to avoid pulling heavy deps at module load time
     const { processIncomingEmails } = await import("@/lib/document-import");
 
-    // Route-level timeout: 55 seconds (maxDuration=60 gives us headroom)
-    const ROUTE_TIMEOUT = 55_000;
-    const result = await Promise.race([
-      processIncomingEmails(),
-      new Promise<never>((_, reject) =>
-        setTimeout(
-          () => reject(new Error("Import timeout — la connexion IMAP prend trop de temps. Vérifiez l'hôte, le port et les identifiants.")),
-          ROUTE_TIMEOUT
-        )
-      ),
-    ]);
+    const t0 = Date.now();
+    const result = await processIncomingEmails();
+    const elapsed = Date.now() - t0;
+    console.log(`[admin/import-documents] Completed in ${elapsed}ms — processed: ${result.processed}, created: ${result.created}, errors: ${result.errors.length}`);
+
+    // If processIncomingEmails returned errors (e.g. connection failure), surface them
+    if (result.errors.length > 0 && result.processed === 0 && result.created === 0) {
+      return NextResponse.json({
+        success: false,
+        ...result,
+        elapsed,
+        timestamp: new Date().toISOString(),
+      });
+    }
 
     return NextResponse.json({
       success: true,
       ...result,
+      elapsed,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {

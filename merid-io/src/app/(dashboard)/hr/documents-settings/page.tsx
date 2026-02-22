@@ -955,19 +955,28 @@ export default function DocumentsSettingsPage() {
                 {lang === "en" ? "Run Import Now" : "Lancer l'import maintenant"}
               </button>
               {importResult && (
-                <div className={`flex items-center gap-2 text-sm ${importResult.success ? "text-emerald-600" : "text-red-600"}`}>
-                  {importResult.success ? (
-                    <CheckCircle2 className="h-4 w-4" />
-                  ) : (
-                    <AlertCircle className="h-4 w-4" />
+                <div className={`text-sm ${importResult.success ? "text-emerald-600" : "text-red-600"}`}>
+                  <div className="flex items-center gap-2">
+                    {importResult.success ? (
+                      <CheckCircle2 className="h-4 w-4 shrink-0" />
+                    ) : (
+                      <AlertCircle className="h-4 w-4 shrink-0" />
+                    )}
+                    <span>
+                      {importResult.success
+                        ? lang === "en"
+                          ? `${importResult.processed} processed, ${importResult.created} created`
+                          : `${importResult.processed} traité(s), ${importResult.created} créé(s)`
+                        : importResult.errors[0] || (lang === "en" ? "Import failed" : "Échec")}
+                    </span>
+                  </div>
+                  {!importResult.success && importResult.errors.length > 1 && (
+                    <ul className="mt-1 ml-6 list-disc text-xs text-red-500 space-y-0.5">
+                      {importResult.errors.slice(1).map((err, i) => (
+                        <li key={i}>{err}</li>
+                      ))}
+                    </ul>
                   )}
-                  <span>
-                    {importResult.success
-                      ? lang === "en"
-                        ? `${importResult.processed} processed, ${importResult.created} created`
-                        : `${importResult.processed} traité(s), ${importResult.created} créé(s)`
-                      : importResult.errors[0] || (lang === "en" ? "Import failed" : "Échec")}
-                  </span>
                 </div>
               )}
             </div>
