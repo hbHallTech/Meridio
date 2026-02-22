@@ -31,18 +31,12 @@ export async function POST() {
     const elapsed = Date.now() - t0;
     console.log(`[admin/import-documents] Completed in ${elapsed}ms — processed: ${result.processed}, created: ${result.created}, errors: ${result.errors.length}`);
 
-    // If processIncomingEmails returned errors (e.g. connection failure), surface them
-    if (result.errors.length > 0 && result.processed === 0 && result.created === 0) {
-      return NextResponse.json({
-        success: false,
-        ...result,
-        elapsed,
-        timestamp: new Date().toISOString(),
-      });
-    }
+    // Surface errors: if there are errors and no docs created, mark as failure
+    const hasErrors = result.errors.length > 0;
+    const success = result.created > 0 || (!hasErrors && result.processed >= 0);
 
     return NextResponse.json({
-      success: true,
+      success,
       ...result,
       elapsed,
       timestamp: new Date().toISOString(),
