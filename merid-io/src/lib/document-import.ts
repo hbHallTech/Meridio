@@ -13,6 +13,7 @@
 import { prisma } from "@/lib/prisma";
 import { put } from "@vercel/blob";
 import { logAudit } from "@/lib/audit";
+import { decrypt } from "@/lib/crypto";
 import crypto from "crypto";
 import { inflateSync } from "zlib";
 
@@ -379,28 +380,50 @@ async function findEmployee(
 const IMAP_CONNECT_TIMEOUT = 7_000; // 7 seconds (must be under Vercel's function timeout)
 
 export async function processIncomingEmails(): Promise<ImportResult> {
-  const host = process.env.DOCS_IMAP_HOST;
-  const port = parseInt(process.env.DOCS_IMAP_PORT || "993", 10);
-  const user = process.env.DOCS_IMAP_USER;
-  const pass = process.env.DOCS_IMAP_PASS;
+  const result: ImportResult = { processed: 0, created: 0, errors: [], details: [] };
+
+  const company = await prisma.company.findFirst({
+    select: {
+      id: true,
+      documentsModuleEnabled: true,
+      docsImapHost: true,
+      docsImapPort: true,
+      docsImapUser: true,
+      docsImapPassEncrypted: true,
+      docsImapSecure: true,
+    },
+  });
+  if (!company?.documentsModuleEnabled) {
+    result.errors.push("Documents module is disabled");
+    return result;
+  }
+
+  // Read IMAP config: database first, env variables as fallback
+  const host = company.docsImapHost || process.env.DOCS_IMAP_HOST;
+  const port = company.docsImapPort || parseInt(process.env.DOCS_IMAP_PORT || "993", 10);
+  const user = company.docsImapUser || process.env.DOCS_IMAP_USER;
+  const secure = company.docsImapHost ? company.docsImapSecure : (port === 993);
+
+  let pass: string | undefined;
+  if (company.docsImapPassEncrypted) {
+    try {
+      pass = decrypt(company.docsImapPassEncrypted);
+    } catch {
+      // If decryption fails (ENCRYPTION_KEY changed), try using as-is (dev mode)
+      pass = company.docsImapPassEncrypted;
+    }
+  }
+  if (!pass) {
+    pass = process.env.DOCS_IMAP_PASS;
+  }
 
   if (!host || !user || !pass) {
     return {
       processed: 0,
       created: 0,
-      errors: ["IMAP credentials not configured (DOCS_IMAP_HOST, DOCS_IMAP_USER, DOCS_IMAP_PASS)"],
+      errors: ["Configuration IMAP manquante — saisissez les paramètres dans Intégration ou configurez les variables d'environnement"],
       details: [],
     };
-  }
-
-  const result: ImportResult = { processed: 0, created: 0, errors: [], details: [] };
-
-  const company = await prisma.company.findFirst({
-    select: { id: true, documentsModuleEnabled: true },
-  });
-  if (!company?.documentsModuleEnabled) {
-    result.errors.push("Documents module is disabled");
-    return result;
   }
 
   // Dynamic import of ImapFlow to avoid bundling issues
@@ -409,7 +432,7 @@ export async function processIncomingEmails(): Promise<ImportResult> {
   const client = new ImapFlow({
     host,
     port,
-    secure: port === 993,
+    secure,
     auth: { user, pass },
     logger: false,
   });

@@ -126,6 +126,13 @@ model Company {
   documentsWebhookUrl    String?  // URL webhook ERP pour intégration
   documentsWebhookSecret String?  // Secret HMAC pour signature webhook
   documentsWebhookEnabled Boolean @default(false)
+
+  // ── IMAP Import Configuration ──
+  docsImapHost          String?
+  docsImapPort          Int?     @default(993)
+  docsImapUser          String?
+  docsImapPassEncrypted String?  // AES-256-GCM encrypted
+  docsImapSecure        Boolean  @default(true)
   emailLogoUrl          String?
   privacyPolicyUrl      String?
 

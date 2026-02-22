@@ -30,11 +30,12 @@ export async function GET() {
     return NextResponse.json(null);
   }
 
-  // Never return SMTP password to client
-  const { smtpPassEncrypted, ...rest } = company;
+  // Never return encrypted passwords to client
+  const { smtpPassEncrypted, docsImapPassEncrypted, ...rest } = company;
   return NextResponse.json({
     ...rest,
     smtpPassConfigured: !!smtpPassEncrypted,
+    docsImapPassConfigured: !!docsImapPassEncrypted,
   });
 }
 
@@ -132,13 +133,25 @@ export async function PATCH(request: NextRequest) {
       }
     } else if (tab === "documents") {
       // Documents module configuration
-      const boolFields = ["documentsModuleEnabled", "documentsAiEnabled", "documentsWebhookEnabled"];
-      const strFields = ["documentsNotifyEmail", "documentsWebhookUrl", "documentsWebhookSecret"];
+      const boolFields = ["documentsModuleEnabled", "documentsAiEnabled", "documentsWebhookEnabled", "docsImapSecure"];
+      const strFields = ["documentsNotifyEmail", "documentsWebhookUrl", "documentsWebhookSecret", "docsImapHost", "docsImapUser"];
       for (const f of boolFields) {
         if (fields[f] !== undefined) updateData[f] = !!fields[f];
       }
       for (const f of strFields) {
         if (fields[f] !== undefined) updateData[f] = fields[f] || null;
+      }
+      if (fields.docsImapPort !== undefined) {
+        updateData.docsImapPort = fields.docsImapPort ? Number(fields.docsImapPort) : null;
+      }
+      // Only update IMAP password if a new one is provided
+      if (fields.docsImapPass && fields.docsImapPass.trim()) {
+        try {
+          updateData.docsImapPassEncrypted = encrypt(fields.docsImapPass);
+        } catch {
+          // If ENCRYPTION_KEY not set, store as-is (development)
+          updateData.docsImapPassEncrypted = fields.docsImapPass;
+        }
       }
     } else {
       // Legacy: direct field updates (backward compat)
@@ -182,10 +195,11 @@ export async function PATCH(request: NextRequest) {
 
     if (!company) return NextResponse.json(null);
 
-    const { smtpPassEncrypted, ...rest } = company;
+    const { smtpPassEncrypted, docsImapPassEncrypted, ...rest } = company;
     return NextResponse.json({
       ...rest,
       smtpPassConfigured: !!smtpPassEncrypted,
+      docsImapPassConfigured: !!docsImapPassEncrypted,
     });
   } catch (error) {
     console.error("PATCH /api/admin/company error:", error);

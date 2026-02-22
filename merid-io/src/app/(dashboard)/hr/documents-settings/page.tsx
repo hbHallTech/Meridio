@@ -32,6 +32,11 @@ interface CompanyConfig {
   documentsWebhookUrl: string | null;
   documentsWebhookSecret: string | null;
   documentsWebhookEnabled: boolean;
+  docsImapHost: string | null;
+  docsImapPort: number | null;
+  docsImapUser: string | null;
+  docsImapSecure: boolean;
+  docsImapPassConfigured: boolean;
 }
 
 interface TemplateItem {
@@ -150,6 +155,7 @@ export default function DocumentsSettingsPage() {
 
   // ─── Integration tab state ───
   const [integrationSaving, setIntegrationSaving] = useState(false);
+  const [docsImapPass, setDocsImapPass] = useState("");
   const [importRunning, setImportRunning] = useState(false);
   const [importResult, setImportResult] = useState<{
     success: boolean;
@@ -173,6 +179,11 @@ export default function DocumentsSettingsPage() {
             documentsWebhookUrl: data.documentsWebhookUrl ?? null,
             documentsWebhookSecret: data.documentsWebhookSecret ?? null,
             documentsWebhookEnabled: data.documentsWebhookEnabled ?? false,
+            docsImapHost: data.docsImapHost ?? null,
+            docsImapPort: data.docsImapPort ?? 993,
+            docsImapUser: data.docsImapUser ?? null,
+            docsImapSecure: data.docsImapSecure ?? true,
+            docsImapPassConfigured: data.docsImapPassConfigured ?? false,
           });
         }
       }
@@ -258,6 +269,11 @@ export default function DocumentsSettingsPage() {
           documentsWebhookUrl: config.documentsWebhookUrl,
           documentsWebhookSecret: config.documentsWebhookSecret,
           documentsWebhookEnabled: config.documentsWebhookEnabled,
+          docsImapHost: config.docsImapHost,
+          docsImapPort: config.docsImapPort,
+          docsImapUser: config.docsImapUser,
+          docsImapSecure: config.docsImapSecure,
+          ...(docsImapPass ? { docsImapPass } : {}),
         }),
       });
       if (res.ok) {
@@ -844,40 +860,76 @@ export default function DocumentsSettingsPage() {
                 : "Le système interroge une boîte IMAP toutes les heures pour les e-mails avec pièces jointes PDF. Les documents sont créés automatiquement via extraction OCR."}
             </p>
 
-            <div className="rounded-lg bg-gray-50 border border-gray-200 p-4 space-y-3">
+            <div className="rounded-lg bg-gray-50 border border-gray-200 p-4 space-y-4">
               <h4 className="text-xs font-semibold text-gray-600">
-                {lang === "en" ? "IMAP Configuration (Environment Variables)" : "Configuration IMAP (Variables d'environnement)"}
+                {lang === "en" ? "IMAP Configuration" : "Configuration IMAP"}
               </h4>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-md bg-white border border-gray-200 px-3 py-2">
-                  <span className="block text-[10px] font-medium text-gray-400 uppercase tracking-wide">DOCS_IMAP_HOST</span>
-                  <span className="text-xs font-mono text-gray-600">
-                    {lang === "en" ? "IMAP server hostname" : "Nom d'hôte du serveur IMAP"}
-                  </span>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                    {lang === "en" ? "IMAP Host" : "Hôte IMAP"}
+                  </label>
+                  <input
+                    type="text"
+                    value={config.docsImapHost ?? ""}
+                    onChange={(e) => setConfig({ ...config, docsImapHost: e.target.value || null })}
+                    placeholder="imap.gmail.com"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#1B3A5C] focus:outline-none"
+                  />
                 </div>
-                <div className="rounded-md bg-white border border-gray-200 px-3 py-2">
-                  <span className="block text-[10px] font-medium text-gray-400 uppercase tracking-wide">DOCS_IMAP_PORT</span>
-                  <span className="text-xs font-mono text-gray-600">
-                    {lang === "en" ? "Port (default: 993)" : "Port (défaut : 993)"}
-                  </span>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                    {lang === "en" ? "Port" : "Port"}
+                  </label>
+                  <input
+                    type="number"
+                    value={config.docsImapPort ?? 993}
+                    onChange={(e) => setConfig({ ...config, docsImapPort: parseInt(e.target.value) || 993 })}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#1B3A5C] focus:outline-none"
+                  />
                 </div>
-                <div className="rounded-md bg-white border border-gray-200 px-3 py-2">
-                  <span className="block text-[10px] font-medium text-gray-400 uppercase tracking-wide">DOCS_IMAP_USER</span>
-                  <span className="text-xs font-mono text-gray-600">
-                    {lang === "en" ? "IMAP username/email" : "Utilisateur/e-mail IMAP"}
-                  </span>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                    {lang === "en" ? "Username / Email" : "Utilisateur / Email"}
+                  </label>
+                  <input
+                    type="text"
+                    value={config.docsImapUser ?? ""}
+                    onChange={(e) => setConfig({ ...config, docsImapUser: e.target.value || null })}
+                    placeholder="documents@company.com"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#1B3A5C] focus:outline-none"
+                  />
                 </div>
-                <div className="rounded-md bg-white border border-gray-200 px-3 py-2">
-                  <span className="block text-[10px] font-medium text-gray-400 uppercase tracking-wide">DOCS_IMAP_PASS</span>
-                  <span className="text-xs font-mono text-gray-600">
-                    {lang === "en" ? "IMAP password" : "Mot de passe IMAP"}
-                  </span>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                    {lang === "en" ? "Password" : "Mot de passe"}
+                  </label>
+                  <input
+                    type="password"
+                    value={docsImapPass}
+                    onChange={(e) => setDocsImapPass(e.target.value)}
+                    placeholder={config.docsImapPassConfigured
+                      ? (lang === "en" ? "••••••• (configured)" : "••••••• (configuré)")
+                      : (lang === "en" ? "Enter password" : "Saisir le mot de passe")}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#1B3A5C] focus:outline-none"
+                  />
+                  {config.docsImapPassConfigured && !docsImapPass && (
+                    <p className="mt-1 text-xs text-emerald-600">
+                      {lang === "en" ? "Password is configured. Leave empty to keep current." : "Mot de passe configuré. Laisser vide pour conserver l'actuel."}
+                    </p>
+                  )}
                 </div>
               </div>
+              <Toggle
+                checked={config.docsImapSecure}
+                onChange={(v) => setConfig({ ...config, docsImapSecure: v })}
+                label={lang === "en" ? "SSL/TLS" : "SSL/TLS"}
+                description={lang === "en" ? "Use secure connection (required for port 993)" : "Connexion sécurisée (obligatoire pour le port 993)"}
+              />
               <p className="text-[11px] text-gray-400">
                 {lang === "en"
-                  ? "These variables must be set in your deployment environment. The cron job runs automatically every hour."
-                  : "Ces variables doivent être définies dans votre environnement de déploiement. Le cron s'exécute automatiquement toutes les heures."}
+                  ? "The cron job runs automatically every hour. You can also trigger it manually below."
+                  : "Le cron s'exécute automatiquement toutes les heures. Vous pouvez aussi le déclencher manuellement ci-dessous."}
               </p>
             </div>
 
