@@ -32,6 +32,7 @@ import {
   ClipboardList,
   Wallet,
   FileText,
+  Settings,
 } from "lucide-react";
 import { MeridioLogo, MeridioIcon } from "@/components/MeridioLogo";
 
@@ -139,6 +140,7 @@ export function Sidebar({
         { href: "/hr/balances", label: t("balances"), icon: Wallet, roles: ["HR", "ADMIN"] },
         { href: "/hr/reports", label: t("reports"), icon: BarChart3, roles: ["HR", "ADMIN"] },
         { href: "/hr/documents", label: t("hrDocuments"), icon: FileText, roles: ["HR", "ADMIN"] },
+        { href: "/hr/documents-settings", label: t("documentsSettings"), icon: Settings, roles: ["ADMIN"] },
       ],
     },
     {

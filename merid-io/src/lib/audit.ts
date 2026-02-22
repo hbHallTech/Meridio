@@ -63,6 +63,10 @@ export type AuditAction =
   | "DOCUMENT_DELETED"
   | "DOCUMENT_VIEWED"
   | "DOCUMENT_DOWNLOADED"
+  // Templates
+  | "TEMPLATE_CREATED"
+  | "TEMPLATE_UPDATED"
+  | "TEMPLATE_DELETED"
   // Auth / 2FA
   | "2FA_CODE_SENT"
   | "2FA_VERIFIED"

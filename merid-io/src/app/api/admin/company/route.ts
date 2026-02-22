@@ -130,6 +130,16 @@ export async function PATCH(request: NextRequest) {
           }
         }
       }
+    } else if (tab === "documents") {
+      // Documents module configuration
+      const boolFields = ["documentsModuleEnabled", "documentsAiEnabled", "documentsWebhookEnabled"];
+      const strFields = ["documentsNotifyEmail", "documentsWebhookUrl", "documentsWebhookSecret"];
+      for (const f of boolFields) {
+        if (fields[f] !== undefined) updateData[f] = !!fields[f];
+      }
+      for (const f of strFields) {
+        if (fields[f] !== undefined) updateData[f] = fields[f] || null;
+      }
     } else {
       // Legacy: direct field updates (backward compat)
       if (fields.name !== undefined) updateData.name = fields.name;

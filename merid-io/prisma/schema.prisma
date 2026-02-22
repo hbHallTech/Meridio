@@ -121,6 +121,11 @@ model Company {
   auditRetentionDays    Int     @default(365)
   trialModeEnabled      Boolean @default(false)
   documentsModuleEnabled Boolean @default(false)
+  documentsAiEnabled     Boolean @default(false)
+  documentsNotifyEmail   String?  // Email pour réception de notifications documents
+  documentsWebhookUrl    String?  // URL webhook ERP pour intégration
+  documentsWebhookSecret String?  // Secret HMAC pour signature webhook
+  documentsWebhookEnabled Boolean @default(false)
   emailLogoUrl          String?
   privacyPolicyUrl      String?
 
@@ -129,6 +134,7 @@ model Company {
 
   offices     Office[]
   notificationSettings CompanyNotificationSetting[]
+  documentTemplates    DocumentTemplate[]
 }
 
 model CompanyNotificationSetting {
@@ -469,6 +475,29 @@ model Document {
   @@index([userId, status])
   @@index([userId, type])
   @@index([createdAt])
+}
+
+// ============================================================
+// DOCUMENT TEMPLATES
+// ============================================================
+
+model DocumentTemplate {
+  id          String       @id @default(cuid())
+  companyId   String
+  name        String       // ex: "Fiche de paie standard"
+  type        DocumentType // Lié au type de document
+  subject     String?      // Sujet (pour emails associés)
+  content     String       // Contenu HTML/Markdown du template
+  variables   String[]     // Variables disponibles: ["employee_name", "month", "year", ...]
+  isActive    Boolean      @default(true)
+  isDefault   Boolean      @default(false) // Template par défaut pour ce type
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  company     Company      @relation(fields: [companyId], references: [id])
+
+  @@unique([companyId, name])
+  @@index([companyId, type])
 }
 
 // ============================================================

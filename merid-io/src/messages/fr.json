@@ -70,7 +70,8 @@
     "delegations": "Délégations",
     "exceptionalRules": "Règles exceptionnelles",
     "documents": "Mes documents",
-    "hrDocuments": "Documents RH"
+    "hrDocuments": "Documents RH",
+    "documentsSettings": "Config Documents"
   },
   "leaves": {
     "title": "Mes demandes de congé",

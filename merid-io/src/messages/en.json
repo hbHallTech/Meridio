@@ -70,7 +70,8 @@
     "delegations": "Delegations",
     "exceptionalRules": "Exceptional Rules",
     "documents": "My Documents",
-    "hrDocuments": "HR Documents"
+    "hrDocuments": "HR Documents",
+    "documentsSettings": "Documents Config"
   },
   "leaves": {
     "title": "My Leave Requests",
