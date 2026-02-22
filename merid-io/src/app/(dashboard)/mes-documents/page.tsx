@@ -14,6 +14,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Archive,
+  FilePlus,
+  ChevronDown,
 } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 
@@ -123,6 +125,10 @@ export default function MesDocumentsPage() {
   // Module availability
   const [moduleDisabled, setModuleDisabled] = useState(false);
 
+  // Generation
+  const [genMenuOpen, setGenMenuOpen] = useState(false);
+  const [generating, setGenerating] = useState(false);
+
   // Debounce search
   useEffect(() => {
     const timer = setTimeout(() => setSearchDebounced(search), 300);
@@ -216,11 +222,15 @@ export default function MesDocumentsPage() {
       setViewerLoading(false);
     }
 
-    // Auto-update status NOUVEAU → OUVERT via GET /api/documents/:id
+    // Auto-update status NOUVEAU → OUVERT via PATCH
     if (doc.status === "NOUVEAU") {
       try {
-        const res = await fetch(`/api/documents/${doc.id}`);
-        if (res.ok) {
+        const patchRes = await fetch(`/api/documents/${doc.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "OUVERT" }),
+        });
+        if (patchRes.ok) {
           setData((prev) => {
             if (!prev) return prev;
             return {
@@ -280,6 +290,38 @@ export default function MesDocumentsPage() {
     }
   };
 
+  // ─── Generate attestation ───
+  const handleGenerate = async (type: "ATTESTATION_TRAVAIL" | "CERTIFICAT_TRAVAIL") => {
+    setGenMenuOpen(false);
+    setGenerating(true);
+    try {
+      const res = await fetch("/api/documents/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        addToast({
+          type: "success",
+          title: lang === "en" ? "Document generated" : "Document généré",
+          message: data.document?.name,
+        });
+        fetchDocuments();
+      } else {
+        const err = await res.json();
+        addToast({ type: "error", title: err.error || "Erreur" });
+      }
+    } catch {
+      addToast({
+        type: "error",
+        title: lang === "en" ? "Network error" : "Erreur réseau",
+      });
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   // ─── Module disabled state ───
   if (moduleDisabled) {
     return (
@@ -315,6 +357,50 @@ export default function MesDocumentsPage() {
           )}
         </div>
         <div className="flex items-center gap-2">
+          {/* Generate attestation dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setGenMenuOpen(!genMenuOpen)}
+              disabled={generating}
+              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-50"
+              style={{ backgroundColor: "#1B3A5C" }}
+              aria-haspopup="true"
+              aria-expanded={genMenuOpen}
+            >
+              {generating ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <FilePlus className="h-4 w-4" />
+              )}
+              {lang === "en" ? "Generate" : "Générer"}
+              <ChevronDown className="h-3.5 w-3.5" />
+            </button>
+            {genMenuOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-10"
+                  onClick={() => setGenMenuOpen(false)}
+                />
+                <div className="absolute right-0 z-20 mt-1 w-56 rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+                  <button
+                    onClick={() => handleGenerate("ATTESTATION_TRAVAIL")}
+                    className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: "#8B5CF6" }} />
+                    {lang === "en" ? "Work Certificate" : "Attestation de travail"}
+                  </button>
+                  <button
+                    onClick={() => handleGenerate("CERTIFICAT_TRAVAIL")}
+                    className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: "#06B6D4" }} />
+                    {lang === "en" ? "Employment Certificate" : "Certificat de travail"}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+
           {/* Search */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />

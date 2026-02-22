@@ -284,7 +284,7 @@ export default function DocumentsSettingsPage() {
     setImportRunning(true);
     setImportResult(null);
     try {
-      const res = await fetch("/api/cron/import-documents");
+      const res = await fetch("/api/admin/import-documents", { method: "POST" });
       const data = await res.json();
       setImportResult({
         success: data.success ?? false,
