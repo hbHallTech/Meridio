@@ -615,14 +615,35 @@ export async function processIncomingEmails(): Promise<ImportResult> {
               const downloadMsg = await client.download(msg.seq.toString(), pdfPart.part, { uid: false });
               if (!downloadMsg) {
                 detail.error = `Could not download part ${pdfPart.part}`;
+                result.errors.push(detail.error);
                 continue;
               }
-              const pdfBuffer = await streamToBuffer(downloadMsg.content);
+              let pdfBuffer = await streamToBuffer(downloadMsg.content);
               console.log(`[imap-import] Downloaded ${pdfPart.filename}: ${pdfBuffer.length} bytes (${Date.now() - t2}ms)`);
 
-              // Verify PDF magic bytes
+              // ImapFlow may return base64-encoded content for MIME parts.
+              // Detect and decode if needed: base64 text starts with "JVBERi" (which is "%PDF" in base64)
+              if (pdfBuffer.length > 10 && pdfBuffer[0] !== 0x25) {
+                const head = pdfBuffer.subarray(0, 20).toString("ascii");
+                if (/^[A-Za-z0-9+/\r\n]/.test(head)) {
+                  // Looks like base64 — try decoding
+                  try {
+                    const decoded = Buffer.from(pdfBuffer.toString("ascii").replace(/\s/g, ""), "base64");
+                    if (decoded.length > 4 && decoded[0] === 0x25 && decoded[1] === 0x50) {
+                      console.log(`[imap-import] Decoded base64 → ${decoded.length} bytes`);
+                      pdfBuffer = decoded;
+                    }
+                  } catch {
+                    // Not valid base64, continue with original buffer
+                  }
+                }
+              }
+
+              // Verify PDF magic bytes (%PDF)
               if (pdfBuffer.length < 5 || pdfBuffer[0] !== 0x25 || pdfBuffer[1] !== 0x50) {
-                detail.error = `${pdfPart.filename} is not a valid PDF`;
+                console.warn(`[imap-import] ${pdfPart.filename}: not a valid PDF (first bytes: ${pdfBuffer.subarray(0, 10).toString("hex")})`);
+                detail.error = `${pdfPart.filename} n'est pas un PDF valide`;
+                result.errors.push(detail.error);
                 continue;
               }
 
@@ -630,6 +651,9 @@ export async function processIncomingEmails(): Promise<ImportResult> {
               const t3 = Date.now();
               const { text, usedOcr } = await extractTextFromPdf(pdfBuffer);
               console.log(`[imap-import] Text extraction: ${text.length} chars, OCR=${usedOcr} (${Date.now() - t3}ms)`);
+              if (text.length > 0) {
+                console.log(`[imap-import] Text preview: ${text.substring(0, 200)}`);
+              }
 
               if (!text || text.length < 20) {
                 // OCR failed or empty PDF
@@ -642,18 +666,21 @@ export async function processIncomingEmails(): Promise<ImportResult> {
                     usedOcr,
                   },
                 });
-                detail.error = `OCR extraction failed for ${pdfPart.filename}`;
+                detail.error = `Extraction de texte échouée pour ${pdfPart.filename} (${text.length} caractères extraits)`;
+                result.errors.push(detail.error);
                 await notifyHrImportFailure(pdfPart.filename, detail.from, detail.subject, "OCR extraction produced no usable text");
                 continue;
               }
 
               // Parse metadata from extracted text
               const metadata = parsePayslipText(text);
+              console.log(`[imap-import] Parsed metadata: name=${metadata.employeeName}, email=${metadata.employeeEmail}, type=${metadata.documentType}, month=${metadata.month}, year=${metadata.year}`);
 
               // Find matching employee
               const employee = await findEmployee(metadata);
               if (!employee) {
-                detail.error = `No matching employee for ${pdfPart.filename} (name: ${metadata.employeeName}, email: ${metadata.employeeEmail})`;
+                detail.error = `Aucun employé trouvé pour ${pdfPart.filename} (nom: ${metadata.employeeName || "non détecté"}, email: ${metadata.employeeEmail || "non détecté"})`;
+                result.errors.push(detail.error);
                 await notifyHrImportFailure(
                   pdfPart.filename,
                   detail.from,
