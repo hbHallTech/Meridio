@@ -81,6 +81,52 @@ const MONTH_MAP: Record<string, string> = {
 
 // ─── Built-in lightweight PDF text extractor ───
 // Parses PDF streams directly using Node.js zlib — no pdfjs-dist or DOM required.
+// Supports ToUnicode CMap parsing for CID/Identity-H fonts (common in Word/Excel PDFs).
+
+/** Parse a ToUnicode CMap stream and return a glyph-ID → Unicode mapping */
+function parseToUnicodeCMap(cmapText: string): Map<number, string> {
+  const map = new Map<number, string>();
+
+  // Parse beginbfchar...endbfchar sections
+  // Format: <srcCode> <dstString>
+  const bfcharRegex = /beginbfchar([\s\S]*?)endbfchar/g;
+  let section;
+  while ((section = bfcharRegex.exec(cmapText)) !== null) {
+    const pairRegex = /<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/g;
+    let pair;
+    while ((pair = pairRegex.exec(section[1])) !== null) {
+      const gid = parseInt(pair[1], 16);
+      // Destination can be multi-byte (UTF-16BE)
+      const dstHex = pair[2];
+      let str = "";
+      for (let i = 0; i < dstHex.length; i += 4) {
+        const code = parseInt(dstHex.substring(i, Math.min(i + 4, dstHex.length)), 16);
+        if (code > 0) str += String.fromCharCode(code);
+      }
+      if (str) map.set(gid, str);
+    }
+  }
+
+  // Parse beginbfrange...endbfrange sections
+  // Format: <srcCodeLo> <srcCodeHi> <dstStringLo>
+  //    or:  <srcCodeLo> <srcCodeHi> [<dst1> <dst2> ...]
+  const bfrangeRegex = /beginbfrange([\s\S]*?)endbfrange/g;
+  while ((section = bfrangeRegex.exec(cmapText)) !== null) {
+    // Simple range: <lo> <hi> <dstStart>
+    const rangeRegex = /<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/g;
+    let range;
+    while ((range = rangeRegex.exec(section[1])) !== null) {
+      const lo = parseInt(range[1], 16);
+      const hi = parseInt(range[2], 16);
+      let dstStart = parseInt(range[3], 16);
+      for (let gid = lo; gid <= hi; gid++) {
+        map.set(gid, String.fromCharCode(dstStart++));
+      }
+    }
+  }
+
+  return map;
+}
 
 export function extractTextFromPdfBuffer(buffer: Buffer): string {
   const textChunks: string[] = [];
@@ -88,32 +134,44 @@ export function extractTextFromPdfBuffer(buffer: Buffer): string {
   // Find all stream objects and extract text operators
   const pdfStr = buffer.toString("latin1");
 
-  // Match stream...endstream blocks
+  // First pass: decompress all streams and collect ToUnicode CMaps
+  const globalCMap = new Map<number, string>();
+  const decompressedStreams: { content: string; beforeStream: string }[] = [];
+
   const streamRegex = /stream\r?\n([\s\S]*?)endstream/g;
   let streamMatch;
 
   while ((streamMatch = streamRegex.exec(pdfStr)) !== null) {
     let content = streamMatch[1];
-
-    // Check if stream is FlateDecode compressed
-    // Look backwards for the object dictionary to check /Filter
     const beforeStream = pdfStr.slice(Math.max(0, streamMatch.index - 500), streamMatch.index);
     const isCompressed = /\/Filter\s*\/FlateDecode/i.test(beforeStream);
 
     if (isCompressed) {
       try {
-        // Convert latin1 string back to bytes for decompression
         const compressedBytes = Buffer.from(content, "latin1");
         const decompressed = inflateSync(compressedBytes);
         content = decompressed.toString("latin1");
       } catch {
-        // Decompression failed — skip this stream
         continue;
       }
     }
 
-    // Extract text from content stream operators
-    extractTextOperators(content, textChunks);
+    // Check if this stream is a ToUnicode CMap
+    if (content.includes("beginbfchar") || content.includes("beginbfrange")) {
+      const cmap = parseToUnicodeCMap(content);
+      for (const [k, v] of cmap) globalCMap.set(k, v);
+    }
+
+    decompressedStreams.push({ content, beforeStream });
+  }
+
+  if (globalCMap.size > 0) {
+    console.log(`[imap-import] Parsed ToUnicode CMap: ${globalCMap.size} glyph mappings`);
+  }
+
+  // Second pass: extract text operators using CMap if available
+  for (const { content } of decompressedStreams) {
+    extractTextOperators(content, textChunks, globalCMap);
   }
 
   // Join chunks with appropriate spacing
@@ -144,9 +202,43 @@ function decodePdfString(s: string): string {
     .replace(/\\(\d{1,3})/g, (_m, oct) => String.fromCharCode(parseInt(oct, 8)));
 }
 
-/** Decode hex string to text */
-function decodeHexString(hex: string): string {
+/** Decode hex string to text, using ToUnicode CMap if available */
+function decodeHexString(hex: string, cmap?: Map<number, string>): string {
   try {
+    // If we have a ToUnicode CMap, use it to decode glyph IDs → Unicode
+    if (cmap && cmap.size > 0 && hex.length >= 4 && hex.length % 4 === 0) {
+      let text = "";
+      for (let i = 0; i < hex.length; i += 4) {
+        const gid = parseInt(hex.substring(i, i + 4), 16);
+        if (gid === 0) continue;
+        const mapped = cmap.get(gid);
+        if (mapped) {
+          text += mapped;
+        } else {
+          text += String.fromCharCode(gid); // Fallback: treat as Unicode code point
+        }
+      }
+      if (text && /[A-Za-z0-9\u00C0-\u024F]/.test(text)) {
+        return text;
+      }
+    }
+
+    // Many PDFs (especially from Word/Excel) use CID/Identity-H fonts where
+    // hex strings encode UTF-16BE: each character = 4 hex digits (2 bytes).
+    // e.g., <00530069007200690065> = "Sirie"
+    if (hex.length >= 4 && hex.length % 4 === 0) {
+      let text = "";
+      for (let i = 0; i < hex.length; i += 4) {
+        const code = parseInt(hex.substring(i, i + 4), 16);
+        if (code === 0) continue; // Skip NULL characters
+        text += String.fromCharCode(code);
+      }
+      // If result contains actual printable characters, use it
+      if (/[A-Za-z0-9\u00C0-\u024F]/.test(text)) {
+        return text;
+      }
+    }
+    // Fallback: single-byte latin1 encoding (standard PDF text)
     return Buffer.from(hex, "hex").toString("latin1");
   } catch {
     return "";
@@ -154,7 +246,7 @@ function decodeHexString(hex: string): string {
 }
 
 /** Extract text from PDF content stream operators */
-function extractTextOperators(content: string, chunks: string[]) {
+function extractTextOperators(content: string, chunks: string[], cmap?: Map<number, string>) {
   // Tj with parenthesized string: (text) Tj
   const tjParenMatches = content.matchAll(/\(([^)]*)\)\s*Tj/g);
   for (const m of tjParenMatches) {
@@ -164,7 +256,7 @@ function extractTextOperators(content: string, chunks: string[]) {
   // Tj with hex string: <hex> Tj
   const tjHexMatches = content.matchAll(/<([0-9A-Fa-f]+)>\s*Tj/g);
   for (const m of tjHexMatches) {
-    const text = decodeHexString(m[1]);
+    const text = decodeHexString(m[1], cmap);
     if (text && /\S/.test(text)) {
       chunks.push(text);
     }
@@ -182,7 +274,7 @@ function extractTextOperators(content: string, chunks: string[]) {
       if (p[1] !== undefined) {
         combined.push(decodePdfString(p[1]));
       } else if (p[2] !== undefined) {
-        combined.push(decodeHexString(p[2]));
+        combined.push(decodeHexString(p[2], cmap));
       }
     }
     if (combined.length > 0) {
@@ -199,7 +291,7 @@ function extractTextOperators(content: string, chunks: string[]) {
   // ' operator with hex: <hex> '
   const quoteHexMatches = content.matchAll(/<([0-9A-Fa-f]+)>\s*'/g);
   for (const m of quoteHexMatches) {
-    const text = decodeHexString(m[1]);
+    const text = decodeHexString(m[1], cmap);
     if (text) chunks.push("\n" + text);
   }
 }
@@ -697,22 +789,13 @@ export async function processIncomingEmails(): Promise<ImportResult> {
               const metadata = parsePayslipText(text);
               console.log(`[imap-import] Parsed metadata: name=${metadata.employeeName}, email=${metadata.employeeEmail}, type=${metadata.documentType}, month=${metadata.month}, year=${metadata.year}`);
 
-              // Find matching employee
+              // Find matching employee (may be null → unassigned doc for HR)
               const employee = await findEmployee(metadata);
-              if (!employee) {
-                detail.error = `Aucun employé trouvé pour ${att.filename} (nom: ${metadata.employeeName || "non détecté"}, email: ${metadata.employeeEmail || "non détecté"})`;
-                result.errors.push(detail.error);
-                await notifyHrImportFailure(
-                  att.filename,
-                  detail.from,
-                  detail.subject,
-                  `Could not match employee: ${metadata.employeeName || "unknown"}`
-                );
-                continue;
-              }
+              const isUnassigned = !employee;
 
               // Upload PDF to Vercel Blob
-              const blobPath = `documents/${employee.id}/${crypto.randomUUID()}.pdf`;
+              const blobFolder = employee ? `documents/${employee.id}` : `documents/unassigned`;
+              const blobPath = `${blobFolder}/${crypto.randomUUID()}.pdf`;
               const blob = await put(blobPath, att.content, {
                 access: "private",
                 addRandomSuffix: false,
@@ -726,10 +809,10 @@ export async function processIncomingEmails(): Promise<ImportResult> {
                 : metadata.documentType.replace(/_/g, "_");
               const docName = `${typeLabel}${monthLabel}-${yearLabel}.pdf`;
 
-              // Create document record
+              // Create document record (userId = null if no employee match)
               const document = await prisma.document.create({
                 data: {
-                  userId: employee.id,
+                  userId: employee?.id ?? null,
                   name: att.filename || docName,
                   type: metadata.documentType,
                   filePath: blob.url,
@@ -741,17 +824,35 @@ export async function processIncomingEmails(): Promise<ImportResult> {
                     source: "email_import",
                     usedOcr,
                     senderEmail: detail.from,
+                    ...(isUnassigned ? {
+                      unassigned: true,
+                      detectedName: metadata.employeeName,
+                      detectedEmail: metadata.employeeEmail,
+                    } : {}),
                   },
                 },
               });
 
-              await logAudit(null, "EMAIL_IMPORT_SUCCESS", {
+              if (isUnassigned) {
+                // Notify HR that a document needs manual assignment
+                console.log(`[imap-import] No employee match for ${att.filename} — created unassigned document ${document.id}`);
+                await notifyHrUnassignedDocument(
+                  document.id,
+                  att.filename,
+                  detail.from,
+                  detail.subject,
+                  metadata.employeeName,
+                );
+              }
+
+              await logAudit(null, isUnassigned ? "EMAIL_IMPORT_UNASSIGNED" : "EMAIL_IMPORT_SUCCESS", {
                 entityType: "Document",
                 entityId: document.id,
                 newValue: {
                   name: document.name,
                   type: document.type,
-                  userId: employee.id,
+                  userId: employee?.id ?? null,
+                  unassigned: isUnassigned,
                   source: "email",
                   from: detail.from,
                   usedOcr,
@@ -908,6 +1009,46 @@ function extractPdfAttachments(raw: Buffer): { filename: string; content: Buffer
   }
 
   return attachments;
+}
+
+/**
+ * Notify HR users when a document is imported but could not be matched to an employee.
+ * The document is created with userId = null; HR must assign it manually.
+ */
+async function notifyHrUnassignedDocument(
+  documentId: string,
+  filename: string,
+  senderEmail: string,
+  subject: string,
+  detectedName: string | null,
+): Promise<void> {
+  try {
+    const hrUsers = await prisma.user.findMany({
+      where: {
+        isActive: true,
+        roles: { hasSome: ["HR", "ADMIN"] },
+      },
+      select: { id: true },
+    });
+
+    const nameInfo = detectedName ? ` (nom détecté : ${detectedName})` : "";
+
+    for (const hr of hrUsers) {
+      await prisma.notification.create({
+        data: {
+          userId: hr.id,
+          type: "DOCUMENT_IMPORT_UNASSIGNED",
+          title_fr: `Document importé — affectation requise`,
+          title_en: `Document imported — assignment required`,
+          body_fr: `Le fichier "${filename}" de ${senderEmail}${nameInfo} a été importé mais aucun employé correspondant n'a été trouvé. Veuillez l'affecter manuellement.`,
+          body_en: `File "${filename}" from ${senderEmail}${nameInfo} was imported but no matching employee was found. Please assign it manually.`,
+          data: { documentId, filename, senderEmail, subject, detectedName },
+        },
+      });
+    }
+  } catch {
+    console.error("[email-import] Failed to notify HR about unassigned document");
+  }
 }
 
 /**
