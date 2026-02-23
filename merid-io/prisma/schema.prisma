@@ -462,7 +462,7 @@ model Notification {
 
 model Document {
   id              String         @id @default(cuid())
-  userId          String
+  userId          String?        // null = document non assigné (en attente d'affectation RH)
   name            String         // ex: "Fiche_Paie_02-2026.pdf"
   type            DocumentType
   status          DocumentStatus @default(NOUVEAU)
@@ -475,7 +475,7 @@ model Document {
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
-  user            User           @relation("UserDocuments", fields: [userId], references: [id])
+  user            User?          @relation("UserDocuments", fields: [userId], references: [id])
   createdBy       User?          @relation("DocumentCreatedBy", fields: [createdById], references: [id])
   modifiedBy      User?          @relation("DocumentModifiedBy", fields: [modifiedById], references: [id])
 
