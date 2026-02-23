@@ -143,6 +143,7 @@ export const documentUpdateSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   type: z.enum(["FICHE_PAIE", "ATTESTATION_TRAVAIL", "CERTIFICAT_TRAVAIL", "CONTRAT", "AUTRE"]).optional(),
   status: z.enum(["NOUVEAU", "OUVERT", "ARCHIVE"]).optional(),
+  userId: z.string().min(1).optional(), // Assign/reassign document to a user (HR/Admin only)
   metadata: z
     .object({
       mois: z.string().optional(),

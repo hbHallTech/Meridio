@@ -22,6 +22,8 @@ import {
   Users,
   FilePlus,
   ChevronDown,
+  AlertTriangle,
+  UserPlus,
 } from "lucide-react";
 
 // ─── Types ───
@@ -35,14 +37,16 @@ interface EmployeeOption {
 
 interface DocumentItem {
   id: string;
+  userId: string | null;
   name: string;
   type: string;
   status: string;
   fileSize: number;
   mimeType: string;
-  metadata: { mois?: string; annee?: string } | null;
+  metadata: { mois?: string; annee?: string; unassigned?: boolean; detectedName?: string; detectedEmail?: string } | null;
   createdAt: string;
   updatedAt: string;
+  user: { firstName: string; lastName: string } | null;
   createdBy: { firstName: string; lastName: string } | null;
 }
 
@@ -161,6 +165,11 @@ export default function HRDocumentsPage() {
   const [editType, setEditType] = useState("");
   const [editMois, setEditMois] = useState("");
   const [editAnnee, setEditAnnee] = useState("");
+
+  // Assign dialog
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [assignTargetDoc, setAssignTargetDoc] = useState<DocumentItem | null>(null);
+  const [assignTargetUserId, setAssignTargetUserId] = useState("");
 
   // Viewer
   const [viewerOpen, setViewerOpen] = useState(false);
@@ -457,6 +466,44 @@ export default function HRDocumentsPage() {
     }
   };
 
+  // ─── Assign unassigned document to employee ───
+  const openAssign = (doc: DocumentItem) => {
+    setAssignTargetDoc(doc);
+    setAssignTargetUserId("");
+    setAssignOpen(true);
+  };
+
+  const handleAssign = async () => {
+    if (!assignTargetDoc || !assignTargetUserId) return;
+    setSubmitting(true);
+    try {
+      const res = await fetch(`/api/documents/${assignTargetDoc.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: assignTargetUserId }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Erreur");
+      }
+      addToast({
+        type: "success",
+        title: lang === "en" ? "Document assigned" : "Document affecté",
+      });
+      setAssignOpen(false);
+      setAssignTargetDoc(null);
+      fetchDocuments();
+    } catch (err) {
+      addToast({
+        type: "error",
+        title: lang === "en" ? "Assignment error" : "Erreur d'affectation",
+        message: err instanceof Error ? err.message : undefined,
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   // ─── View document ───
   const handleView = async (doc: DocumentItem) => {
     setViewerDoc(doc);
@@ -617,6 +664,9 @@ export default function HRDocumentsPage() {
                     ? "-- Select an employee --"
                     : "-- Sélectionner un employé --"}
               </option>
+              <option value="unassigned">
+                {lang === "en" ? "Unassigned documents" : "Documents non affectés"}
+              </option>
               {filteredEmployees.map((emp) => (
                 <option key={emp.id} value={emp.id}>
                   {emp.lastName} {emp.firstName} — {emp.email}
@@ -626,7 +676,24 @@ export default function HRDocumentsPage() {
           </div>
           {/* Summary + Upload button */}
           <div className="flex items-end justify-between gap-3">
-            {selectedEmployee && (
+            {selectedEmployeeId === "unassigned" ? (
+              <div className="text-sm text-gray-600">
+                <p className="flex items-center gap-2 font-medium text-amber-600">
+                  <AlertTriangle className="h-4 w-4" />
+                  {lang === "en" ? "Unassigned documents" : "Documents non affectés"}
+                </p>
+                <p className="text-gray-400">
+                  {lang === "en"
+                    ? "These documents need to be assigned to an employee"
+                    : "Ces documents doivent être affectés à un employé"}
+                </p>
+                {data && (
+                  <p className="mt-1">
+                    {data.total} {lang === "en" ? "document(s)" : "document(s)"}
+                  </p>
+                )}
+              </div>
+            ) : selectedEmployee ? (
               <div className="text-sm text-gray-600">
                 <p className="font-medium text-gray-900">
                   {selectedEmployee.firstName} {selectedEmployee.lastName}
@@ -638,8 +705,8 @@ export default function HRDocumentsPage() {
                   </p>
                 )}
               </div>
-            )}
-            {selectedEmployeeId && (
+            ) : null}
+            {selectedEmployeeId && selectedEmployeeId !== "unassigned" && (
               <div className="flex items-center gap-2">
                 {/* Generate dropdown */}
                 <div className="relative">
@@ -935,6 +1002,16 @@ export default function HRDocumentsPage() {
                             </td>
                             <td className="whitespace-nowrap px-6 py-4">
                               <div className="flex items-center justify-end gap-1">
+                                {!doc.userId && (
+                                  <button
+                                    onClick={() => openAssign(doc)}
+                                    className="rounded-lg p-2 text-amber-500 transition-colors hover:bg-amber-50 hover:text-amber-600"
+                                    title={lang === "en" ? "Assign to employee" : "Affecter à un employé"}
+                                    aria-label={`${lang === "en" ? "Assign" : "Affecter"} ${doc.name}`}
+                                  >
+                                    <UserPlus className="h-4 w-4" />
+                                  </button>
+                                )}
                                 <button
                                   onClick={() => handleView(doc)}
                                   className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
@@ -1304,6 +1381,79 @@ export default function HRDocumentsPage() {
         confirmLabel={lang === "en" ? "Delete" : "Supprimer"}
         loading={submitting}
       />
+
+      {/* ═══ Assign Document Dialog ═══ */}
+      <Dialog
+        open={assignOpen}
+        onClose={() => {
+          setAssignOpen(false);
+          setAssignTargetDoc(null);
+        }}
+        title={lang === "en" ? "Assign Document" : "Affecter le document"}
+        description={assignTargetDoc?.name}
+        maxWidth="lg"
+      >
+        <div className="space-y-4">
+          {assignTargetDoc?.metadata?.detectedName && (
+            <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
+              <p className="font-medium">
+                {lang === "en" ? "Detected information:" : "Informations détectées :"}
+              </p>
+              <p>
+                {lang === "en" ? "Name" : "Nom"}: {assignTargetDoc.metadata.detectedName}
+              </p>
+              {assignTargetDoc.metadata.detectedEmail && (
+                <p>Email: {assignTargetDoc.metadata.detectedEmail}</p>
+              )}
+            </div>
+          )}
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              {lang === "en" ? "Assign to employee" : "Affecter à l'employé"} *
+            </label>
+            <select
+              value={assignTargetUserId}
+              onChange={(e) => setAssignTargetUserId(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#1B3A5C] focus:outline-none"
+            >
+              <option value="">
+                {lang === "en" ? "-- Select an employee --" : "-- Sélectionner un employé --"}
+              </option>
+              {employees.map((emp) => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.lastName} {emp.firstName} — {emp.email}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="mt-6 flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                setAssignOpen(false);
+                setAssignTargetDoc(null);
+              }}
+              disabled={submitting}
+              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              {lang === "en" ? "Cancel" : "Annuler"}
+            </button>
+            <button
+              onClick={handleAssign}
+              disabled={submitting || !assignTargetUserId}
+              className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+              style={{ backgroundColor: "#1B3A5C" }}
+            >
+              {submitting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <UserPlus className="h-4 w-4" />
+              )}
+              {lang === "en" ? "Assign" : "Affecter"}
+            </button>
+          </div>
+        </div>
+      </Dialog>
 
       {/* ═══ PDF Viewer Dialog ═══ */}
       {viewerDoc && (

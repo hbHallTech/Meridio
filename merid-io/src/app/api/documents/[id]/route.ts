@@ -155,6 +155,22 @@ export async function PATCH(
   if (data.status) updateData.status = data.status;
   if (data.metadata !== undefined) updateData.metadata = data.metadata;
 
+  // Allow HR/Admin to assign a document to a user
+  if (data.userId) {
+    if (!isHrOrAdmin) {
+      return NextResponse.json({ error: "Seuls RH/Admin peuvent affecter un document" }, { status: 403 });
+    }
+    // Verify target user exists
+    const targetUser = await prisma.user.findUnique({
+      where: { id: data.userId },
+      select: { id: true },
+    });
+    if (!targetUser) {
+      return NextResponse.json({ error: "Employé introuvable" }, { status: 404 });
+    }
+    updateData.userId = data.userId;
+  }
+
   const updated = await prisma.document.update({
     where: { id },
     data: updateData,

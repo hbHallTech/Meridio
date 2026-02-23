@@ -430,19 +430,52 @@ async function ocrFromBuffer(pdfBuffer: Buffer): Promise<string> {
 
 // ─── Extract text from PDF (built-in first, OCR fallback) ───
 
+/** Check if extracted text has enough meaningful content (letters/digits vs total) */
+function isTextMeaningful(text: string, minAlphaRatio = 0.15, minAlphaChars = 30): boolean {
+  if (!text) return false;
+  const alphaCount = (text.match(/[A-Za-z0-9\u00C0-\u024F]/g) || []).length;
+  return alphaCount >= minAlphaChars && (alphaCount / text.length) >= minAlphaRatio;
+}
+
 export async function extractTextFromPdf(buffer: Buffer): Promise<{ text: string; usedOcr: boolean }> {
-  // Try built-in text extraction first (fast, zero external deps)
+  // Strategy 1: pdfjs-dist (most robust, handles CID/Identity-H fonts natively)
+  try {
+    const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(buffer), verbosity: 0 });
+    const pdfDoc = await loadingTask.promise;
+
+    let fullText = "";
+    for (let i = 1; i <= pdfDoc.numPages; i++) {
+      const page = await pdfDoc.getPage(i);
+      const tc = await page.getTextContent();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const pageText = tc.items.map((item: any) => item.str || "").join(" ");
+      fullText += pageText + "\n";
+    }
+    fullText = fullText.trim();
+
+    if (isTextMeaningful(fullText)) {
+      console.log(`[imap-import] pdfjs-dist extraction: ${fullText.length} chars (meaningful)`);
+      return { text: fullText, usedOcr: false };
+    }
+    console.log(`[imap-import] pdfjs-dist extraction: ${fullText.length} chars but not meaningful, trying built-in...`);
+  } catch (e) {
+    console.log(`[imap-import] pdfjs-dist extraction failed:`, e instanceof Error ? e.message : e);
+  }
+
+  // Strategy 2: Built-in text extraction (handles some edge cases pdfjs misses)
   try {
     const text = extractTextFromPdfBuffer(buffer);
-    if (text && text.length > 50) {
+    if (isTextMeaningful(text)) {
+      console.log(`[imap-import] Built-in extraction: ${text.length} chars (meaningful)`);
       return { text, usedOcr: false };
     }
-    console.log(`[imap-import] Built-in extraction: only ${text.length} chars, trying OCR...`);
+    console.log(`[imap-import] Built-in extraction: ${text.length} chars but not meaningful, trying OCR...`);
   } catch (e) {
     console.log(`[imap-import] Built-in extraction failed:`, e instanceof Error ? e.message : e);
   }
 
-  // OCR fallback for image-based / scanned PDFs (with timeout)
+  // Strategy 3: OCR fallback for image-based / scanned PDFs (with timeout)
   try {
     const text = await ocrFromBuffer(buffer);
     return { text: text.trim(), usedOcr: true };
