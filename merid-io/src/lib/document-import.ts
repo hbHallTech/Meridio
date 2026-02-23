@@ -569,6 +569,11 @@ export async function processIncomingEmails(): Promise<ImportResult> {
     greetingTimeout: 30_000,    // 30s for server greeting
   });
 
+  // Prevent uncaught ECONNRESET from crashing the Node.js process
+  client.on("error", (err: Error) => {
+    console.error(`[imap-import] ImapFlow error event: ${err.message}`);
+  });
+
   try {
     console.log(`[imap-import] Connecting via ImapFlow...`);
     const t1 = Date.now();
@@ -768,7 +773,22 @@ export async function processIncomingEmails(): Promise<ImportResult> {
     await client.logout();
   } catch (connErr) {
     const errMsg = connErr instanceof Error ? connErr.message : String(connErr);
-    result.errors.push(`IMAP connection error: ${errMsg}`);
+    const lowerMsg = errMsg.toLowerCase();
+
+    // Provide user-friendly error messages for common IMAP failures
+    if (lowerMsg.includes("authenticate") || lowerMsg.includes("login") || lowerMsg.includes("credentials") || lowerMsg.includes("no authenticate")) {
+      result.errors.push(
+        `Échec d'authentification IMAP — le serveur a refusé les identifiants. ` +
+        `Pour Outlook/Office365, utilisez un "mot de passe d'application" (pas le mot de passe du compte). ` +
+        `Pour Gmail, activez les "mots de passe d'application" dans les paramètres de sécurité Google.`
+      );
+    } else if (lowerMsg.includes("econnreset") || lowerMsg.includes("econnrefused")) {
+      result.errors.push(`Connexion IMAP refusée par ${host}:${port} — vérifiez l'hôte et le port.`);
+    } else if (lowerMsg.includes("timeout")) {
+      result.errors.push(`Connexion IMAP timeout vers ${host}:${port} — le serveur ne répond pas.`);
+    } else {
+      result.errors.push(`Erreur IMAP : ${errMsg}`);
+    }
   }
 
   return result;
