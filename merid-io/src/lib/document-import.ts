@@ -603,10 +603,12 @@ export async function processIncomingEmails(): Promise<ImportResult> {
     const lock = await client.getMailboxLock("INBOX");
 
     try {
-      // Fetch metadata only (NOT source) — avoids downloading full message body upfront
+      // Phase 1: Fetch metadata only (fast) — identify messages with PDF attachments
+      const msgMetas: { seq: number; uid: number; detail: ImportResult["details"][0]; hasPdf: boolean }[] = [];
       const messages = client.fetch({ seen: false }, {
         envelope: true,
         bodyStructure: true,
+        uid: true,
       });
 
       for await (const msg of messages) {
@@ -617,87 +619,77 @@ export async function processIncomingEmails(): Promise<ImportResult> {
           attachments: 0,
           documentsCreated: 0,
         };
+        const pdfParts = findPdfParts(msg.bodyStructure);
+        console.log(`[imap-import] Message ${msg.seq}: ${detail.subject} — ${pdfParts.length} PDF part(s) found`);
+        detail.attachments = pdfParts.length;
+        msgMetas.push({ seq: msg.seq, uid: msg.uid, detail, hasPdf: pdfParts.length > 0 });
+      }
+      console.log(`[imap-import] Phase 1 done: ${msgMetas.length} messages, ${msgMetas.filter(m => m.hasPdf).length} with PDFs`);
+
+      // Phase 2: For each message with PDFs, download full source and extract attachments
+      for (const meta of msgMetas) {
+        const { detail } = meta;
+
+        if (!meta.hasPdf) {
+          result.details.push(detail);
+          result.processed++;
+          continue;
+        }
 
         try {
-          // Find PDF attachment parts from MIME structure (without downloading content)
-          const pdfParts = findPdfParts(msg.bodyStructure);
-          console.log(`[imap-import] Message ${msg.seq}: ${detail.subject} — ${pdfParts.length} PDF part(s) found`);
+          // Download the full message source (not specific MIME parts — that hangs on some servers)
+          console.log(`[imap-import] Downloading full message ${meta.seq} (UID ${meta.uid})...`);
+          const t2 = Date.now();
 
-          if (pdfParts.length === 0) {
-            // No PDF attachments, skip without downloading
+          let rawBuffer: Buffer;
+          try {
+            rawBuffer = await downloadPartWithTimeout(client, meta.uid.toString(), undefined, DOWNLOAD_TIMEOUT);
+          } catch (dlErr) {
+            const dlMsg = dlErr instanceof Error ? dlErr.message : String(dlErr);
+            console.warn(`[imap-import] Download failed for message ${meta.seq}: ${dlMsg}`);
+            detail.error = `Téléchargement échoué : ${dlMsg}`;
+            result.errors.push(detail.error);
+            result.details.push(detail);
+            result.processed++;
+            continue;
+          }
+          console.log(`[imap-import] Downloaded message ${meta.seq}: ${rawBuffer.length} bytes (${Date.now() - t2}ms)`);
+
+          // Parse raw email to extract PDF attachments
+          const attachments = extractPdfAttachments(rawBuffer);
+          console.log(`[imap-import] Extracted ${attachments.length} PDF attachment(s) from message ${meta.seq}`);
+
+          if (attachments.length === 0) {
+            detail.error = `Aucune pièce jointe PDF trouvée dans l'email (MIME parsing)`;
+            result.errors.push(detail.error);
             result.details.push(detail);
             result.processed++;
             continue;
           }
 
-          detail.attachments = pdfParts.length;
-
-          for (const pdfPart of pdfParts) {
+          for (const att of attachments) {
             try {
-              // Download the PDF with a timeout to prevent one stuck download from blocking everything
-              console.log(`[imap-import] Downloading part ${pdfPart.part} (${pdfPart.filename})...`);
-              const t2 = Date.now();
-
-              let pdfBuffer: Buffer;
-              try {
-                pdfBuffer = await downloadPartWithTimeout(client, msg.seq.toString(), pdfPart.part, DOWNLOAD_TIMEOUT);
-              } catch (dlErr) {
-                const dlMsg = dlErr instanceof Error ? dlErr.message : String(dlErr);
-                console.warn(`[imap-import] Download failed for ${pdfPart.filename}: ${dlMsg}`);
-                detail.error = `Téléchargement échoué pour ${pdfPart.filename} : ${dlMsg}`;
-                result.errors.push(detail.error);
-                continue;
-              }
-              console.log(`[imap-import] Downloaded ${pdfPart.filename}: ${pdfBuffer.length} bytes (${Date.now() - t2}ms)`);
-
-              // ImapFlow may return base64-encoded content for MIME parts.
-              // Detect and decode if needed: base64 text starts with "JVBERi" (which is "%PDF" in base64)
-              if (pdfBuffer.length > 10 && pdfBuffer[0] !== 0x25) {
-                const head = pdfBuffer.subarray(0, 20).toString("ascii");
-                if (/^[A-Za-z0-9+/\r\n]/.test(head)) {
-                  // Looks like base64 — try decoding
-                  try {
-                    const decoded = Buffer.from(pdfBuffer.toString("ascii").replace(/\s/g, ""), "base64");
-                    if (decoded.length > 4 && decoded[0] === 0x25 && decoded[1] === 0x50) {
-                      console.log(`[imap-import] Decoded base64 → ${decoded.length} bytes`);
-                      pdfBuffer = decoded;
-                    }
-                  } catch {
-                    // Not valid base64, continue with original buffer
-                  }
-                }
-              }
-
-              // Verify PDF magic bytes (%PDF)
-              if (pdfBuffer.length < 5 || pdfBuffer[0] !== 0x25 || pdfBuffer[1] !== 0x50) {
-                console.warn(`[imap-import] ${pdfPart.filename}: not a valid PDF (first bytes: ${pdfBuffer.subarray(0, 10).toString("hex")})`);
-                detail.error = `${pdfPart.filename} n'est pas un PDF valide`;
-                result.errors.push(detail.error);
-                continue;
-              }
-
               // Extract text from PDF
               const t3 = Date.now();
-              const { text, usedOcr } = await extractTextFromPdf(pdfBuffer);
-              console.log(`[imap-import] Text extraction: ${text.length} chars, OCR=${usedOcr} (${Date.now() - t3}ms)`);
+              const { text, usedOcr } = await extractTextFromPdf(att.content);
+              console.log(`[imap-import] Text extraction for ${att.filename}: ${text.length} chars, OCR=${usedOcr} (${Date.now() - t3}ms)`);
               if (text.length > 0) {
                 console.log(`[imap-import] Text preview: ${text.substring(0, 200)}`);
               }
 
               if (!text || text.length < 20) {
-                // OCR failed or empty PDF
                 await logAudit(null, "EMAIL_IMPORT_OCR_FAILURE", {
                   entityType: "Document",
                   newValue: {
-                    filename: pdfPart.filename,
+                    filename: att.filename,
                     from: detail.from,
                     subject: detail.subject,
                     usedOcr,
                   },
                 });
-                detail.error = `Extraction de texte échouée pour ${pdfPart.filename} (${text.length} caractères extraits)`;
+                detail.error = `Extraction de texte échouée pour ${att.filename} (${text.length} caractères extraits)`;
                 result.errors.push(detail.error);
-                await notifyHrImportFailure(pdfPart.filename, detail.from, detail.subject, "OCR extraction produced no usable text");
+                await notifyHrImportFailure(att.filename, detail.from, detail.subject, "OCR extraction produced no usable text");
                 continue;
               }
 
@@ -708,10 +700,10 @@ export async function processIncomingEmails(): Promise<ImportResult> {
               // Find matching employee
               const employee = await findEmployee(metadata);
               if (!employee) {
-                detail.error = `Aucun employé trouvé pour ${pdfPart.filename} (nom: ${metadata.employeeName || "non détecté"}, email: ${metadata.employeeEmail || "non détecté"})`;
+                detail.error = `Aucun employé trouvé pour ${att.filename} (nom: ${metadata.employeeName || "non détecté"}, email: ${metadata.employeeEmail || "non détecté"})`;
                 result.errors.push(detail.error);
                 await notifyHrImportFailure(
-                  pdfPart.filename,
+                  att.filename,
                   detail.from,
                   detail.subject,
                   `Could not match employee: ${metadata.employeeName || "unknown"}`
@@ -720,17 +712,14 @@ export async function processIncomingEmails(): Promise<ImportResult> {
               }
 
               // Upload PDF to Vercel Blob
-              const ext = ".pdf";
-              const blobPath = `documents/${employee.id}/${crypto.randomUUID()}${ext}`;
-              const blob = await put(blobPath, pdfBuffer, {
+              const blobPath = `documents/${employee.id}/${crypto.randomUUID()}.pdf`;
+              const blob = await put(blobPath, att.content, {
                 access: "private",
                 addRandomSuffix: false,
               });
 
               // Generate document name
-              const monthLabel = metadata.month
-                ? `_${metadata.month}`
-                : "";
+              const monthLabel = metadata.month ? `_${metadata.month}` : "";
               const yearLabel = metadata.year ?? new Date().getFullYear().toString();
               const typeLabel = metadata.documentType === "FICHE_PAIE"
                 ? "Fiche_Paie"
@@ -741,10 +730,10 @@ export async function processIncomingEmails(): Promise<ImportResult> {
               const document = await prisma.document.create({
                 data: {
                   userId: employee.id,
-                  name: pdfPart.filename || docName,
+                  name: att.filename || docName,
                   type: metadata.documentType,
                   filePath: blob.url,
-                  fileSize: pdfBuffer.length,
+                  fileSize: att.content.length,
                   mimeType: "application/pdf",
                   metadata: {
                     ...(metadata.month ? { mois: metadata.month } : {}),
@@ -774,13 +763,13 @@ export async function processIncomingEmails(): Promise<ImportResult> {
               result.created++;
             } catch (attErr) {
               const errMsg = attErr instanceof Error ? attErr.message : String(attErr);
-              detail.error = `Error processing ${pdfPart.filename}: ${errMsg}`;
+              detail.error = `Erreur traitement ${att.filename}: ${errMsg}`;
               result.errors.push(detail.error);
             }
           }
 
-          // Mark message as seen
-          await client.messageFlagsAdd(msg.seq.toString(), ["\\Seen"], { uid: false });
+          // Mark message as seen after processing
+          await client.messageFlagsAdd(meta.uid.toString(), ["\\Seen"], { uid: true });
         } catch (msgErr) {
           const errMsg = msgErr instanceof Error ? msgErr.message : String(msgErr);
           detail.error = errMsg;
@@ -821,18 +810,18 @@ export async function processIncomingEmails(): Promise<ImportResult> {
 // ─── Helpers ───
 
 /**
- * Download a specific MIME part from an IMAP message with a timeout.
- * Prevents a single slow/stuck download from blocking the entire pipeline.
+ * Download a message (or specific MIME part) with a timeout.
+ * When part is undefined, downloads the full message source.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function downloadPartWithTimeout(client: any, seq: string, part: string, timeout: number): Promise<Buffer> {
+async function downloadPartWithTimeout(client: any, uid: string, part: string | undefined, timeout: number): Promise<Buffer> {
   return new Promise<Buffer>(async (resolve, reject) => {
     const timer = setTimeout(() => {
       reject(new Error(`Timeout après ${timeout / 1000}s — le fichier est peut-être trop volumineux`));
     }, timeout);
 
     try {
-      const downloadMsg = await client.download(seq, part, { uid: false });
+      const downloadMsg = await client.download(uid, part, { uid: true });
       if (!downloadMsg) {
         clearTimeout(timer);
         reject(new Error("Le serveur n'a pas renvoyé de contenu"));
