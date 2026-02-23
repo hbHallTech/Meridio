@@ -174,8 +174,10 @@ export async function GET(request: NextRequest) {
   const queryUserId = searchParams.get("userId");
 
   // HR/Admin can list any user's docs via ?userId=, employees only see their own
+  // Special value "unassigned" lists documents with no userId (pending HR assignment)
+  const isUnassigned = queryUserId === "unassigned" && isHrOrAdmin;
   let targetUserId = session.user.id;
-  if (queryUserId && isHrOrAdmin) {
+  if (queryUserId && queryUserId !== "unassigned" && isHrOrAdmin) {
     targetUserId = queryUserId;
   } else if (queryUserId && !isHrOrAdmin) {
     return NextResponse.json({ error: "Accès non autorisé" }, { status: 403 });
@@ -183,7 +185,7 @@ export async function GET(request: NextRequest) {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where: any = {
-    userId: targetUserId,
+    userId: isUnassigned ? null : targetUserId,
     status: { not: "DELETED" },
   };
 
@@ -220,6 +222,7 @@ export async function GET(request: NextRequest) {
         skip: offset,
         select: {
           id: true,
+          userId: true,
           name: true,
           type: true,
           status: true,
@@ -228,6 +231,9 @@ export async function GET(request: NextRequest) {
           metadata: true,
           createdAt: true,
           updatedAt: true,
+          user: {
+            select: { firstName: true, lastName: true },
+          },
           createdBy: {
             select: { firstName: true, lastName: true },
           },
