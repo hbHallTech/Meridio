@@ -17,6 +17,22 @@ import { decrypt } from "@/lib/crypto";
 import crypto from "crypto";
 import { inflateSync } from "zlib";
 
+// Prevent stale IMAP socket errors from crashing the Vercel serverless process.
+// In Vercel, function containers are reused — a previous invocation's IMAP connection
+// may still exist and emit errors (ECONNRESET, Socket timeout) after our handler exits.
+if (typeof process !== "undefined" && !process.env.__IMAP_UNCAUGHT_HANDLER) {
+  process.env.__IMAP_UNCAUGHT_HANDLER = "1";
+  process.on("uncaughtException", (err) => {
+    const msg = err?.message || "";
+    if (msg.includes("ECONNRESET") || msg.includes("Socket timeout") || msg.includes("ETIMEOUT")) {
+      console.warn(`[imap-import] Caught stale socket error (non-fatal): ${msg}`);
+      return; // Swallow — these are from previous invocation's dead connections
+    }
+    // Re-throw non-IMAP errors so they're not silently swallowed
+    throw err;
+  });
+}
+
 // ─── Types ───
 
 export interface ImportResult {
