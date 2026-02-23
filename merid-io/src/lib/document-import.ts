@@ -17,6 +17,22 @@ import { decrypt } from "@/lib/crypto";
 import crypto from "crypto";
 import { inflateSync } from "zlib";
 
+// Prevent stale IMAP socket errors from crashing the Vercel serverless process.
+// In Vercel, function containers are reused — a previous invocation's IMAP connection
+// may still exist and emit errors (ECONNRESET, Socket timeout) after our handler exits.
+if (typeof process !== "undefined" && !process.env.__IMAP_UNCAUGHT_HANDLER) {
+  process.env.__IMAP_UNCAUGHT_HANDLER = "1";
+  process.on("uncaughtException", (err) => {
+    const msg = err?.message || "";
+    if (msg.includes("ECONNRESET") || msg.includes("Socket timeout") || msg.includes("ETIMEOUT")) {
+      console.warn(`[imap-import] Caught stale socket error (non-fatal): ${msg}`);
+      return; // Swallow — these are from previous invocation's dead connections
+    }
+    // Re-throw non-IMAP errors so they're not silently swallowed
+    throw err;
+  });
+}
+
 // ─── Types ───
 
 export interface ImportResult {
@@ -494,6 +510,10 @@ async function testImapConnectivity(host: string, port: number, secure: boolean)
   });
 }
 
+// ─── IMAP constants ───
+
+const DOWNLOAD_TIMEOUT = 30_000; // 30s max per attachment download
+
 // ─── IMAP connection + email processing ───
 
 export async function processIncomingEmails(): Promise<ImportResult> {
@@ -569,6 +589,11 @@ export async function processIncomingEmails(): Promise<ImportResult> {
     greetingTimeout: 30_000,    // 30s for server greeting
   });
 
+  // Prevent uncaught ECONNRESET from crashing the Node.js process
+  client.on("error", (err: Error) => {
+    console.error(`[imap-import] ImapFlow error event: ${err.message}`);
+  });
+
   try {
     console.log(`[imap-import] Connecting via ImapFlow...`);
     const t1 = Date.now();
@@ -609,16 +634,20 @@ export async function processIncomingEmails(): Promise<ImportResult> {
 
           for (const pdfPart of pdfParts) {
             try {
-              // Download only the specific PDF MIME part (not the entire message)
+              // Download the PDF with a timeout to prevent one stuck download from blocking everything
               console.log(`[imap-import] Downloading part ${pdfPart.part} (${pdfPart.filename})...`);
               const t2 = Date.now();
-              const downloadMsg = await client.download(msg.seq.toString(), pdfPart.part, { uid: false });
-              if (!downloadMsg) {
-                detail.error = `Could not download part ${pdfPart.part}`;
+
+              let pdfBuffer: Buffer;
+              try {
+                pdfBuffer = await downloadPartWithTimeout(client, msg.seq.toString(), pdfPart.part, DOWNLOAD_TIMEOUT);
+              } catch (dlErr) {
+                const dlMsg = dlErr instanceof Error ? dlErr.message : String(dlErr);
+                console.warn(`[imap-import] Download failed for ${pdfPart.filename}: ${dlMsg}`);
+                detail.error = `Téléchargement échoué pour ${pdfPart.filename} : ${dlMsg}`;
                 result.errors.push(detail.error);
                 continue;
               }
-              let pdfBuffer = await streamToBuffer(downloadMsg.content);
               console.log(`[imap-import] Downloaded ${pdfPart.filename}: ${pdfBuffer.length} bytes (${Date.now() - t2}ms)`);
 
               // ImapFlow may return base64-encoded content for MIME parts.
@@ -768,13 +797,56 @@ export async function processIncomingEmails(): Promise<ImportResult> {
     await client.logout();
   } catch (connErr) {
     const errMsg = connErr instanceof Error ? connErr.message : String(connErr);
-    result.errors.push(`IMAP connection error: ${errMsg}`);
+    const lowerMsg = errMsg.toLowerCase();
+
+    // Provide user-friendly error messages for common IMAP failures
+    if (lowerMsg.includes("authenticate") || lowerMsg.includes("login") || lowerMsg.includes("credentials") || lowerMsg.includes("no authenticate")) {
+      result.errors.push(
+        `Échec d'authentification IMAP — le serveur a refusé les identifiants. ` +
+        `Pour Outlook/Office365, utilisez un "mot de passe d'application" (pas le mot de passe du compte). ` +
+        `Pour Gmail, activez les "mots de passe d'application" dans les paramètres de sécurité Google.`
+      );
+    } else if (lowerMsg.includes("econnreset") || lowerMsg.includes("econnrefused")) {
+      result.errors.push(`Connexion IMAP refusée par ${host}:${port} — vérifiez l'hôte et le port.`);
+    } else if (lowerMsg.includes("timeout")) {
+      result.errors.push(`Connexion IMAP timeout vers ${host}:${port} — le serveur ne répond pas.`);
+    } else {
+      result.errors.push(`Erreur IMAP : ${errMsg}`);
+    }
   }
 
   return result;
 }
 
 // ─── Helpers ───
+
+/**
+ * Download a specific MIME part from an IMAP message with a timeout.
+ * Prevents a single slow/stuck download from blocking the entire pipeline.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function downloadPartWithTimeout(client: any, seq: string, part: string, timeout: number): Promise<Buffer> {
+  return new Promise<Buffer>(async (resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`Timeout après ${timeout / 1000}s — le fichier est peut-être trop volumineux`));
+    }, timeout);
+
+    try {
+      const downloadMsg = await client.download(seq, part, { uid: false });
+      if (!downloadMsg) {
+        clearTimeout(timer);
+        reject(new Error("Le serveur n'a pas renvoyé de contenu"));
+        return;
+      }
+      const buffer = await streamToBuffer(downloadMsg.content);
+      clearTimeout(timer);
+      resolve(buffer);
+    } catch (err) {
+      clearTimeout(timer);
+      reject(err);
+    }
+  });
+}
 
 async function streamToBuffer(stream: ReadableStream | NodeJS.ReadableStream): Promise<Buffer> {
   const chunks: Uint8Array[] = [];
