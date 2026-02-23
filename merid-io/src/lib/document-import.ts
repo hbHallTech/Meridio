@@ -408,25 +408,10 @@ export function parsePayslipText(text: string): ParsedMetadata {
 }
 
 // ─── OCR Fallback for image-based PDFs ───
-// Dynamically imported to avoid module-load issues in serverless
-// Has a 20s timeout to prevent freezing serverless functions
-
-const OCR_TIMEOUT = 20_000; // 20 seconds max for OCR
-
-async function ocrFromBuffer(pdfBuffer: Buffer): Promise<string> {
-  const Tesseract = (await import("tesseract.js")).default;
-  const ocrPromise = Tesseract.recognize(pdfBuffer, "fra+eng", {
-    logger: () => {}, // Suppress progress logs
-  });
-
-  const result = await Promise.race([
-    ocrPromise,
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("OCR timeout")), OCR_TIMEOUT)
-    ),
-  ]);
-  return result.data.text;
-}
+// NOTE: tesseract.js worker module is NOT bundled by Vercel's serverless bundler,
+// causing "Cannot find module 'tesseract.js/src/worker-script/node/index.js'" crashes.
+// OCR is disabled in serverless — pdfjs-dist + built-in parser handle text-based PDFs.
+// For scanned/image PDFs, the document is still created (unassigned) for HR to handle.
 
 // ─── Extract text from PDF (built-in first, OCR fallback) ───
 
@@ -439,9 +424,17 @@ function isTextMeaningful(text: string, minAlphaRatio = 0.15, minAlphaChars = 30
 
 export async function extractTextFromPdf(buffer: Buffer): Promise<{ text: string; usedOcr: boolean }> {
   // Strategy 1: pdfjs-dist (most robust, handles CID/Identity-H fonts natively)
+  // Uses legacy build which works without Canvas/DOMMatrix in serverless.
+  // Warnings about @napi-rs/canvas, DOMMatrix, Path2D are non-fatal — we only need text extraction.
   try {
     const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
-    const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(buffer), verbosity: 0 });
+    const loadingTask = pdfjsLib.getDocument({
+      data: new Uint8Array(buffer),
+      verbosity: 0,
+      // Disable features that need browser/canvas APIs (not available in serverless)
+      disableFontFace: true,
+      isEvalSupported: false,
+    });
     const pdfDoc = await loadingTask.promise;
 
     let fullText = "";
@@ -463,26 +456,22 @@ export async function extractTextFromPdf(buffer: Buffer): Promise<{ text: string
     console.log(`[imap-import] pdfjs-dist extraction failed:`, e instanceof Error ? e.message : e);
   }
 
-  // Strategy 2: Built-in text extraction (handles some edge cases pdfjs misses)
+  // Strategy 2: Built-in text extraction with ToUnicode CMap support
   try {
     const text = extractTextFromPdfBuffer(buffer);
     if (isTextMeaningful(text)) {
       console.log(`[imap-import] Built-in extraction: ${text.length} chars (meaningful)`);
       return { text, usedOcr: false };
     }
-    console.log(`[imap-import] Built-in extraction: ${text.length} chars but not meaningful, trying OCR...`);
+    console.log(`[imap-import] Built-in extraction: ${text.length} chars but not meaningful`);
   } catch (e) {
     console.log(`[imap-import] Built-in extraction failed:`, e instanceof Error ? e.message : e);
   }
 
-  // Strategy 3: OCR fallback for image-based / scanned PDFs (with timeout)
-  try {
-    const text = await ocrFromBuffer(buffer);
-    return { text: text.trim(), usedOcr: true };
-  } catch (e) {
-    console.warn(`[imap-import] OCR failed:`, e instanceof Error ? e.message : e);
-    return { text: "", usedOcr: true };
-  }
+  // No OCR fallback in serverless (tesseract.js worker not bundled by Vercel)
+  // Return empty — the document will still be created as unassigned for HR
+  console.warn(`[imap-import] All text extraction strategies failed — document will be created without parsed metadata`);
+  return { text: "", usedOcr: false };
 }
 
 // ─── Match employee by name or email ───
