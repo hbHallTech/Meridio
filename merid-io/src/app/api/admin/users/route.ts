@@ -20,6 +20,8 @@ export async function GET() {
       email: true,
       firstName: true,
       lastName: true,
+      cin: true,
+      cnss: true,
       roles: true,
       isActive: true,
       hireDate: true,
@@ -55,6 +57,8 @@ export async function POST(request: Request) {
       isActive,
       forcePasswordChange,
       sendNotification,
+      cin,
+      cnss,
     } = body;
 
     if (!firstName || !lastName || !email || !password || !roles || !officeId || !hireDate) {
@@ -85,12 +89,16 @@ export async function POST(request: Request) {
         passwordExpiresAt,
         lastPasswordChangeAt: new Date(),
         passwordHistory,
+        cin: cin || null,
+        cnss: cnss || null,
       },
       select: {
         id: true,
         email: true,
         firstName: true,
         lastName: true,
+        cin: true,
+        cnss: true,
         roles: true,
         isActive: true,
         hireDate: true,
@@ -148,6 +156,8 @@ export async function PATCH(request: Request) {
       isActive,
       forcePasswordChange,
       sendNotification,
+      cin,
+      cnss,
     } = body;
 
     if (!id) {
@@ -176,6 +186,8 @@ export async function PATCH(request: Request) {
     if (hireDate !== undefined) updateData.hireDate = new Date(hireDate);
     if (isActive !== undefined) updateData.isActive = isActive;
     if (forcePasswordChange !== undefined) updateData.forcePasswordChange = forcePasswordChange;
+    if (cin !== undefined) updateData.cin = cin || null;
+    if (cnss !== undefined) updateData.cnss = cnss || null;
 
     let passwordChanged = false;
     if (password && password.trim().length > 0) {
@@ -213,6 +225,8 @@ export async function PATCH(request: Request) {
         email: true,
         firstName: true,
         lastName: true,
+        cin: true,
+        cnss: true,
         roles: true,
         isActive: true,
         hireDate: true,
