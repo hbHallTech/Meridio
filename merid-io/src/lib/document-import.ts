@@ -458,11 +458,17 @@ async function extractTextWithDocumentAI(buffer: Buffer): Promise<string> {
     throw new Error("Google Document AI env vars missing (GOOGLE_CLIENT_EMAIL, GOOGLE_PRIVATE_KEY, GOOGLE_PROJECT_ID, DOCAI_PROCESSOR_ID)");
   }
 
+  // API endpoint must match the processor location (e.g., "eu-documentai.googleapis.com")
+  const apiEndpoint = `${location}-documentai.googleapis.com`;
+
   const client = new DocumentProcessorServiceClient({
     credentials: { client_email: clientEmail, private_key: privateKey },
+    apiEndpoint,
   });
 
   const name = `projects/${projectId}/locations/${location}/processors/${processorId}`;
+  console.log(`[imap-import] Document AI request: endpoint=${apiEndpoint}, processor=${name}`);
+
   const [result] = await client.processDocument({
     name,
     rawDocument: {
@@ -498,8 +504,28 @@ export async function extractTextFromPdf(buffer: Buffer): Promise<{ text: string
   }
 
   // Strategy 2: pdfjs-dist (robust local fallback, handles CID/Identity-H fonts)
-  // Uses legacy build which works without Canvas/DOMMatrix in serverless.
+  // Polyfill DOMMatrix for Vercel serverless (no DOM available — only needed for rendering, not text extraction)
   try {
+    if (typeof globalThis.DOMMatrix === "undefined") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (globalThis as any).DOMMatrix = class DOMMatrix {
+        m: number[];
+        constructor(init?: string | number[]) {
+          this.m = Array.isArray(init) ? init : [1, 0, 0, 1, 0, 0];
+        }
+        get a() { return this.m[0]; } get b() { return this.m[1]; }
+        get c() { return this.m[2]; } get d() { return this.m[3]; }
+        get e() { return this.m[4]; } get f() { return this.m[5]; }
+        isIdentity = true;
+        is2D = true;
+        inverse() { return new DOMMatrix(); }
+        multiply() { return new DOMMatrix(); }
+        translate() { return new DOMMatrix(); }
+        scale() { return new DOMMatrix(); }
+        transformPoint(p: Record<string, number>) { return p; }
+        toString() { return "matrix(1, 0, 0, 1, 0, 0)"; }
+      };
+    }
     const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
     const loadingTask = pdfjsLib.getDocument({
       data: new Uint8Array(buffer),
