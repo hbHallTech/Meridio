@@ -368,19 +368,37 @@ export function parsePayslipText(text: string): ParsedMetadata {
   }
 
   // ── Extract employee name ──
-  // Look for patterns like "Employé: Nom Prénom", "Salarié : NOM Prénom", "M./Mme NOM"
-  // Match exactly "LASTNAME Firstname" or "LASTNAME First Second" after label
-  // Uses line-based matching (not normalized) to avoid cross-line capture
+  // Document AI reads table cells separately, so "Nom & Prénom" is on one line
+  // and the actual name (e.g., "Sirine SOLTANI") is on a different line.
+
+  // Strategy 1: Label on same line as value (e.g., "Salarié : NOM Prénom")
   for (const line of lines) {
-    const labelPattern = /(?:employ[ée]|salari[ée]|collaborateur|nom\s+(?:et\s+)?pr[ée]nom)\s*[:]\s*(.+)/i;
+    const labelPattern = /(?:employ[ée]|salari[ée]|collaborateur|nom\s+(?:et\s+|&\s*)?pr[ée]nom)\s*[:]\s*(.+)/i;
     const labelMatch = labelPattern.exec(line);
     if (labelMatch) {
-      result.employeeName = labelMatch[1].trim();
-      break;
+      const val = labelMatch[1].trim();
+      if (val.length >= 3 && /[a-zA-ZÀ-ÿ]/.test(val)) {
+        result.employeeName = val;
+        break;
+      }
     }
   }
 
-  // M./Mme pattern on normalized text (only if label match didn't find a name)
+  // Strategy 2: Label on one line, value on NEXT line
+  if (!result.employeeName) {
+    for (let i = 0; i < lines.length - 1; i++) {
+      if (/^(?:nom\s+(?:et\s+|&\s*)?pr[ée]nom|employ[ée]|salari[ée]|collaborateur)\s*:?\s*$/i.test(lines[i])) {
+        const nextLine = lines[i + 1].trim();
+        // Check next line looks like a name (has letters, not a label)
+        if (nextLine.length >= 3 && /[a-zA-ZÀ-ÿ]{2,}/.test(nextLine) && !/^(adresse|date|fonction|matricule|r[ée]gime|rib|lib)/i.test(nextLine)) {
+          result.employeeName = nextLine;
+          break;
+        }
+      }
+    }
+  }
+
+  // Strategy 3: M./Mme pattern
   if (!result.employeeName) {
     const titlePattern = /\b(?:M\.|Mme|Mr|Mrs)\s+([A-ZÉÈÊÀÙÛÔÂ][a-zéèêàùûôâ]+(?:\s+[A-ZÉÈÊÀÙÛÔÂ][a-zéèêàùûôâ]+)+)/;
     const titleMatch = titlePattern.exec(normalized);
@@ -389,14 +407,22 @@ export function parsePayslipText(text: string): ParsedMetadata {
     }
   }
 
-  // Fallback: look for a line with all-caps text that could be a name (common in payslips)
+  // Strategy 4: Standalone line with "Firstname LASTNAME" or "LASTNAME Firstname" pattern
+  // Skip known payslip labels/keywords to avoid false positives like "Régime CNSS"
   if (!result.employeeName) {
+    const skipPattern = /^(bulletin|paie|salaire|adresse|fonction|matricule|r[ée]gime|cnss|salarié|rib|libellé|chef|situation|date|prime|net|brut|total|cotisation|indemnit|cong[ée]|absence|heure|code|base|taux|montant|gain|retenue|rubrique)/i;
     for (const line of lines) {
-      // Match "LASTNAME Firstname" pattern (all-caps last name + capitalized first)
-      const allCapsName = /^([A-ZÉÈÊÀÙÛÔÂ]{2,})\s+([A-ZÉÈÊÀÙÛÔÂ][a-zéèêàùûôâ]+)$/;
-      const capsMatch = allCapsName.exec(line);
-      if (capsMatch) {
-        result.employeeName = `${capsMatch[1]} ${capsMatch[2]}`;
+      if (skipPattern.test(line)) continue;
+      // "Firstname LASTNAME" (e.g., "Sirine SOLTANI", "Sawssen SOLTANI")
+      const fnLn = /^([A-ZÀ-ÿ][a-zà-ÿ]+)\s+([A-ZÉÈÊÀÙÛÔÂ]{2,})$/.exec(line);
+      if (fnLn) {
+        result.employeeName = `${fnLn[2]} ${fnLn[1]}`; // normalize to "LASTNAME Firstname"
+        break;
+      }
+      // "LASTNAME Firstname" (e.g., "SOLTANI Sirine")
+      const lnFn = /^([A-ZÉÈÊÀÙÛÔÂ]{2,})\s+([A-ZÀ-ÿ][a-zà-ÿ]+)$/.exec(line);
+      if (lnFn) {
+        result.employeeName = `${lnFn[1]} ${lnFn[2]}`;
         break;
       }
     }
@@ -409,31 +435,44 @@ export function parsePayslipText(text: string): ParsedMetadata {
   }
 
   // ── Extract CIN (Carte d'Identité Nationale) ──
-  // Format: optional 2-letter country prefix + 6-10 digits (e.g., "09815606", "TN09815606", "CH12345678")
-  // Look for labeled patterns first, then standalone
-  for (const line of lines) {
-    const cinLabelMatch = /(?:C\.?I\.?N\.?|carte\s+(?:d['''])?identit[ée]|n[°o]\s*(?:de\s+)?(?:la\s+)?C\.?I\.?N\.?)\s*[:=]?\s*([A-Z]{0,2}\d{6,10})/i.exec(line);
-    if (cinLabelMatch) {
-      result.employeeCin = cinLabelMatch[1].toUpperCase();
+  // Format: optional 2-letter country prefix + 6-10 digits (e.g., "09815606", "TN09815606")
+  // Document AI may put label and value on separate lines
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    // Same line: "CIN : 09815606" or "C.I.N. : TN09815606"
+    const cinSameLine = /(?:C\.?I\.?N\.?|carte\s+(?:d['''])?identit[ée])\s*[:=]?\s*([A-Z]{0,2}\d{6,10})/i.exec(line);
+    if (cinSameLine) {
+      result.employeeCin = cinSameLine[1].toUpperCase();
       break;
     }
-  }
-  if (!result.employeeCin) {
-    // Standalone CIN pattern: optional country prefix + 6-10 digits
-    const cinStandalone = /\b([A-Z]{2}\d{6,10})\b/.exec(normalized);
-    if (cinStandalone) {
-      result.employeeCin = cinStandalone[1].toUpperCase();
+    // Label only on this line, value on next line
+    if (/(?:C\.?I\.?N\.?|carte\s+(?:d['''])?identit[ée])\s*[:=]?\s*$/i.test(line) && i + 1 < lines.length) {
+      const nextVal = /^([A-Z]{0,2}\d{6,10})$/i.exec(lines[i + 1].trim());
+      if (nextVal) {
+        result.employeeCin = nextVal[1].toUpperCase();
+        break;
+      }
     }
   }
 
   // ── Extract CNSS (numéro sécurité sociale) ──
   // Format: 7-10 digit number (e.g., "1753436706")
-  // Look for labeled patterns first
-  for (const line of lines) {
-    const cnssLabelMatch = /(?:C\.?N\.?S\.?S\.?|s[ée]curit[ée]\s+sociale|matricule\s+CNSS|n[°o]\s*(?:de\s+)?(?:la\s+)?C\.?N\.?S\.?S\.?|n[°o]\s*immatriculation)\s*[:=]?\s*(\d{7,10})/i.exec(line);
-    if (cnssLabelMatch) {
-      result.employeeCnss = cnssLabelMatch[1];
+  // Document AI often puts "Matricule CNSS :" on one line and the number on the next
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    // Same line: "Matricule CNSS : 1753436706"
+    const cnssSameLine = /(?:C\.?N\.?S\.?S\.?|s[ée]curit[ée]\s+sociale|matricule\s+CNSS|n[°o]\s*immatriculation)\s*[:=]?\s*(\d{7,10})/i.exec(line);
+    if (cnssSameLine) {
+      result.employeeCnss = cnssSameLine[1];
       break;
+    }
+    // Label only on this line ("Matricule CNSS :"), value on next line ("1753436706")
+    if (/(?:C\.?N\.?S\.?S\.?|matricule\s+CNSS|s[ée]curit[ée]\s+sociale|n[°o]\s*immatriculation)\s*[:=]?\s*$/i.test(line) && i + 1 < lines.length) {
+      const nextVal = /^(\d{7,10})$/.exec(lines[i + 1].trim());
+      if (nextVal) {
+        result.employeeCnss = nextVal[1];
+        break;
+      }
     }
   }
 
@@ -451,7 +490,7 @@ async function extractTextWithDocumentAI(buffer: Buffer): Promise<string> {
   const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
   const privateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n");
   const projectId = process.env.GOOGLE_PROJECT_ID;
-  const rawLocation = process.env.DOCAI_LOCATION || "eu";
+  const rawLocation = (process.env.DOCAI_LOCATION || "eu").trim();
   const processorId = process.env.DOCAI_PROCESSOR_ID;
 
   if (!clientEmail || !privateKey || !projectId || !processorId) {
@@ -459,9 +498,15 @@ async function extractTextWithDocumentAI(buffer: Buffer): Promise<string> {
   }
 
   // Normalize DOCAI_LOCATION: accept "eu", "us", "eu-documentai.googleapis.com", etc.
-  // Extract just the region prefix (e.g., "eu" from "eu-documentai.googleapis.com")
-  const location = rawLocation.replace(/-?documentai\.googleapis\.com$/i, "") || "eu";
+  // Extract just the short region code (e.g., "eu" from "eu-documentai.googleapis.com")
+  let location = rawLocation;
+  if (location.includes("documentai.googleapis.com")) {
+    location = location.split("-documentai")[0] || location.split("documentai")[0].replace(/-$/, "");
+  }
+  if (!location || location.includes(".")) location = "eu"; // safety fallback
   const apiEndpoint = `${location}-documentai.googleapis.com`;
+
+  console.log(`[imap-import] Document AI: DOCAI_LOCATION raw="${rawLocation}" → location="${location}", endpoint="${apiEndpoint}"`);
 
   const client = new DocumentProcessorServiceClient({
     credentials: { client_email: clientEmail, private_key: privateKey },
@@ -469,16 +514,22 @@ async function extractTextWithDocumentAI(buffer: Buffer): Promise<string> {
   });
 
   const name = `projects/${projectId}/locations/${location}/processors/${processorId}`;
-  console.log(`[imap-import] Document AI request: endpoint=${apiEndpoint}, processor=${name}`);
+  console.log(`[imap-import] Document AI request: processor=${name}, pdf=${buffer.length} bytes`);
 
-  const [result] = await client.processDocument({
+  // Timeout: 60s max for Document AI (Vercel function limit is 300s, leave room for other work)
+  const DOCAI_TIMEOUT = 60_000;
+  const docaiPromise = client.processDocument({
     name,
     rawDocument: {
       content: buffer.toString("base64"),
       mimeType: "application/pdf",
     },
   });
+  const timeoutPromise = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error(`Document AI timeout after ${DOCAI_TIMEOUT / 1000}s`)), DOCAI_TIMEOUT)
+  );
 
+  const [result] = await Promise.race([docaiPromise, timeoutPromise]);
   return result.document?.text || "";
 }
 
