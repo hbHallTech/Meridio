@@ -451,7 +451,7 @@ async function extractTextWithDocumentAI(buffer: Buffer): Promise<string> {
   const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
   const privateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n");
   const projectId = process.env.GOOGLE_PROJECT_ID;
-  const rawLocation = process.env.DOCAI_LOCATION || "eu";
+  const rawLocation = (process.env.DOCAI_LOCATION || "eu").trim();
   const processorId = process.env.DOCAI_PROCESSOR_ID;
 
   if (!clientEmail || !privateKey || !projectId || !processorId) {
@@ -459,9 +459,15 @@ async function extractTextWithDocumentAI(buffer: Buffer): Promise<string> {
   }
 
   // Normalize DOCAI_LOCATION: accept "eu", "us", "eu-documentai.googleapis.com", etc.
-  // Extract just the region prefix (e.g., "eu" from "eu-documentai.googleapis.com")
-  const location = rawLocation.replace(/-?documentai\.googleapis\.com$/i, "") || "eu";
+  // Extract just the short region code (e.g., "eu" from "eu-documentai.googleapis.com")
+  let location = rawLocation;
+  if (location.includes("documentai.googleapis.com")) {
+    location = location.split("-documentai")[0] || location.split("documentai")[0].replace(/-$/, "");
+  }
+  if (!location || location.includes(".")) location = "eu"; // safety fallback
   const apiEndpoint = `${location}-documentai.googleapis.com`;
+
+  console.log(`[imap-import] Document AI: DOCAI_LOCATION raw="${rawLocation}" → location="${location}", endpoint="${apiEndpoint}"`);
 
   const client = new DocumentProcessorServiceClient({
     credentials: { client_email: clientEmail, private_key: privateKey },
@@ -469,16 +475,22 @@ async function extractTextWithDocumentAI(buffer: Buffer): Promise<string> {
   });
 
   const name = `projects/${projectId}/locations/${location}/processors/${processorId}`;
-  console.log(`[imap-import] Document AI request: endpoint=${apiEndpoint}, processor=${name}`);
+  console.log(`[imap-import] Document AI request: processor=${name}, pdf=${buffer.length} bytes`);
 
-  const [result] = await client.processDocument({
+  // Timeout: 60s max for Document AI (Vercel function limit is 300s, leave room for other work)
+  const DOCAI_TIMEOUT = 60_000;
+  const docaiPromise = client.processDocument({
     name,
     rawDocument: {
       content: buffer.toString("base64"),
       mimeType: "application/pdf",
     },
   });
+  const timeoutPromise = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error(`Document AI timeout after ${DOCAI_TIMEOUT / 1000}s`)), DOCAI_TIMEOUT)
+  );
 
+  const [result] = await Promise.race([docaiPromise, timeoutPromise]);
   return result.document?.text || "";
 }
 
