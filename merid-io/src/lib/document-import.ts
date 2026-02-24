@@ -409,25 +409,25 @@ export function parsePayslipText(text: string): ParsedMetadata {
   }
 
   // ── Extract CIN (Carte d'Identité Nationale) ──
-  // Moroccan CIN format: 1-2 letters + 5-7 digits (e.g., "AB123456", "J123456", "BK654321")
+  // Format: optional 2-letter country prefix + 6-10 digits (e.g., "09815606", "TN09815606", "CH12345678")
   // Look for labeled patterns first, then standalone
   for (const line of lines) {
-    const cinLabelMatch = /(?:C\.?I\.?N\.?|carte\s+(?:d['''])?identit[ée]|n[°o]\s*(?:de\s+)?(?:la\s+)?C\.?I\.?N\.?)\s*[:=]?\s*([A-Z]{1,2}\d{5,7})/i.exec(line);
+    const cinLabelMatch = /(?:C\.?I\.?N\.?|carte\s+(?:d['''])?identit[ée]|n[°o]\s*(?:de\s+)?(?:la\s+)?C\.?I\.?N\.?)\s*[:=]?\s*([A-Z]{0,2}\d{6,10})/i.exec(line);
     if (cinLabelMatch) {
       result.employeeCin = cinLabelMatch[1].toUpperCase();
       break;
     }
   }
   if (!result.employeeCin) {
-    // Standalone CIN pattern (common in Moroccan payslips)
-    const cinStandalone = /\b([A-Z]{1,2}\d{5,7})\b/.exec(normalized);
+    // Standalone CIN pattern: optional country prefix + 6-10 digits
+    const cinStandalone = /\b([A-Z]{2}\d{6,10})\b/.exec(normalized);
     if (cinStandalone) {
       result.employeeCin = cinStandalone[1].toUpperCase();
     }
   }
 
   // ── Extract CNSS (numéro sécurité sociale) ──
-  // Moroccan CNSS: typically 9-digit number
+  // Format: 7-10 digit number (e.g., "1753436706")
   // Look for labeled patterns first
   for (const line of lines) {
     const cnssLabelMatch = /(?:C\.?N\.?S\.?S\.?|s[ée]curit[ée]\s+sociale|matricule\s+CNSS|n[°o]\s*(?:de\s+)?(?:la\s+)?C\.?N\.?S\.?S\.?|n[°o]\s*immatriculation)\s*[:=]?\s*(\d{7,10})/i.exec(line);
@@ -562,15 +562,15 @@ async function findEmployee(
     }
   }
 
-  // Priority 2: CNSS match (social security number)
+  // Priority 2: CNSS match (social security number — unique)
   if (metadata.employeeCnss) {
-    const users = await prisma.user.findMany({
-      where: { cnss: metadata.employeeCnss, isActive: true },
-      select: { id: true, email: true },
+    const user = await prisma.user.findUnique({
+      where: { cnss: metadata.employeeCnss },
+      select: { id: true, email: true, isActive: true },
     });
-    if (users.length === 1) {
+    if (user?.isActive) {
       console.log(`[imap-import] Employee matched by CNSS: ${metadata.employeeCnss}`);
-      return { id: users[0].id, email: users[0].email };
+      return { id: user.id, email: user.email };
     }
   }
 

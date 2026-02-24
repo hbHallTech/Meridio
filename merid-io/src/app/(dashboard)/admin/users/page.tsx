@@ -431,7 +431,7 @@ export default function AdminUsersPage() {
             <label className="mb-1 block text-sm font-medium text-gray-700">CIN</label>
             <input
               {...form.register("cin")}
-              placeholder="AB123456"
+              placeholder="09815606 ou TN09815606"
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:border-[#1B3A5C] focus:outline-none focus:ring-1 focus:ring-[#1B3A5C]"
             />
             {form.formState.errors.cin && (
@@ -442,7 +442,7 @@ export default function AdminUsersPage() {
             <label className="mb-1 block text-sm font-medium text-gray-700">CNSS</label>
             <input
               {...form.register("cnss")}
-              placeholder="123456789"
+              placeholder="1753436706"
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:border-[#1B3A5C] focus:outline-none focus:ring-1 focus:ring-[#1B3A5C]"
             />
             {form.formState.errors.cnss && (
