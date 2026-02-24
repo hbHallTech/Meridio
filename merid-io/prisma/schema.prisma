@@ -207,6 +207,8 @@ model User {
   passwordHash      String
   firstName         String
   lastName          String
+  cin               String?   @unique // Carte d'Identité Nationale — matching fiches de paie
+  cnss              String?   // Numéro CNSS (sécurité sociale) — fallback matching
   roles             UserRole[]
   officeId          String
   teamId            String?

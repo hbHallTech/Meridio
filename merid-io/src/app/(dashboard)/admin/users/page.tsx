@@ -42,6 +42,8 @@ interface UserData {
   email: string;
   firstName: string;
   lastName: string;
+  cin: string | null;
+  cnss: string | null;
   roles: string[];
   isActive: boolean;
   hireDate: string;
@@ -210,6 +212,8 @@ export default function AdminUsersPage() {
       officeId: "",
       teamId: "",
       hireDate: "",
+      cin: "",
+      cnss: "",
       isActive: true,
       forcePasswordChange: true,
       sendNotification: true,
@@ -258,6 +262,8 @@ export default function AdminUsersPage() {
       officeId: "",
       teamId: "",
       hireDate: "",
+      cin: "",
+      cnss: "",
       isActive: true,
       forcePasswordChange: false,
       sendNotification: false,
@@ -277,6 +283,8 @@ export default function AdminUsersPage() {
       officeId: user.office?.id || "",
       teamId: user.team?.id || "",
       hireDate: user.hireDate ? new Date(user.hireDate).toISOString().split("T")[0] : "",
+      cin: user.cin || "",
+      cnss: user.cnss || "",
       isActive: user.isActive,
       forcePasswordChange: user.forcePasswordChange,
       sendNotification: false,
@@ -297,6 +305,8 @@ export default function AdminUsersPage() {
         officeId: data.officeId,
         teamId: data.teamId || null,
         hireDate: data.hireDate,
+        cin: data.cin || "",
+        cnss: data.cnss || "",
         isActive: data.isActive,
         forcePasswordChange: data.forcePasswordChange,
         sendNotification: data.sendNotification,
@@ -413,6 +423,32 @@ export default function AdminUsersPage() {
           {form.formState.errors.email && (
             <p className="mt-1 text-xs text-red-600">{form.formState.errors.email.message as string}</p>
           )}
+        </div>
+
+        {/* CIN + CNSS */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">CIN</label>
+            <input
+              {...form.register("cin")}
+              placeholder="AB123456"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:border-[#1B3A5C] focus:outline-none focus:ring-1 focus:ring-[#1B3A5C]"
+            />
+            {form.formState.errors.cin && (
+              <p className="mt-1 text-xs text-red-600">{form.formState.errors.cin.message as string}</p>
+            )}
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">CNSS</label>
+            <input
+              {...form.register("cnss")}
+              placeholder="123456789"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:border-[#1B3A5C] focus:outline-none focus:ring-1 focus:ring-[#1B3A5C]"
+            />
+            {form.formState.errors.cnss && (
+              <p className="mt-1 text-xs text-red-600">{form.formState.errors.cnss.message as string}</p>
+            )}
+          </div>
         </div>
 
         {/* Password + Generate */}

@@ -79,6 +79,8 @@ export const userSchema = z.object({
   teamId: z.string().optional(),
   officeId: z.string().min(1, "Le bureau est requis"),
   hireDate: z.string().min(1, "La date d'embauche est requise"),
+  cin: z.string().regex(/^[A-Z]{1,2}\d{5,7}$/, "Format CIN invalide (ex: AB123456)").optional().or(z.literal("")),
+  cnss: z.string().regex(/^\d{7,10}$/, "Format CNSS invalide (7-10 chiffres)").optional().or(z.literal("")),
 });
 
 export const teamSchema = z.object({

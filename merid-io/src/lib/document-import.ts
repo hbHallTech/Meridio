@@ -52,6 +52,8 @@ export interface ImportResult {
 interface ParsedMetadata {
   employeeName: string | null;
   employeeEmail: string | null;
+  employeeCin: string | null;  // Carte d'Identité Nationale (e.g., "AB123456")
+  employeeCnss: string | null; // Numéro CNSS / sécurité sociale (e.g., "123456789")
   month: string | null; // "01"-"12"
   year: string | null;  // "YYYY"
   documentType: "FICHE_PAIE" | "ATTESTATION_TRAVAIL" | "CERTIFICAT_TRAVAIL" | "CONTRAT" | "AUTRE";
@@ -302,6 +304,8 @@ export function parsePayslipText(text: string): ParsedMetadata {
   const result: ParsedMetadata = {
     employeeName: null,
     employeeEmail: null,
+    employeeCin: null,
+    employeeCnss: null,
     month: null,
     year: null,
     documentType: "FICHE_PAIE",
@@ -404,16 +408,74 @@ export function parsePayslipText(text: string): ParsedMetadata {
     result.employeeEmail = emailMatch[1].toLowerCase();
   }
 
+  // ── Extract CIN (Carte d'Identité Nationale) ──
+  // Moroccan CIN format: 1-2 letters + 5-7 digits (e.g., "AB123456", "J123456", "BK654321")
+  // Look for labeled patterns first, then standalone
+  for (const line of lines) {
+    const cinLabelMatch = /(?:C\.?I\.?N\.?|carte\s+(?:d['''])?identit[ée]|n[°o]\s*(?:de\s+)?(?:la\s+)?C\.?I\.?N\.?)\s*[:=]?\s*([A-Z]{1,2}\d{5,7})/i.exec(line);
+    if (cinLabelMatch) {
+      result.employeeCin = cinLabelMatch[1].toUpperCase();
+      break;
+    }
+  }
+  if (!result.employeeCin) {
+    // Standalone CIN pattern (common in Moroccan payslips)
+    const cinStandalone = /\b([A-Z]{1,2}\d{5,7})\b/.exec(normalized);
+    if (cinStandalone) {
+      result.employeeCin = cinStandalone[1].toUpperCase();
+    }
+  }
+
+  // ── Extract CNSS (numéro sécurité sociale) ──
+  // Moroccan CNSS: typically 9-digit number
+  // Look for labeled patterns first
+  for (const line of lines) {
+    const cnssLabelMatch = /(?:C\.?N\.?S\.?S\.?|s[ée]curit[ée]\s+sociale|matricule\s+CNSS|n[°o]\s*(?:de\s+)?(?:la\s+)?C\.?N\.?S\.?S\.?|n[°o]\s*immatriculation)\s*[:=]?\s*(\d{7,10})/i.exec(line);
+    if (cnssLabelMatch) {
+      result.employeeCnss = cnssLabelMatch[1];
+      break;
+    }
+  }
+
   return result;
 }
 
-// ─── OCR Fallback for image-based PDFs ───
-// NOTE: tesseract.js worker module is NOT bundled by Vercel's serverless bundler,
-// causing "Cannot find module 'tesseract.js/src/worker-script/node/index.js'" crashes.
-// OCR is disabled in serverless — pdfjs-dist + built-in parser handle text-based PDFs.
-// For scanned/image PDFs, the document is still created (unassigned) for HR to handle.
+// ─── Google Document AI OCR ───
+// Primary extraction strategy — handles scanned PDFs, complex fonts, tables.
+// Requires env vars: GOOGLE_CLIENT_EMAIL, GOOGLE_PRIVATE_KEY, GOOGLE_PROJECT_ID,
+//                    DOCAI_LOCATION, DOCAI_PROCESSOR_ID
 
-// ─── Extract text from PDF (built-in first, OCR fallback) ───
+async function extractTextWithDocumentAI(buffer: Buffer): Promise<string> {
+  const { DocumentProcessorServiceClient } = await import("@google-cloud/documentai");
+
+  const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
+  const privateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n");
+  const projectId = process.env.GOOGLE_PROJECT_ID;
+  const location = process.env.DOCAI_LOCATION || "eu";
+  const processorId = process.env.DOCAI_PROCESSOR_ID;
+
+  if (!clientEmail || !privateKey || !projectId || !processorId) {
+    throw new Error("Google Document AI env vars missing (GOOGLE_CLIENT_EMAIL, GOOGLE_PRIVATE_KEY, GOOGLE_PROJECT_ID, DOCAI_PROCESSOR_ID)");
+  }
+
+  const client = new DocumentProcessorServiceClient({
+    credentials: { client_email: clientEmail, private_key: privateKey },
+  });
+
+  const name = `projects/${projectId}/locations/${location}/processors/${processorId}`;
+  const [result] = await client.processDocument({
+    name,
+    rawDocument: {
+      content: buffer.toString("base64"),
+      mimeType: "application/pdf",
+    },
+  });
+
+  return result.document?.text || "";
+}
+
+// ─── Extract text from PDF ───
+// Strategy chain: Document AI → pdfjs-dist → built-in parser
 
 /** Check if extracted text has enough meaningful content (letters/digits vs total) */
 function isTextMeaningful(text: string, minAlphaRatio = 0.15, minAlphaChars = 30): boolean {
@@ -423,15 +485,25 @@ function isTextMeaningful(text: string, minAlphaRatio = 0.15, minAlphaChars = 30
 }
 
 export async function extractTextFromPdf(buffer: Buffer): Promise<{ text: string; usedOcr: boolean }> {
-  // Strategy 1: pdfjs-dist (most robust, handles CID/Identity-H fonts natively)
+  // Strategy 1: Google Document AI (best for payslips — handles tables, scanned PDFs, all fonts)
+  try {
+    const text = await extractTextWithDocumentAI(buffer);
+    if (isTextMeaningful(text)) {
+      console.log(`[imap-import] Document AI extraction: ${text.length} chars (meaningful)`);
+      return { text, usedOcr: true };
+    }
+    console.log(`[imap-import] Document AI extraction: ${text.length} chars but not meaningful, trying pdfjs-dist...`);
+  } catch (e) {
+    console.log(`[imap-import] Document AI extraction failed:`, e instanceof Error ? e.message : e);
+  }
+
+  // Strategy 2: pdfjs-dist (robust local fallback, handles CID/Identity-H fonts)
   // Uses legacy build which works without Canvas/DOMMatrix in serverless.
-  // Warnings about @napi-rs/canvas, DOMMatrix, Path2D are non-fatal — we only need text extraction.
   try {
     const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
     const loadingTask = pdfjsLib.getDocument({
       data: new Uint8Array(buffer),
       verbosity: 0,
-      // Disable features that need browser/canvas APIs (not available in serverless)
       disableFontFace: true,
       isEvalSupported: false,
     });
@@ -456,7 +528,7 @@ export async function extractTextFromPdf(buffer: Buffer): Promise<{ text: string
     console.log(`[imap-import] pdfjs-dist extraction failed:`, e instanceof Error ? e.message : e);
   }
 
-  // Strategy 2: Built-in text extraction with ToUnicode CMap support
+  // Strategy 3: Built-in text extraction with ToUnicode CMap support
   try {
     const text = extractTextFromPdfBuffer(buffer);
     if (isTextMeaningful(text)) {
@@ -468,27 +540,53 @@ export async function extractTextFromPdf(buffer: Buffer): Promise<{ text: string
     console.log(`[imap-import] Built-in extraction failed:`, e instanceof Error ? e.message : e);
   }
 
-  // No OCR fallback in serverless (tesseract.js worker not bundled by Vercel)
-  // Return empty — the document will still be created as unassigned for HR
+  // All strategies failed — document will still be created as unassigned for HR
   console.warn(`[imap-import] All text extraction strategies failed — document will be created without parsed metadata`);
   return { text: "", usedOcr: false };
 }
 
-// ─── Match employee by name or email ───
+// ─── Match employee by CIN, CNSS, email, or name ───
 
 async function findEmployee(
   metadata: ParsedMetadata
 ): Promise<{ id: string; email: string } | null> {
-  // Try email match first (most reliable)
+  // Priority 1: CIN match (most reliable — unique national ID)
+  if (metadata.employeeCin) {
+    const user = await prisma.user.findUnique({
+      where: { cin: metadata.employeeCin },
+      select: { id: true, email: true, isActive: true },
+    });
+    if (user?.isActive) {
+      console.log(`[imap-import] Employee matched by CIN: ${metadata.employeeCin}`);
+      return { id: user.id, email: user.email };
+    }
+  }
+
+  // Priority 2: CNSS match (social security number)
+  if (metadata.employeeCnss) {
+    const users = await prisma.user.findMany({
+      where: { cnss: metadata.employeeCnss, isActive: true },
+      select: { id: true, email: true },
+    });
+    if (users.length === 1) {
+      console.log(`[imap-import] Employee matched by CNSS: ${metadata.employeeCnss}`);
+      return { id: users[0].id, email: users[0].email };
+    }
+  }
+
+  // Priority 3: Email match
   if (metadata.employeeEmail) {
     const user = await prisma.user.findUnique({
       where: { email: metadata.employeeEmail },
       select: { id: true, email: true, isActive: true },
     });
-    if (user?.isActive) return { id: user.id, email: user.email };
+    if (user?.isActive) {
+      console.log(`[imap-import] Employee matched by email: ${metadata.employeeEmail}`);
+      return { id: user.id, email: user.email };
+    }
   }
 
-  // Try name match (fuzzy)
+  // Priority 4: Name match (fuzzy — least reliable)
   if (metadata.employeeName) {
     const parts = metadata.employeeName.split(/\s+/);
     if (parts.length >= 2) {
@@ -509,6 +607,7 @@ async function findEmployee(
         select: { id: true, email: true },
       });
       if (users.length === 1) {
+        console.log(`[imap-import] Employee matched by name: ${metadata.employeeName}`);
         return { id: users[0].id, email: users[0].email };
       }
     }
@@ -809,7 +908,7 @@ export async function processIncomingEmails(): Promise<ImportResult> {
 
               // Parse metadata from extracted text
               const metadata = parsePayslipText(text);
-              console.log(`[imap-import] Parsed metadata: name=${metadata.employeeName}, email=${metadata.employeeEmail}, type=${metadata.documentType}, month=${metadata.month}, year=${metadata.year}`);
+              console.log(`[imap-import] Parsed metadata: name=${metadata.employeeName}, email=${metadata.employeeEmail}, cin=${metadata.employeeCin}, cnss=${metadata.employeeCnss}, type=${metadata.documentType}, month=${metadata.month}, year=${metadata.year}`);
 
               // Find matching employee (may be null → unassigned doc for HR)
               const employee = await findEmployee(metadata);
@@ -850,6 +949,8 @@ export async function processIncomingEmails(): Promise<ImportResult> {
                       unassigned: true,
                       detectedName: metadata.employeeName,
                       detectedEmail: metadata.employeeEmail,
+                      detectedCin: metadata.employeeCin,
+                      detectedCnss: metadata.employeeCnss,
                     } : {}),
                   },
                 },
