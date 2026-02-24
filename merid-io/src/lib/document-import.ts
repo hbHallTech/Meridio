@@ -451,14 +451,16 @@ async function extractTextWithDocumentAI(buffer: Buffer): Promise<string> {
   const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
   const privateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n");
   const projectId = process.env.GOOGLE_PROJECT_ID;
-  const location = process.env.DOCAI_LOCATION || "eu";
+  const rawLocation = process.env.DOCAI_LOCATION || "eu";
   const processorId = process.env.DOCAI_PROCESSOR_ID;
 
   if (!clientEmail || !privateKey || !projectId || !processorId) {
     throw new Error("Google Document AI env vars missing (GOOGLE_CLIENT_EMAIL, GOOGLE_PRIVATE_KEY, GOOGLE_PROJECT_ID, DOCAI_PROCESSOR_ID)");
   }
 
-  // API endpoint must match the processor location (e.g., "eu-documentai.googleapis.com")
+  // Normalize DOCAI_LOCATION: accept "eu", "us", "eu-documentai.googleapis.com", etc.
+  // Extract just the region prefix (e.g., "eu" from "eu-documentai.googleapis.com")
+  const location = rawLocation.replace(/-?documentai\.googleapis\.com$/i, "") || "eu";
   const apiEndpoint = `${location}-documentai.googleapis.com`;
 
   const client = new DocumentProcessorServiceClient({
