@@ -120,6 +120,7 @@ model Company {
   inactivityTimeoutMin  Int     @default(30)
   auditRetentionDays    Int     @default(365)
   trialModeEnabled      Boolean @default(false)
+  csvSeparator          String  @default(",")  // Global CSV export delimiter (, ; | \t)
   documentsModuleEnabled Boolean @default(false)
   documentsAiEnabled     Boolean @default(false)
   documentsNotifyEmail   String?  // Email pour réception de notifications documents

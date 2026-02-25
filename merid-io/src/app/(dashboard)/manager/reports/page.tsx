@@ -154,6 +154,7 @@ export default function ManagerReportsPage() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [showFilters, setShowFilters] = useState(false);
+  const [csvSeparator, setCsvSeparator] = useState(",");
 
   // ─── Fetch dashboard KPIs ───
   const fetchDashboard = useCallback(
@@ -208,6 +209,10 @@ export default function ManagerReportsPage() {
     fetchReport();
   }, [fetchReport]);
 
+  useEffect(() => {
+    fetch("/api/settings/csv").then((r) => r.ok ? r.json() : null).then((d) => { if (d?.separator) setCsvSeparator(d.separator); }).catch(() => {});
+  }, []);
+
   const clearFilters = () => {
     setTeamId("");
     setTypeId("");
@@ -240,7 +245,7 @@ export default function ManagerReportsPage() {
       i.status,
     ]);
     const csv = [header, ...rows]
-      .map((r) => r.map((c) => `"${c}"`).join(","))
+      .map((r) => r.map((c) => `"${c}"`).join(csvSeparator))
       .join("\n");
     const blob = new Blob(["\uFEFF" + csv], {
       type: "text/csv;charset=utf-8;",

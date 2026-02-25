@@ -68,6 +68,7 @@ interface CompanyData {
   inactivityTimeoutMin: number;
   auditRetentionDays: number;
   trialModeEnabled: boolean;
+  csvSeparator: string;
   emailLogoUrl: string | null;
   privacyPolicyUrl: string | null;
   createdAt: string;
@@ -164,6 +165,7 @@ export default function AdminCompanyPage() {
   const [advForm, setAdvForm] = useState({
     enforce2FA: false, inactivityTimeoutMin: 30,
     auditRetentionDays: 365, trialModeEnabled: false, privacyPolicyUrl: "",
+    csvSeparator: ",",
   });
   const [emailLogoPreview, setEmailLogoPreview] = useState<string | null>(null);
 
@@ -215,6 +217,7 @@ export default function AdminCompanyPage() {
         enforce2FA: data.enforce2FA, inactivityTimeoutMin: data.inactivityTimeoutMin,
         auditRetentionDays: data.auditRetentionDays, trialModeEnabled: data.trialModeEnabled,
         privacyPolicyUrl: data.privacyPolicyUrl || "",
+        csvSeparator: data.csvSeparator || ",",
       });
       setEmailLogoPreview(data.emailLogoUrl);
     } catch (e) {
@@ -876,7 +879,7 @@ function TabNotifications({ settings, setSettings, lang }: {
 // ─── TAB 5: Advanced ───
 
 function TabAdvanced({ form, setForm, emailLogoPreview, emailLogoInputRef, handleLogoUpload, uploadingLogo, lang }: {
-  form: { enforce2FA: boolean; inactivityTimeoutMin: number; auditRetentionDays: number; trialModeEnabled: boolean; privacyPolicyUrl: string };
+  form: { enforce2FA: boolean; inactivityTimeoutMin: number; auditRetentionDays: number; trialModeEnabled: boolean; privacyPolicyUrl: string; csvSeparator: string };
   setForm: (f: typeof form) => void;
   emailLogoPreview: string | null;
   emailLogoInputRef: React.RefObject<HTMLInputElement | null>;
@@ -939,6 +942,28 @@ function TabAdvanced({ form, setForm, emailLogoPreview, emailLogoInputRef, handl
           </button>
           <input ref={emailLogoInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/svg+xml" onChange={(e) => handleLogoUpload(e, "emailLogo")} className="hidden" />
         </div>
+      </div>
+
+      {/* CSV separator */}
+      <div className="rounded-lg border border-gray-200 p-4 space-y-2">
+        <label className="block text-sm font-medium text-gray-700">
+          {lang === "en" ? "CSV export separator" : "Séparateur exports CSV"}
+        </label>
+        <select
+          value={form.csvSeparator}
+          onChange={(e) => upd("csvSeparator", e.target.value)}
+          className="w-full max-w-xs rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#1B3A5C] focus:outline-none"
+        >
+          <option value=",">{lang === "en" ? "Comma (,)" : "Virgule (,)"}</option>
+          <option value=";">{lang === "en" ? "Semicolon (;)" : "Point-virgule (;)"}</option>
+          <option value="|">{lang === "en" ? "Pipe (|)" : "Pipe (|)"}</option>
+          <option value={"\t"}>{lang === "en" ? "Tab (\\t)" : "Tabulation (\\t)"}</option>
+        </select>
+        <p className="text-xs text-gray-400">
+          {lang === "en"
+            ? "Field separator for all CSV exports (affects opening in Excel/Google Sheets). Default: comma."
+            : "Séparateur de champ pour tous les exports CSV (impacte l'ouverture dans Excel/Google Sheets). Par défaut : virgule."}
+        </p>
       </div>
 
       {/* Privacy policy URL */}

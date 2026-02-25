@@ -131,6 +131,13 @@ export async function PATCH(request: NextRequest) {
           }
         }
       }
+      // CSV separator: single non-alphanumeric character
+      if (fields.csvSeparator !== undefined) {
+        const sep = String(fields.csvSeparator);
+        if (sep.length === 1 && /^[,;|\t]$/.test(sep)) {
+          updateData.csvSeparator = sep;
+        }
+      }
     } else if (tab === "documents") {
       // Documents module configuration
       const boolFields = ["documentsModuleEnabled", "documentsAiEnabled", "documentsWebhookEnabled", "docsImapSecure"];
