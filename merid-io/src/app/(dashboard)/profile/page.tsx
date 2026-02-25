@@ -269,18 +269,22 @@ export default function ProfilePage() {
 
   // Save notification preferences
   const handleNotifToggle = async (type: string, enabled: boolean) => {
-    const updated = { ...notifPrefs, [type]: enabled };
-    setNotifPrefs(updated);
+    const prev = { ...notifPrefs };
+    setNotifPrefs({ ...notifPrefs, [type]: enabled });
     setNotifSaving(true);
     try {
-      await fetch("/api/profile/notifications", {
+      const res = await fetch("/api/profile/notifications", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ settings: [{ type, enabled }] }),
       });
+      if (!res.ok) {
+        setNotifPrefs(prev);
+        addToast({ type: "error", title: lang === "en" ? "Save error" : "Erreur de sauvegarde" });
+      }
     } catch {
       // Revert on error
-      setNotifPrefs(notifPrefs);
+      setNotifPrefs(prev);
       addToast({ type: "error", title: lang === "en" ? "Error" : "Erreur" });
     } finally {
       setNotifSaving(false);
