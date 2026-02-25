@@ -6,6 +6,7 @@ declare module "next-auth" {
       id: string;
       roles: string[];
       officeId?: string | null;
+      teamId?: string | null;
       language: "fr" | "en";
       twoFactorVerified?: boolean;
       forcePasswordChange?: boolean;
@@ -18,6 +19,7 @@ declare module "next-auth/jwt" {
     id?: string;
     roles?: string[];
     officeId?: string | null;
+    teamId?: string | null;
     language?: "fr" | "en";
     twoFactorVerified?: boolean;
     forcePasswordChange?: boolean;

@@ -5,6 +5,7 @@ declare module "next-auth" {
   interface User {
     roles?: UserRole[];
     officeId?: string;
+    teamId?: string | null;
     language?: string;
     twoFactorVerified?: boolean;
   }
@@ -45,6 +46,7 @@ export const authConfig: NextAuthConfig = {
       if (user) {
         token.roles = user.roles;
         token.officeId = user.officeId;
+        token.teamId = user.teamId;
         token.language = user.language;
         token.twoFactorVerified = user.twoFactorVerified;
       }
@@ -64,6 +66,7 @@ export const authConfig: NextAuthConfig = {
       }
       session.user.roles = (token.roles as UserRole[]) ?? [];
       session.user.officeId = (token.officeId as string) ?? "";
+      session.user.teamId = (token.teamId as string | null) ?? null;
       session.user.language = (token.language as string) ?? "fr";
       session.user.twoFactorVerified =
         (token.twoFactorVerified as boolean) ?? false;

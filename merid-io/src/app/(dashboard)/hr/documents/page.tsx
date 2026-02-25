@@ -188,21 +188,16 @@ export default function HRDocumentsPage() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch("/api/admin/users");
+        const res = await fetch("/api/hr/employees");
         if (res.ok) {
           const users = await res.json();
           setEmployees(
-            users
-              .filter((u: { isActive: boolean }) => u.isActive)
-              .map((u: { id: string; firstName: string; lastName: string; email: string }) => ({
-                id: u.id,
-                firstName: u.firstName,
-                lastName: u.lastName,
-                email: u.email,
-              }))
-              .sort((a: EmployeeOption, b: EmployeeOption) =>
-                `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`)
-              )
+            users.map((u: { id: string; firstName: string; lastName: string; email: string }) => ({
+              id: u.id,
+              firstName: u.firstName,
+              lastName: u.lastName,
+              email: u.email,
+            }))
           );
         }
       } catch {
