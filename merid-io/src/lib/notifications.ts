@@ -421,6 +421,9 @@ export async function notifyPasswordExpiringSoon(userId: string, daysLeft: numbe
 }
 
 export async function notifyPasswordAutoReset(userId: string) {
+  const enabled = await isNotificationEnabled("PASSWORD_EXPIRING", userId);
+  if (!enabled) return;
+
   return createNotification({
     userId,
     type: "PASSWORD_EXPIRING",
