@@ -39,6 +39,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           select: {
             roles: true,
             officeId: true,
+            teamId: true,
             language: true,
             forcePasswordChange: true,
           },
@@ -46,6 +47,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (dbUser) {
           token.roles = dbUser.roles;
           token.officeId = dbUser.officeId;
+          token.teamId = dbUser.teamId;
           token.language = dbUser.language;
           token.forcePasswordChange = dbUser.forcePasswordChange;
         }
@@ -73,6 +75,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (token.roles) session.user.roles = token.roles as UserRole[];
       if (token.officeId !== undefined)
         session.user.officeId = token.officeId as string;
+      session.user.teamId = (token.teamId as string | null) ?? null;
       if (token.language) session.user.language = token.language as string;
       if (token.twoFactorVerified !== undefined)
         session.user.twoFactorVerified = token.twoFactorVerified as boolean;
@@ -312,6 +315,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           name: `${user.firstName} ${user.lastName}`,
           roles: user.roles,
           officeId: user.officeId,
+          teamId: user.teamId,
           language: user.language,
           twoFactorVerified: !process.env.SMTP_USER,
         };
