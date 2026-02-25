@@ -83,10 +83,15 @@ export async function POST(request: NextRequest) {
     newValue: { filters: Object.fromEntries(searchParams.entries()) },
   });
 
+  // Read company CSV separator setting (fallback to comma)
+  const company = await prisma.company.findFirst({ select: { csvSeparator: true } });
+  const sep = company?.csvSeparator || ",";
+
   // Stream CSV in chunks to avoid memory issues on large datasets
   const CHUNK_SIZE = 500;
   let cursor: string | undefined;
-  const csvHeader = "Date,Utilisateur,Email,Action,Succes,TypeEntite,IdEntite,IP,Details\n";
+  const headerFields = ["Date", "Utilisateur", "Email", "Action", "Succes", "TypeEntite", "IdEntite", "IP", "Details"];
+  const csvHeader = headerFields.map((h) => `"${h}"`).join(sep) + "\n";
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -116,7 +121,9 @@ export async function POST(request: NextRequest) {
           const userName = r.user ? `${r.user.firstName} ${r.user.lastName}` : "";
           const email = r.user?.email ?? "";
           const details = r.newValue ? JSON.stringify(r.newValue).replace(/"/g, '""') : "";
-          return `"${date}","${userName}","${email}","${r.action}","${r.success}","${r.entityType ?? ""}","${r.entityId ?? ""}","${r.ipAddress ?? ""}","${details}"`;
+          return [date, userName, email, r.action, String(r.success), r.entityType ?? "", r.entityId ?? "", r.ipAddress ?? "", details]
+            .map((v) => `"${v}"`)
+            .join(sep);
         });
 
         controller.enqueue(encoder.encode(lines.join("\n") + "\n"));

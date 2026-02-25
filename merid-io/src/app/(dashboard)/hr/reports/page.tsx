@@ -65,6 +65,7 @@ export default function HRReportsPage() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [showFilters, setShowFilters] = useState(false);
+  const [csvSeparator, setCsvSeparator] = useState(",");
 
   const fetchReport = useCallback(async () => {
     setLoading(true);
@@ -87,6 +88,10 @@ export default function HRReportsPage() {
 
   useEffect(() => { fetchReport(); }, [fetchReport]);
 
+  useEffect(() => {
+    fetch("/api/settings/csv").then((r) => r.ok ? r.json() : null).then((d) => { if (d?.separator) setCsvSeparator(d.separator); }).catch(() => {});
+  }, []);
+
   const clearFilters = () => { setOfficeId(""); setTeamId(""); setTypeId(""); setStatus(""); setFrom(""); setTo(""); };
 
   const hasFilters = officeId || teamId || typeId || status || from || to;
@@ -105,7 +110,7 @@ export default function HRReportsPage() {
       String(i.totalDays),
       i.status,
     ]);
-    const csv = [header, ...rows].map((r) => r.map((c) => `"${c}"`).join(",")).join("\n");
+    const csv = [header, ...rows].map((r) => r.map((c) => `"${c}"`).join(csvSeparator)).join("\n");
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
