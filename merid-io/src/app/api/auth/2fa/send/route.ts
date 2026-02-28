@@ -31,6 +31,7 @@ export async function POST() {
     data: {
       twoFactorCode: code,
       twoFactorExpiry: expiry,
+      twoFactorAttempts: 0,
     },
   });
 

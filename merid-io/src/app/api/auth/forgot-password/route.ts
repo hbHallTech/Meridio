@@ -30,12 +30,14 @@ export async function POST(request: NextRequest) {
   }
 
   const token = crypto.randomBytes(32).toString("hex");
+  // H2: Store SHA-256 hash of token in DB, send raw token via email
+  const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
   const expiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
   await prisma.user.update({
     where: { id: user.id },
     data: {
-      resetPasswordToken: token,
+      resetPasswordToken: tokenHash,
       resetPasswordExpiry: expiry,
     },
   });

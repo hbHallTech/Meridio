@@ -42,6 +42,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             teamId: true,
             language: true,
             forcePasswordChange: true,
+            twoFactorVerified: true,
+            passwordChangedAt: true,
           },
         });
         if (dbUser) {
@@ -50,14 +52,29 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.teamId = dbUser.teamId;
           token.language = dbUser.language;
           token.forcePasswordChange = dbUser.forcePasswordChange;
+          // H5: Store password change timestamp for session invalidation
+          token.passwordChangedAt = dbUser.passwordChangedAt?.getTime() ?? null;
         }
-        token.twoFactorVerified = !process.env.SMTP_USER;
+        // C1: Read 2FA status from DB (not client-controlled)
+        token.twoFactorVerified = !process.env.SMTP_USER || (dbUser?.twoFactorVerified ?? false);
         token.lastActivity = Date.now();
       }
-      // 2. Session updates (language switch, 2FA verify, force password change)
+      // 2. Session updates (language switch, force password change, 2FA refresh)
       if (trigger === "update" && session) {
-        if (session.twoFactorVerified !== undefined) {
-          token.twoFactorVerified = session.twoFactorVerified;
+        // C1: Never accept twoFactorVerified from client — re-read from DB
+        if (session.twoFactorVerified !== undefined && token.sub) {
+          const freshUser = await prisma.user.findUnique({
+            where: { id: token.sub },
+            select: { twoFactorVerified: true, passwordChangedAt: true },
+          });
+          token.twoFactorVerified = !process.env.SMTP_USER || (freshUser?.twoFactorVerified ?? false);
+          // H5: Check if password was changed since token was issued
+          const freshPwdChanged = freshUser?.passwordChangedAt?.getTime() ?? null;
+          if (token.passwordChangedAt && freshPwdChanged && freshPwdChanged > (token.passwordChangedAt as number)) {
+            // Password was changed — invalidate this session
+            token.twoFactorVerified = false;
+            token.forcePasswordChange = true;
+          }
         }
         if (session.language !== undefined) {
           token.language = session.language;
@@ -254,10 +271,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         // ── Successful login ──
 
-        // Reset failed attempts on success
+        // Reset failed attempts and 2FA state on new login
         await prisma.user.update({
           where: { id: user.id },
-          data: { failedLoginAttempts: 0, lockedUntil: null },
+          data: { failedLoginAttempts: 0, lockedUntil: null, twoFactorVerified: false },
         });
 
         // Audit log for successful login

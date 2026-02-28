@@ -20,6 +20,20 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "URL manquante" }, { status: 400 });
   }
 
+  // H6: SSRF protection — only allow Vercel Blob URLs
+  try {
+    const parsed = new URL(blobUrl);
+    if (!parsed.hostname.endsWith(".public.blob.vercel-storage.com") &&
+        !parsed.hostname.endsWith(".blob.vercel-storage.com")) {
+      return NextResponse.json({ error: "URL non autorisée" }, { status: 400 });
+    }
+    if (parsed.protocol !== "https:") {
+      return NextResponse.json({ error: "URL non autorisée" }, { status: 400 });
+    }
+  } catch {
+    return NextResponse.json({ error: "URL invalide" }, { status: 400 });
+  }
+
   try {
     const result = await get(blobUrl, { access: "private" });
 
