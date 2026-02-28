@@ -30,12 +30,13 @@ export async function GET() {
     return NextResponse.json(null);
   }
 
-  // Never return encrypted passwords to client
-  const { smtpPassEncrypted, docsImapPassEncrypted, ...rest } = company;
+  // Never return encrypted secrets to client
+  const { smtpPassEncrypted, docsImapPassEncrypted, documentsWebhookSecret, ...rest } = company;
   return NextResponse.json({
     ...rest,
     smtpPassConfigured: !!smtpPassEncrypted,
     docsImapPassConfigured: !!docsImapPassEncrypted,
+    documentsWebhookSecretConfigured: !!documentsWebhookSecret,
   });
 }
 
@@ -81,12 +82,7 @@ export async function PATCH(request: NextRequest) {
       if (fields.smtpFrom !== undefined) updateData.smtpFrom = fields.smtpFrom || null;
       // Only update password if a new one is provided
       if (fields.smtpPass && fields.smtpPass.trim()) {
-        try {
-          updateData.smtpPassEncrypted = encrypt(fields.smtpPass);
-        } catch {
-          // If ENCRYPTION_KEY not set, store as-is (development)
-          updateData.smtpPassEncrypted = fields.smtpPass;
-        }
+        updateData.smtpPassEncrypted = encrypt(fields.smtpPass);
       }
     } else if (tab === "password") {
       const pwdFields = [
@@ -141,24 +137,25 @@ export async function PATCH(request: NextRequest) {
     } else if (tab === "documents") {
       // Documents module configuration
       const boolFields = ["documentsModuleEnabled", "documentsAiEnabled", "documentsWebhookEnabled", "docsImapSecure"];
-      const strFields = ["documentsNotifyEmail", "documentsWebhookUrl", "documentsWebhookSecret", "docsImapHost", "docsImapUser"];
+      const strFields = ["documentsNotifyEmail", "documentsWebhookUrl", "docsImapHost", "docsImapUser"];
       for (const f of boolFields) {
         if (fields[f] !== undefined) updateData[f] = !!fields[f];
       }
       for (const f of strFields) {
         if (fields[f] !== undefined) updateData[f] = fields[f] || null;
       }
+      // Encrypt webhook secret like other secrets
+      if (fields.documentsWebhookSecret && fields.documentsWebhookSecret.trim()) {
+        updateData.documentsWebhookSecret = encrypt(fields.documentsWebhookSecret);
+      } else if (fields.documentsWebhookSecret === "") {
+        updateData.documentsWebhookSecret = null;
+      }
       if (fields.docsImapPort !== undefined) {
         updateData.docsImapPort = fields.docsImapPort ? Number(fields.docsImapPort) : null;
       }
       // Only update IMAP password if a new one is provided
       if (fields.docsImapPass && fields.docsImapPass.trim()) {
-        try {
-          updateData.docsImapPassEncrypted = encrypt(fields.docsImapPass);
-        } catch {
-          // If ENCRYPTION_KEY not set, store as-is (development)
-          updateData.docsImapPassEncrypted = fields.docsImapPass;
-        }
+        updateData.docsImapPassEncrypted = encrypt(fields.docsImapPass);
       }
     } else {
       // Legacy: direct field updates (backward compat)

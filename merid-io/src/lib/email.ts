@@ -36,7 +36,7 @@ async function getSmtpConfig() {
         try {
           smtpPass = decrypt(company.smtpPassEncrypted);
         } catch {
-          smtpPass = company.smtpPassEncrypted;
+          console.error("[email] SMTP password decryption failed — check ENCRYPTION_KEY");
         }
       }
       return {
@@ -185,7 +185,7 @@ function emailWrapper(content: string): string {
 export async function send2FACode(to: string, code: string, firstName: string) {
   await sendEmail({
     to,
-    subject: `Meridio - Votre code : ${code}`,
+    subject: "Meridio - Votre code de verification",
     html: emailWrapper(`
       <h2 style="color: #1B3A5C; margin-top: 0;">Bonjour ${escapeHtml(firstName)},</h2>
       <p>Voici votre code de verification pour acceder a Meridio :</p>
