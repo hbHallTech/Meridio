@@ -219,6 +219,8 @@ model User {
   isActive          Boolean   @default(true)
   twoFactorCode     String?
   twoFactorExpiry   DateTime?
+  twoFactorAttempts Int       @default(0)
+  twoFactorVerified Boolean   @default(false) // Server-side 2FA session flag, reset on login
   passwordChangedAt DateTime?
   failedLoginAttempts Int     @default(0)
   lockedUntil       DateTime?

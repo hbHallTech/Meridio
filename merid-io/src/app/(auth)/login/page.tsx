@@ -9,7 +9,9 @@ import { Eye, EyeOff, Loader2, Mail, Lock } from "lucide-react";
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
+  // M12: Prevent open redirect — only allow relative paths
+  const rawCallback = searchParams.get("callbackUrl") || "/dashboard";
+  const callbackUrl = rawCallback.startsWith("/") && !rawCallback.startsWith("//") ? rawCallback : "/dashboard";
 
   const reason = searchParams.get("reason");
 

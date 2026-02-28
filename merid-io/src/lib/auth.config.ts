@@ -51,9 +51,7 @@ export const authConfig: NextAuthConfig = {
         token.twoFactorVerified = user.twoFactorVerified;
       }
       if (trigger === "update" && session) {
-        if (session.twoFactorVerified !== undefined) {
-          token.twoFactorVerified = session.twoFactorVerified;
-        }
+        // C1: twoFactorVerified is only read from DB server-side, never from client
         if (session.language !== undefined) {
           token.language = session.language;
         }

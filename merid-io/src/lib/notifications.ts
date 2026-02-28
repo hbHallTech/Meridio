@@ -2,6 +2,16 @@ import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 import { sendEmail, sendLeaveRequestNotification } from "@/lib/email";
 
+/** M13: Escape HTML special characters to prevent injection in email templates */
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 interface CreateNotificationParams {
   userId: string;
   type: string;
@@ -95,6 +105,10 @@ export async function notifyLeaveSubmitted(
   if (!employee) return;
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const safeName = escapeHtml(employee.firstName);
+  const safeType = escapeHtml(params.leaveType);
+  const safeStart = escapeHtml(params.startDate);
+  const safeEnd = escapeHtml(params.endDate);
 
   const results = await Promise.allSettled([
     createNotification({
@@ -109,7 +123,7 @@ export async function notifyLeaveSubmitted(
     sendEmail({
       to: employee.email,
       subject: `Meridio - Votre demande de conge a ete soumise`,
-      html: `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:'Segoe UI',Arial,sans-serif;background-color:#f4f6f8;margin:0;padding:20px;"><div style="max-width:600px;margin:0 auto;background:white;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);"><div style="background-color:#1B3A5C;padding:24px;text-align:center;"><h1 style="color:white;margin:0;font-size:24px;">Halley-Technologies</h1><p style="color:#00BCD4;margin:4px 0 0;font-size:14px;">Meridio - Gestion des conges</p></div><div style="padding:32px 24px;"><h2 style="color:#1B3A5C;margin-top:0;">Bonjour ${employee.firstName},</h2><p>Votre demande de conge a ete <strong style="color:#1B3A5C;">soumise avec succes</strong> et est en attente d'approbation.</p><table style="width:100%;border-collapse:collapse;margin:16px 0;"><tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Type</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${params.leaveType}</td></tr><tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Du</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${params.startDate}</td></tr><tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Au</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${params.endDate}</td></tr><tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Duree</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${params.totalDays} jour(s)</td></tr></table><div style="text-align:center;margin:24px 0;"><a href="${appUrl}/leaves/${params.leaveRequestId}" style="display:inline-block;background-color:#1B3A5C;color:white;padding:12px 32px;border-radius:6px;text-decoration:none;font-weight:600;">Voir ma demande</a></div></div><div style="background-color:#f8f9fa;padding:16px 24px;text-align:center;font-size:12px;color:#6b7280;"><p style="margin:0;">Cet email a ete envoye automatiquement par Meridio.</p></div></div></body></html>`,
+      html: `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:'Segoe UI',Arial,sans-serif;background-color:#f4f6f8;margin:0;padding:20px;"><div style="max-width:600px;margin:0 auto;background:white;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);"><div style="background-color:#1B3A5C;padding:24px;text-align:center;"><h1 style="color:white;margin:0;font-size:24px;">Halley-Technologies</h1><p style="color:#00BCD4;margin:4px 0 0;font-size:14px;">Meridio - Gestion des conges</p></div><div style="padding:32px 24px;"><h2 style="color:#1B3A5C;margin-top:0;">Bonjour ${safeName},</h2><p>Votre demande de conge a ete <strong style="color:#1B3A5C;">soumise avec succes</strong> et est en attente d'approbation.</p><table style="width:100%;border-collapse:collapse;margin:16px 0;"><tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Type</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${safeType}</td></tr><tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Du</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${safeStart}</td></tr><tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Au</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${safeEnd}</td></tr><tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Duree</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${params.totalDays} jour(s)</td></tr></table><div style="text-align:center;margin:24px 0;"><a href="${appUrl}/leaves/${encodeURIComponent(params.leaveRequestId)}" style="display:inline-block;background-color:#1B3A5C;color:white;padding:12px 32px;border-radius:6px;text-decoration:none;font-weight:600;">Voir ma demande</a></div></div><div style="background-color:#f8f9fa;padding:16px 24px;text-align:center;font-size:12px;color:#6b7280;"><p style="margin:0;">Cet email a ete envoye automatiquement par Meridio.</p></div></div></body></html>`,
     }),
   ]);
 
@@ -204,6 +218,11 @@ export async function notifyLeaveApproved(
   }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const safeName = escapeHtml(employee.firstName);
+  const safeType = escapeHtml(params.leaveType);
+  const safeStart = escapeHtml(params.startDate);
+  const safeEnd = escapeHtml(params.endDate);
+  const safeApprover = escapeHtml(params.approverName);
 
   const results = await Promise.allSettled([
     createNotification({
@@ -218,7 +237,7 @@ export async function notifyLeaveApproved(
     sendEmail({
       to: employee.email,
       subject: `Meridio - Votre demande de congé a été approuvée`,
-      html: `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:'Segoe UI',Arial,sans-serif;background-color:#f4f6f8;margin:0;padding:20px;"><div style="max-width:600px;margin:0 auto;background:white;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);"><div style="background-color:#1B3A5C;padding:24px;text-align:center;"><h1 style="color:white;margin:0;font-size:24px;">Halley-Technologies</h1><p style="color:#00BCD4;margin:4px 0 0;font-size:14px;">Meridio - Gestion des congés</p></div><div style="padding:32px 24px;"><h2 style="color:#1B3A5C;margin-top:0;">Bonjour ${employee.firstName},</h2><p>Votre demande de congé a été <strong style="color:#16a34a;">approuvée</strong> :</p><table style="width:100%;border-collapse:collapse;margin:16px 0;"><tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Type</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${params.leaveType}</td></tr><tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Du</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${params.startDate}</td></tr><tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Au</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${params.endDate}</td></tr><tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Approuvé par</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${params.approverName}</td></tr></table><div style="text-align:center;margin:24px 0;"><a href="${appUrl}/leaves" style="display:inline-block;background-color:#16a34a;color:white;padding:12px 32px;border-radius:6px;text-decoration:none;font-weight:600;">Voir mes congés</a></div></div><div style="background-color:#f8f9fa;padding:16px 24px;text-align:center;font-size:12px;color:#6b7280;"><p style="margin:0;">Cet email a été envoyé automatiquement par Meridio.</p></div></div></body></html>`,
+      html: `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:'Segoe UI',Arial,sans-serif;background-color:#f4f6f8;margin:0;padding:20px;"><div style="max-width:600px;margin:0 auto;background:white;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);"><div style="background-color:#1B3A5C;padding:24px;text-align:center;"><h1 style="color:white;margin:0;font-size:24px;">Halley-Technologies</h1><p style="color:#00BCD4;margin:4px 0 0;font-size:14px;">Meridio - Gestion des congés</p></div><div style="padding:32px 24px;"><h2 style="color:#1B3A5C;margin-top:0;">Bonjour ${safeName},</h2><p>Votre demande de congé a été <strong style="color:#16a34a;">approuvée</strong> :</p><table style="width:100%;border-collapse:collapse;margin:16px 0;"><tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Type</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${safeType}</td></tr><tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Du</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${safeStart}</td></tr><tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Au</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${safeEnd}</td></tr><tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Approuvé par</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${safeApprover}</td></tr></table><div style="text-align:center;margin:24px 0;"><a href="${appUrl}/leaves" style="display:inline-block;background-color:#16a34a;color:white;padding:12px 32px;border-radius:6px;text-decoration:none;font-weight:600;">Voir mes congés</a></div></div><div style="background-color:#f8f9fa;padding:16px 24px;text-align:center;font-size:12px;color:#6b7280;"><p style="margin:0;">Cet email a été envoyé automatiquement par Meridio.</p></div></div></body></html>`,
     }),
   ]);
 
@@ -257,6 +276,12 @@ export async function notifyLeaveRejected(
   }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const safeName = escapeHtml(employee.firstName);
+  const safeType = escapeHtml(params.leaveType);
+  const safeStart = escapeHtml(params.startDate);
+  const safeEnd = escapeHtml(params.endDate);
+  const safeApprover = escapeHtml(params.approverName);
+  const safeComment = escapeHtml(params.comment);
 
   const results = await Promise.allSettled([
     createNotification({
@@ -271,7 +296,7 @@ export async function notifyLeaveRejected(
     sendEmail({
       to: employee.email,
       subject: `Meridio - Votre demande de congé a été refusée`,
-      html: `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:'Segoe UI',Arial,sans-serif;background-color:#f4f6f8;margin:0;padding:20px;"><div style="max-width:600px;margin:0 auto;background:white;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);"><div style="background-color:#1B3A5C;padding:24px;text-align:center;"><h1 style="color:white;margin:0;font-size:24px;">Halley-Technologies</h1><p style="color:#00BCD4;margin:4px 0 0;font-size:14px;">Meridio - Gestion des congés</p></div><div style="padding:32px 24px;"><h2 style="color:#1B3A5C;margin-top:0;">Bonjour ${employee.firstName},</h2><p>Votre demande de congé a été <strong style="color:#dc2626;">refusée</strong> :</p><table style="width:100%;border-collapse:collapse;margin:16px 0;"><tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Type</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${params.leaveType}</td></tr><tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Du</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${params.startDate}</td></tr><tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Au</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${params.endDate}</td></tr><tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Motif de refus</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;color:#dc2626;">${params.comment}</td></tr></table><div style="text-align:center;margin:24px 0;"><a href="${appUrl}/leaves" style="display:inline-block;background-color:#1B3A5C;color:white;padding:12px 32px;border-radius:6px;text-decoration:none;font-weight:600;">Voir mes congés</a></div></div><div style="background-color:#f8f9fa;padding:16px 24px;text-align:center;font-size:12px;color:#6b7280;"><p style="margin:0;">Cet email a été envoyé automatiquement par Meridio.</p></div></div></body></html>`,
+      html: `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:'Segoe UI',Arial,sans-serif;background-color:#f4f6f8;margin:0;padding:20px;"><div style="max-width:600px;margin:0 auto;background:white;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);"><div style="background-color:#1B3A5C;padding:24px;text-align:center;"><h1 style="color:white;margin:0;font-size:24px;">Halley-Technologies</h1><p style="color:#00BCD4;margin:4px 0 0;font-size:14px;">Meridio - Gestion des congés</p></div><div style="padding:32px 24px;"><h2 style="color:#1B3A5C;margin-top:0;">Bonjour ${safeName},</h2><p>Votre demande de congé a été <strong style="color:#dc2626;">refusée</strong> :</p><table style="width:100%;border-collapse:collapse;margin:16px 0;"><tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Type</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${safeType}</td></tr><tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Du</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${safeStart}</td></tr><tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Au</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${safeEnd}</td></tr><tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Motif de refus</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;color:#dc2626;">${safeComment}</td></tr></table><div style="text-align:center;margin:24px 0;"><a href="${appUrl}/leaves" style="display:inline-block;background-color:#1B3A5C;color:white;padding:12px 32px;border-radius:6px;text-decoration:none;font-weight:600;">Voir mes congés</a></div></div><div style="background-color:#f8f9fa;padding:16px 24px;text-align:center;font-size:12px;color:#6b7280;"><p style="margin:0;">Cet email a été envoyé automatiquement par Meridio.</p></div></div></body></html>`,
     }),
   ]);
 
@@ -310,6 +335,12 @@ export async function notifyLeaveNeedsRevision(
   }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const safeName = escapeHtml(employee.firstName);
+  const safeType = escapeHtml(params.leaveType);
+  const safeStart = escapeHtml(params.startDate);
+  const safeEnd = escapeHtml(params.endDate);
+  const safeApprover = escapeHtml(params.approverName);
+  const safeComment = escapeHtml(params.comment);
 
   const results = await Promise.allSettled([
     createNotification({
@@ -324,7 +355,7 @@ export async function notifyLeaveNeedsRevision(
     sendEmail({
       to: employee.email,
       subject: `Meridio - Votre demande de congé nécessite des modifications`,
-      html: `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:'Segoe UI',Arial,sans-serif;background-color:#f4f6f8;margin:0;padding:20px;"><div style="max-width:600px;margin:0 auto;background:white;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);"><div style="background-color:#1B3A5C;padding:24px;text-align:center;"><h1 style="color:white;margin:0;font-size:24px;">Halley-Technologies</h1><p style="color:#00BCD4;margin:4px 0 0;font-size:14px;">Meridio - Gestion des congés</p></div><div style="padding:32px 24px;"><h2 style="color:#1B3A5C;margin-top:0;">Bonjour ${employee.firstName},</h2><p>Votre demande de congé a été <strong style="color:#d97706;">renvoyée pour modification</strong> :</p><table style="width:100%;border-collapse:collapse;margin:16px 0;"><tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Type</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${params.leaveType}</td></tr><tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Du</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${params.startDate}</td></tr><tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Au</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${params.endDate}</td></tr><tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Commentaire</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;color:#d97706;">${params.comment}</td></tr></table><div style="text-align:center;margin:24px 0;"><a href="${appUrl}/leaves" style="display:inline-block;background-color:#1B3A5C;color:white;padding:12px 32px;border-radius:6px;text-decoration:none;font-weight:600;">Modifier ma demande</a></div></div><div style="background-color:#f8f9fa;padding:16px 24px;text-align:center;font-size:12px;color:#6b7280;"><p style="margin:0;">Cet email a été envoyé automatiquement par Meridio.</p></div></div></body></html>`,
+      html: `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:'Segoe UI',Arial,sans-serif;background-color:#f4f6f8;margin:0;padding:20px;"><div style="max-width:600px;margin:0 auto;background:white;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);"><div style="background-color:#1B3A5C;padding:24px;text-align:center;"><h1 style="color:white;margin:0;font-size:24px;">Halley-Technologies</h1><p style="color:#00BCD4;margin:4px 0 0;font-size:14px;">Meridio - Gestion des congés</p></div><div style="padding:32px 24px;"><h2 style="color:#1B3A5C;margin-top:0;">Bonjour ${safeName},</h2><p>Votre demande de congé a été <strong style="color:#d97706;">renvoyée pour modification</strong> :</p><table style="width:100%;border-collapse:collapse;margin:16px 0;"><tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Type</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${safeType}</td></tr><tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Du</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${safeStart}</td></tr><tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Au</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${safeEnd}</td></tr><tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Commentaire</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;color:#d97706;">${safeComment}</td></tr></table><div style="text-align:center;margin:24px 0;"><a href="${appUrl}/leaves" style="display:inline-block;background-color:#1B3A5C;color:white;padding:12px 32px;border-radius:6px;text-decoration:none;font-weight:600;">Modifier ma demande</a></div></div><div style="background-color:#f8f9fa;padding:16px 24px;text-align:center;font-size:12px;color:#6b7280;"><p style="margin:0;">Cet email a été envoyé automatiquement par Meridio.</p></div></div></body></html>`,
     }),
   ]);
 

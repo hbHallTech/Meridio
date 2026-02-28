@@ -2,6 +2,16 @@ import nodemailer from "nodemailer";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 
+/** Escape HTML special characters to prevent injection in email templates */
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 // Serverless-safe timeouts (Vercel functions: 10s hobby / 60s pro)
 const SMTP_CONNECTION_TIMEOUT = 10_000; // 10s to establish TCP + TLS
 const SMTP_GREETING_TIMEOUT = 8_000;   // 8s for SMTP greeting (EHLO)
@@ -177,10 +187,10 @@ export async function send2FACode(to: string, code: string, firstName: string) {
     to,
     subject: `Meridio - Votre code : ${code}`,
     html: emailWrapper(`
-      <h2 style="color: #1B3A5C; margin-top: 0;">Bonjour ${firstName},</h2>
+      <h2 style="color: #1B3A5C; margin-top: 0;">Bonjour ${escapeHtml(firstName)},</h2>
       <p>Voici votre code de verification pour acceder a Meridio :</p>
       <div style="text-align: center; margin: 24px 0;">
-        <span style="display: inline-block; background-color: #f0f4f8; border: 2px solid #1B3A5C; border-radius: 8px; padding: 16px 32px; font-size: 32px; letter-spacing: 4px; font-weight: bold; color: #1B3A5C;">${code}</span>
+        <span style="display: inline-block; background-color: #f0f4f8; border: 2px solid #1B3A5C; border-radius: 8px; padding: 16px 32px; font-size: 32px; letter-spacing: 4px; font-weight: bold; color: #1B3A5C;">${escapeHtml(code)}</span>
       </div>
       <p style="color: #6b7280;">Ce code expire dans <strong>10 minutes</strong>.</p>
       <p style="color: #6b7280;">Si vous n'avez pas demande ce code, ignorez cet email.</p>
@@ -199,7 +209,7 @@ export async function sendPasswordResetEmail(
     to,
     subject: "Meridio - Reinitialisation du mot de passe",
     html: emailWrapper(`
-      <h2 style="color: #1B3A5C; margin-top: 0;">Bonjour ${firstName},</h2>
+      <h2 style="color: #1B3A5C; margin-top: 0;">Bonjour ${escapeHtml(firstName)},</h2>
       <p>Vous avez demande la reinitialisation de votre mot de passe.</p>
       <p>Cliquez sur le bouton ci-dessous pour creer un nouveau mot de passe :</p>
       <div style="text-align: center; margin: 24px 0;">
@@ -216,7 +226,7 @@ export async function sendPasswordChangedEmail(to: string, firstName: string) {
     to,
     subject: "Meridio - Mot de passe modifie",
     html: emailWrapper(`
-      <h2 style="color: #1B3A5C; margin-top: 0;">Bonjour ${firstName},</h2>
+      <h2 style="color: #1B3A5C; margin-top: 0;">Bonjour ${escapeHtml(firstName)},</h2>
       <p>Votre mot de passe Meridio a ete modifie avec succes.</p>
       <p style="color: #6b7280;">Si vous n'etes pas a l'origine de cette modification, contactez immediatement votre administrateur.</p>
       <div style="text-align: center; margin: 24px 0;">
@@ -237,12 +247,12 @@ export async function sendNewAccountEmail(
     to,
     subject: "Meridio - Votre compte a ete cree",
     html: emailWrapper(`
-      <h2 style="color: #1B3A5C; margin-top: 0;">Bienvenue ${firstName},</h2>
+      <h2 style="color: #1B3A5C; margin-top: 0;">Bienvenue ${escapeHtml(firstName)},</h2>
       <p>Votre compte Meridio a ete cree par un administrateur.</p>
       <p>Voici vos identifiants de connexion :</p>
       <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
-        <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">Email</td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600;">${to}</td></tr>
-        <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">Mot de passe</td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600; font-family: monospace;">${tempPassword}</td></tr>
+        <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">Email</td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600;">${escapeHtml(to)}</td></tr>
+        <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">Mot de passe</td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600; font-family: monospace;">${escapeHtml(tempPassword)}</td></tr>
       </table>
       <p style="color: #EF4444; font-weight: 600;">Vous devrez changer votre mot de passe lors de votre premiere connexion.</p>
       <div style="text-align: center; margin: 24px 0;">
@@ -263,11 +273,11 @@ export async function sendAdminPasswordChangedEmail(
     to,
     subject: "Meridio - Votre mot de passe a ete reinitialise",
     html: emailWrapper(`
-      <h2 style="color: #1B3A5C; margin-top: 0;">Bonjour ${firstName},</h2>
+      <h2 style="color: #1B3A5C; margin-top: 0;">Bonjour ${escapeHtml(firstName)},</h2>
       <p>Votre mot de passe Meridio a ete reinitialise par un administrateur.</p>
       <p>Voici votre nouveau mot de passe temporaire :</p>
       <div style="text-align: center; margin: 24px 0;">
-        <span style="display: inline-block; background-color: #f0f4f8; border: 2px solid #1B3A5C; border-radius: 8px; padding: 12px 24px; font-size: 18px; font-weight: bold; font-family: monospace; color: #1B3A5C;">${tempPassword}</span>
+        <span style="display: inline-block; background-color: #f0f4f8; border: 2px solid #1B3A5C; border-radius: 8px; padding: 12px 24px; font-size: 18px; font-weight: bold; font-family: monospace; color: #1B3A5C;">${escapeHtml(tempPassword)}</span>
       </div>
       <p style="color: #EF4444; font-weight: 600;">Vous devrez changer votre mot de passe lors de votre prochaine connexion.</p>
       <div style="text-align: center; margin: 24px 0;">
@@ -284,16 +294,20 @@ export async function sendLeaveRequestNotification(
   startDate: string,
   endDate: string
 ) {
+  const safeName = escapeHtml(employeeName);
+  const safeType = escapeHtml(leaveType);
+  const safeStart = escapeHtml(startDate);
+  const safeEnd = escapeHtml(endDate);
   await sendEmail({
     to: managerEmail,
     subject: `Meridio - Nouvelle demande de conge de ${employeeName}`,
     html: emailWrapper(`
       <h2 style="color: #1B3A5C; margin-top: 0;">Nouvelle demande de conge</h2>
-      <p><strong>${employeeName}</strong> a soumis une demande de conge :</p>
+      <p><strong>${safeName}</strong> a soumis une demande de conge :</p>
       <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
-        <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">Type</td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600;">${leaveType}</td></tr>
-        <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">Du</td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600;">${startDate}</td></tr>
-        <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">Au</td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600;">${endDate}</td></tr>
+        <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">Type</td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600;">${safeType}</td></tr>
+        <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">Du</td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600;">${safeStart}</td></tr>
+        <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">Au</td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600;">${safeEnd}</td></tr>
       </table>
       <div style="text-align: center; margin: 24px 0;">
         <a href="${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/manager/approvals" style="display: inline-block; background-color: #00BCD4; color: white; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: 600;">Voir la demande</a>
@@ -310,15 +324,18 @@ export async function sendNewDeviceLoginEmail(
   ip: string,
   userAgent: string
 ) {
+  const safeName = escapeHtml(firstName);
+  const safeIp = escapeHtml(ip);
+  const safeUa = escapeHtml(userAgent.substring(0, 100));
   await sendEmail({
     to,
     subject: "Meridio - Nouvelle connexion detectee",
     html: emailWrapper(`
-      <h2 style="color: #1B3A5C; margin-top: 0;">Bonjour ${firstName},</h2>
+      <h2 style="color: #1B3A5C; margin-top: 0;">Bonjour ${safeName},</h2>
       <p>Une connexion a votre compte Meridio a ete detectee depuis un nouvel appareil :</p>
       <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
-        <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">Adresse IP</td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600;">${ip}</td></tr>
-        <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">Navigateur</td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600; font-size: 12px;">${userAgent.substring(0, 100)}</td></tr>
+        <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">Adresse IP</td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600;">${safeIp}</td></tr>
+        <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">Navigateur</td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600; font-size: 12px;">${safeUa}</td></tr>
         <tr><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">Date</td><td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600;">${new Date().toLocaleString("fr-CH")}</td></tr>
       </table>
       <p style="color: #EF4444; font-weight: 600;">Si vous n'etes pas a l'origine de cette connexion, changez immediatement votre mot de passe et contactez votre administrateur.</p>
@@ -332,12 +349,15 @@ export async function sendAccountLockedEmail(
   userFullName: string,
   userEmail: string
 ) {
+  const safeAdmin = escapeHtml(adminFirstName);
+  const safeUser = escapeHtml(userFullName);
+  const safeEmail = escapeHtml(userEmail);
   await sendEmail({
     to,
     subject: `Meridio - Compte verrouille : ${userFullName}`,
     html: emailWrapper(`
-      <h2 style="color: #1B3A5C; margin-top: 0;">Bonjour ${adminFirstName},</h2>
-      <p>Le compte de <strong>${userFullName}</strong> (${userEmail}) a ete verrouille suite a 5 tentatives de connexion echouees.</p>
+      <h2 style="color: #1B3A5C; margin-top: 0;">Bonjour ${safeAdmin},</h2>
+      <p>Le compte de <strong>${safeUser}</strong> (${safeEmail}) a ete verrouille suite a 5 tentatives de connexion echouees.</p>
       <p>Le compte sera automatiquement deverrouille dans <strong>15 minutes</strong>.</p>
       <p style="color: #6b7280;">Si cette activite est suspecte, verifiez l'integrite du compte.</p>
     `),
@@ -355,7 +375,7 @@ export async function sendPasswordExpiringSoonEmail(
     to,
     subject: "Meridio - Votre mot de passe expire bientot",
     html: emailWrapper(`
-      <h2 style="color: #1B3A5C; margin-top: 0;">Bonjour ${firstName},</h2>
+      <h2 style="color: #1B3A5C; margin-top: 0;">Bonjour ${escapeHtml(firstName)},</h2>
       <p>Votre mot de passe Meridio expirera dans <strong>${daysLeft} jour(s)</strong>.</p>
       <p>Veuillez le changer avant son expiration pour eviter une reinitialisation automatique.</p>
       <div style="text-align: center; margin: 24px 0;">
@@ -376,11 +396,11 @@ export async function sendPasswordExpiredResetEmail(
     to,
     subject: "Meridio - Mot de passe expire et reinitialise",
     html: emailWrapper(`
-      <h2 style="color: #1B3A5C; margin-top: 0;">Bonjour ${firstName},</h2>
+      <h2 style="color: #1B3A5C; margin-top: 0;">Bonjour ${escapeHtml(firstName)},</h2>
       <p>Votre mot de passe Meridio a expire et a ete reinitialise automatiquement.</p>
       <p>Voici votre nouveau mot de passe temporaire :</p>
       <div style="text-align: center; margin: 24px 0;">
-        <span style="display: inline-block; background-color: #f0f4f8; border: 2px solid #1B3A5C; border-radius: 8px; padding: 12px 24px; font-size: 18px; font-weight: bold; font-family: monospace; color: #1B3A5C;">${tempPassword}</span>
+        <span style="display: inline-block; background-color: #f0f4f8; border: 2px solid #1B3A5C; border-radius: 8px; padding: 12px 24px; font-size: 18px; font-weight: bold; font-family: monospace; color: #1B3A5C;">${escapeHtml(tempPassword)}</span>
       </div>
       <p style="color: #EF4444; font-weight: 600;">Vous devrez changer votre mot de passe lors de votre prochaine connexion.</p>
       <div style="text-align: center; margin: 24px 0;">

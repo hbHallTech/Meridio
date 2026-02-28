@@ -9,6 +9,7 @@ import {
 import { createAuditLog } from "@/lib/notifications";
 import { getRequestIp } from "@/lib/rate-limit";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 
 export async function POST(request: NextRequest) {
   const ip = getRequestIp(request.headers);
@@ -24,9 +25,12 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // H2: Compare SHA-256 hash of submitted token against stored hash
+  const tokenHash = crypto.createHash("sha256").update(parsed.data.token).digest("hex");
+
   const user = await prisma.user.findFirst({
     where: {
-      resetPasswordToken: parsed.data.token,
+      resetPasswordToken: tokenHash,
       resetPasswordExpiry: { gt: new Date() },
     },
   });
