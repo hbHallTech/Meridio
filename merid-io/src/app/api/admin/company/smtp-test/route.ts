@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { decrypt } from "@/lib/crypto";
+import { decryptOrFallback } from "@/lib/crypto";
 import nodemailer from "nodemailer";
 
 export async function POST() {
@@ -31,14 +31,7 @@ export async function POST() {
 
     let smtpPass = "";
     if (company.smtpPassEncrypted) {
-      try {
-        smtpPass = decrypt(company.smtpPassEncrypted);
-      } catch {
-        return NextResponse.json(
-          { error: "Impossible de déchiffrer le mot de passe SMTP. Vérifiez ENCRYPTION_KEY." },
-          { status: 500 }
-        );
-      }
+      smtpPass = decryptOrFallback(company.smtpPassEncrypted, "SMTP password");
     }
 
     const port = company.smtpPort || 587;

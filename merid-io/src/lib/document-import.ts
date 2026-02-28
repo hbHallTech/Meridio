@@ -13,7 +13,7 @@
 import { prisma } from "@/lib/prisma";
 import { put } from "@vercel/blob";
 import { logAudit } from "@/lib/audit";
-import { decrypt } from "@/lib/crypto";
+import { decryptOrFallback } from "@/lib/crypto";
 import crypto from "crypto";
 import { inflateSync } from "zlib";
 
@@ -839,13 +839,7 @@ export async function processIncomingEmails(): Promise<ImportResult> {
 
   let pass: string | undefined;
   if (company.docsImapPassEncrypted) {
-    try {
-      pass = decrypt(company.docsImapPassEncrypted);
-      console.log(`[imap-import] Password decrypted OK`);
-    } catch (decryptErr) {
-      console.error(`[imap-import] Decryption failed — check ENCRYPTION_KEY`);
-      // Fail-secure: do not fall back to using encrypted value as password
-    }
+    pass = decryptOrFallback(company.docsImapPassEncrypted, "IMAP password");
   }
   if (!pass) {
     pass = process.env.DOCS_IMAP_PASS;

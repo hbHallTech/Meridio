@@ -50,3 +50,24 @@ export function decrypt(encryptedString: string): string {
 
   return decrypted;
 }
+
+/**
+ * Try to decrypt; if the value was stored before encryption was enabled
+ * (plain text, not in iv:encrypted:tag format), return it as-is with a warning.
+ * This provides backward compatibility during migration.
+ */
+export function decryptOrFallback(value: string, label: string): string {
+  // Encrypted values always have the format "hex:hex:hex" (iv:data:tag)
+  const parts = value.split(":");
+  if (parts.length !== 3) {
+    console.warn(`[crypto] ${label} is not encrypted (legacy plain-text) — re-save to encrypt`);
+    return value;
+  }
+  try {
+    return decrypt(value);
+  } catch {
+    // Could be a plain-text value that happens to contain colons, or wrong key
+    console.warn(`[crypto] ${label} decryption failed — using as plain-text (re-save to fix)`);
+    return value;
+  }
+}

@@ -1,6 +1,6 @@
 import nodemailer from "nodemailer";
 import { prisma } from "@/lib/prisma";
-import { decrypt } from "@/lib/crypto";
+import { decryptOrFallback } from "@/lib/crypto";
 
 /** Escape HTML special characters to prevent injection in email templates */
 function escapeHtml(str: string): string {
@@ -33,11 +33,7 @@ async function getSmtpConfig() {
     if (company?.smtpHost && company?.smtpUser) {
       let smtpPass = "";
       if (company.smtpPassEncrypted) {
-        try {
-          smtpPass = decrypt(company.smtpPassEncrypted);
-        } catch {
-          console.error("[email] SMTP password decryption failed — check ENCRYPTION_KEY");
-        }
+        smtpPass = decryptOrFallback(company.smtpPassEncrypted, "SMTP password");
       }
       return {
         host: company.smtpHost,
