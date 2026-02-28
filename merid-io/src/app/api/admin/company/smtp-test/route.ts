@@ -34,8 +34,10 @@ export async function POST() {
       try {
         smtpPass = decrypt(company.smtpPassEncrypted);
       } catch {
-        // Fallback: maybe stored unencrypted in dev
-        smtpPass = company.smtpPassEncrypted;
+        return NextResponse.json(
+          { error: "Impossible de déchiffrer le mot de passe SMTP. Vérifiez ENCRYPTION_KEY." },
+          { status: 500 }
+        );
       }
     }
 
@@ -49,7 +51,7 @@ export async function POST() {
         pass: smtpPass,
       },
       ...(port !== 465 && {
-        tls: { rejectUnauthorized: false },
+        tls: { rejectUnauthorized: process.env.NODE_ENV === "production" },
       }),
       connectionTimeout: 10000,
     });

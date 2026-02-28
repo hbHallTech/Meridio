@@ -20,13 +20,17 @@ import { inflateSync } from "zlib";
 // Prevent stale IMAP socket errors from crashing the Vercel serverless process.
 // In Vercel, function containers are reused — a previous invocation's IMAP connection
 // may still exist and emit errors (ECONNRESET, Socket timeout) after our handler exits.
+// Scoped: only handles known IMAP socket errors (checked via stack trace), re-throws everything else.
 if (typeof process !== "undefined" && !process.env.__IMAP_UNCAUGHT_HANDLER) {
   process.env.__IMAP_UNCAUGHT_HANDLER = "1";
   process.on("uncaughtException", (err) => {
     const msg = err?.message || "";
-    if (msg.includes("ECONNRESET") || msg.includes("Socket timeout") || msg.includes("ETIMEOUT")) {
-      console.warn(`[imap-import] Caught stale socket error (non-fatal): ${msg}`);
-      return; // Swallow — these are from previous invocation's dead connections
+    const stack = err?.stack || "";
+    const isSocketError = msg.includes("ECONNRESET") || msg.includes("Socket timeout") || msg.includes("ETIMEOUT");
+    const isFromImap = stack.includes("imapflow") || stack.includes("TLSSocket") || stack.includes("Socket.");
+    if (isSocketError && isFromImap) {
+      console.warn(`[imap-import] Caught stale IMAP socket error (non-fatal): ${msg}`);
+      return;
     }
     // Re-throw non-IMAP errors so they're not silently swallowed
     throw err;
@@ -636,7 +640,7 @@ async function findEmployee(
       select: { id: true, email: true, isActive: true },
     });
     if (user?.isActive) {
-      console.log(`[imap-import] Employee matched by CIN: ${metadata.employeeCin}`);
+      console.log(`[imap-import] Employee matched by CIN`);
       return { id: user.id, email: user.email };
     }
   }
@@ -648,7 +652,7 @@ async function findEmployee(
       select: { id: true, email: true, isActive: true },
     });
     if (user?.isActive) {
-      console.log(`[imap-import] Employee matched by CNSS: ${metadata.employeeCnss}`);
+      console.log(`[imap-import] Employee matched by CNSS`);
       return { id: user.id, email: user.email };
     }
   }
@@ -660,7 +664,7 @@ async function findEmployee(
       select: { id: true, email: true, isActive: true },
     });
     if (user?.isActive) {
-      console.log(`[imap-import] Employee matched by email: ${metadata.employeeEmail}`);
+      console.log(`[imap-import] Employee matched by email`);
       return { id: user.id, email: user.email };
     }
   }
@@ -768,7 +772,7 @@ async function testImapConnectivity(host: string, port: number, secure: boolean)
     if (secure) {
       // Direct TLS (port 993)
       const socket = tls.connect(
-        { host, port, rejectUnauthorized: false, timeout },
+        { host, port, rejectUnauthorized: process.env.NODE_ENV === "production", timeout },
         () => {
           console.log(`[imap-import] TLS handshake OK — cipher: ${socket.getCipher()?.name}, protocol: ${socket.getProtocol()}`);
           socket.destroy();
@@ -837,11 +841,10 @@ export async function processIncomingEmails(): Promise<ImportResult> {
   if (company.docsImapPassEncrypted) {
     try {
       pass = decrypt(company.docsImapPassEncrypted);
-      console.log(`[imap-import] Password decrypted OK (length: ${pass.length})`);
+      console.log(`[imap-import] Password decrypted OK`);
     } catch (decryptErr) {
-      console.warn(`[imap-import] Decryption failed, using raw value:`, decryptErr);
-      // If decryption fails (ENCRYPTION_KEY changed), try using as-is (dev mode)
-      pass = company.docsImapPassEncrypted;
+      console.error(`[imap-import] Decryption failed — check ENCRYPTION_KEY`);
+      // Fail-secure: do not fall back to using encrypted value as password
     }
   }
   if (!pass) {
@@ -858,7 +861,7 @@ export async function processIncomingEmails(): Promise<ImportResult> {
     };
   }
 
-  console.log(`[imap-import] Config: host=${host}, port=${port}, user=${user}, secure=${secure}`);
+  console.log(`[imap-import] Config: host=${host}, port=${port}, secure=${secure}`);
 
   // Connect via ImapFlow
   const { ImapFlow } = await import("imapflow");
@@ -875,7 +878,7 @@ export async function processIncomingEmails(): Promise<ImportResult> {
       error: (obj: Record<string, unknown>) => console.error(`[imap-error]`, obj.msg || ""),
     },
     tls: {
-      rejectUnauthorized: false, // Accept self-signed certs (some corporate IMAP servers)
+      rejectUnauthorized: process.env.NODE_ENV === "production",
     },
     connectionTimeout: 30_000,  // 30s TCP connect
     greetingTimeout: 30_000,    // 30s for server greeting
@@ -987,7 +990,7 @@ export async function processIncomingEmails(): Promise<ImportResult> {
 
               // Parse metadata from extracted text
               const metadata = parsePayslipText(text);
-              console.log(`[imap-import] Parsed metadata: name=${metadata.employeeName}, email=${metadata.employeeEmail}, cin=${metadata.employeeCin}, cnss=${metadata.employeeCnss}, type=${metadata.documentType}, month=${metadata.month}, year=${metadata.year}`);
+              console.log(`[imap-import] Parsed metadata: type=${metadata.documentType}, month=${metadata.month}, year=${metadata.year}, hasName=${!!metadata.employeeName}, hasCin=${!!metadata.employeeCin}, hasCnss=${!!metadata.employeeCnss}`);
 
               // Find matching employee (may be null → unassigned doc for HR)
               const employee = await findEmployee(metadata);

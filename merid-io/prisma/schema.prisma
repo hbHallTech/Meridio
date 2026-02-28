@@ -249,6 +249,10 @@ model User {
   documents         Document[]     @relation("UserDocuments")
   createdDocuments  Document[]     @relation("DocumentCreatedBy")
   modifiedDocuments Document[]     @relation("DocumentModifiedBy")
+
+  @@index([resetPasswordToken])
+  @@index([isActive])
+  @@index([teamId])
 }
 
 model Team {
@@ -371,6 +375,9 @@ model LeaveRequest {
   user                User        @relation(fields: [userId], references: [id])
   leaveTypeConfig     LeaveTypeConfig @relation(fields: [leaveTypeConfigId], references: [id])
   approvalSteps       ApprovalStep[]
+
+  @@index([userId])
+  @@index([status])
 }
 
 model ApprovalStep {

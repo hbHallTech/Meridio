@@ -238,6 +238,17 @@ export async function PATCH(request: Request) {
       },
     });
 
+    // Sanitize: strip sensitive fields from audit log
+    const sanitized = { ...updateData };
+    delete sanitized.passwordHash;
+    delete sanitized.passwordHistory;
+    delete sanitized.passwordChangedAt;
+    delete sanitized.lastPasswordChangeAt;
+    delete sanitized.passwordExpiresAt;
+    if (passwordChanged) sanitized.passwordChanged = true;
+    if (sanitized.cin !== undefined) sanitized.cin = "***";
+    if (sanitized.cnss !== undefined) sanitized.cnss = "***";
+
     await prisma.auditLog.create({
       data: {
         userId: session.user.id!,
@@ -245,7 +256,7 @@ export async function PATCH(request: Request) {
         entityType: "User",
         entityId: id,
         oldValue,
-        newValue: JSON.parse(JSON.stringify(updateData)),
+        newValue: JSON.parse(JSON.stringify(sanitized)),
       },
     });
 
