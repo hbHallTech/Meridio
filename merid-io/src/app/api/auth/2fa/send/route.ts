@@ -3,11 +3,18 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { send2FACode } from "@/lib/email";
 import { logAudit } from "@/lib/audit";
+import { checkBotId } from "botid/server";
 import crypto from "crypto";
 
 export async function POST() {
   if (!process.env.SMTP_USER) {
     return NextResponse.json({ skipped: true });
+  }
+
+  // Vercel BotID – block automated requests
+  const botCheck = await checkBotId();
+  if (botCheck.isBot && !botCheck.isVerifiedBot) {
+    return NextResponse.json({ error: "Access denied" }, { status: 403 });
   }
 
   const session = await auth();

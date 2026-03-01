@@ -3,9 +3,16 @@ import { prisma } from "@/lib/prisma";
 import { forgotPasswordSchema } from "@/lib/validators";
 import { sendPasswordResetEmail } from "@/lib/email";
 import { logAudit, getIp } from "@/lib/audit";
+import { checkBotId } from "botid/server";
 import crypto from "crypto";
 
 export async function POST(request: NextRequest) {
+  // Vercel BotID – block automated requests
+  const botCheck = await checkBotId();
+  if (botCheck.isBot && !botCheck.isVerifiedBot) {
+    return NextResponse.json({ error: "Access denied" }, { status: 403 });
+  }
+
   const body = await request.json();
   const parsed = forgotPasswordSchema.safeParse(body);
 

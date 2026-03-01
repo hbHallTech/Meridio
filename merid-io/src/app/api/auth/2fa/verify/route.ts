@@ -3,11 +3,18 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { verify2FASchema } from "@/lib/validators";
 import { logAudit, getIp } from "@/lib/audit";
+import { checkBotId } from "botid/server";
 import crypto from "crypto";
 
 const MAX_2FA_ATTEMPTS = 5;
 
 export async function POST(request: NextRequest) {
+  // Vercel BotID – block automated requests
+  const botCheck = await checkBotId();
+  if (botCheck.isBot && !botCheck.isVerifiedBot) {
+    return NextResponse.json({ error: "Access denied" }, { status: 403 });
+  }
+
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
