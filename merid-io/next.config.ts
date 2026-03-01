@@ -27,7 +27,7 @@ const nextConfig: NextConfig = {
           },
           {
             key: "X-Frame-Options",
-            value: "DENY",
+            value: "SAMEORIGIN",
           },
           {
             key: "X-XSS-Protection",
@@ -54,7 +54,7 @@ const nextConfig: NextConfig = {
               "img-src 'self' data: blob: https://*.blob.vercel-storage.com",
               "font-src 'self'",
               "connect-src 'self' https://*.vercel-storage.com https://*.vercel.com",
-              "frame-ancestors 'none'",
+              "frame-ancestors 'self'",
               "base-uri 'self'",
               "form-action 'self'",
             ].join("; "),
