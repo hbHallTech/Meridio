@@ -71,7 +71,11 @@
     "exceptionalRules": "Exceptional Rules",
     "documents": "My Documents",
     "hrDocuments": "HR Documents",
-    "documentsSettings": "Documents Config"
+    "documentsSettings": "Documents Config",
+    "launchImportNow": "Run Import Now",
+    "importRunning": "Import running...",
+    "importSuccess": "Import started successfully",
+    "noNewDocuments": "No new documents found"
   },
   "leaves": {
     "title": "My Leave Requests",

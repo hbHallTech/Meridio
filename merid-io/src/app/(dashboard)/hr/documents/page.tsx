@@ -24,6 +24,7 @@ import {
   ChevronDown,
   AlertTriangle,
   UserPlus,
+  Play,
 } from "lucide-react";
 
 // ─── Types ───
@@ -183,6 +184,9 @@ export default function HRDocumentsPage() {
   // Generation
   const [genMenuOpen, setGenMenuOpen] = useState(false);
   const [generating, setGenerating] = useState(false);
+
+  // Manual import
+  const [importRunning, setImportRunning] = useState(false);
 
   // ─── Fetch employees ───
   useEffect(() => {
@@ -577,6 +581,35 @@ export default function HRDocumentsPage() {
     a.click();
   };
 
+  // ─── Manual import handler ───
+  const handleManualImport = async () => {
+    setImportRunning(true);
+    try {
+      const res = await fetch("/api/admin/import-documents", { method: "POST" });
+      const contentType = res.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) throw new Error(`Server error (${res.status})`);
+      const data = await res.json();
+      if (data.success && data.created > 0) {
+        addToast({ type: "success", title: lang === "en" ? `${data.created} document(s) imported` : `${data.created} document(s) importé(s)` });
+        fetchDocuments();
+      } else if (data.success && data.created === 0) {
+        addToast({ type: "info", title: lang === "en" ? "No new documents found" : "Aucun nouveau document trouvé" });
+      } else {
+        addToast({ type: "error", title: data.error || (lang === "en" ? "Import failed" : "Échec de l'import") });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "";
+      addToast({
+        type: "error",
+        title: message.includes("Server error")
+          ? (lang === "en" ? message : "Erreur serveur — vérifiez les paramètres IMAP")
+          : (lang === "en" ? "Network error" : "Erreur réseau"),
+      });
+    } finally {
+      setImportRunning(false);
+    }
+  };
+
   // ─── Module disabled ───
   if (moduleDisabled) {
     return (
@@ -610,11 +643,26 @@ export default function HRDocumentsPage() {
               : "Téléverser, gérer et distribuer les documents employés"}
           </p>
         </div>
-        <div
-          className="flex h-10 w-10 items-center justify-center rounded-lg"
-          style={{ backgroundColor: "rgba(0,188,212,0.1)" }}
-        >
-          <FileText className="h-5 w-5" style={{ color: "#00BCD4" }} />
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleManualImport}
+            disabled={importRunning}
+            className="inline-flex items-center gap-2 rounded-lg border border-[#1B3A5C] px-4 py-2 text-sm font-medium text-[#1B3A5C] transition-colors hover:bg-[#1B3A5C]/5 disabled:opacity-50"
+            aria-label={lang === "en" ? "Run Import Now" : "Lancer l'import maintenant"}
+          >
+            {importRunning ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Play className="h-4 w-4" />
+            )}
+            {lang === "en" ? "Run Import Now" : "Lancer l'import maintenant"}
+          </button>
+          <div
+            className="flex h-10 w-10 items-center justify-center rounded-lg"
+            style={{ backgroundColor: "rgba(0,188,212,0.1)" }}
+          >
+            <FileText className="h-5 w-5" style={{ color: "#00BCD4" }} />
+          </div>
         </div>
       </div>
 
