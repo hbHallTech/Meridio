@@ -9,7 +9,7 @@ import {
 } from "ai";
 import { xai } from "@ai-sdk/xai";
 import { auth } from "@/lib/auth";
-import { checkBotId } from "botid/server";
+import { isBotRequest } from "@/lib/bot-protection";
 import { z } from "zod";
 
 // ─── Role-based system prompts ─────────────────────────────────────────────────
@@ -139,9 +139,7 @@ const openPageTool = tool({
 // ─── POST handler ───────────────────────────────────────────────────────────────
 
 export async function POST(req: Request) {
-  // Vercel BotID – block automated requests
-  const botCheck = await checkBotId();
-  if (botCheck.isBot && !botCheck.isVerifiedBot) {
+  if (await isBotRequest()) {
     return new Response("Access denied", { status: 403 });
   }
 
