@@ -8,14 +8,12 @@ import {
 } from "@/lib/password";
 import { createAuditLog } from "@/lib/notifications";
 import { getRequestIp } from "@/lib/rate-limit";
-import { checkBotId } from "botid/server";
+import { isBotRequest } from "@/lib/bot-protection";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 
 export async function POST(request: NextRequest) {
-  // Vercel BotID – block automated requests
-  const botCheck = await checkBotId();
-  if (botCheck.isBot && !botCheck.isVerifiedBot) {
+  if (await isBotRequest()) {
     return NextResponse.json({ error: "Access denied" }, { status: 403 });
   }
 
