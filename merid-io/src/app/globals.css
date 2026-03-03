@@ -339,3 +339,44 @@
 .dark .meridio-suggestion-bubble:hover {
   box-shadow: 0 2px 6px rgb(0 188 212 / 0.18);
 }
+
+/* ══════════════════════════════════════════════════════════
+   Landing page styles
+   ══════════════════════════════════════════════════════════ */
+
+/* Landing page form inputs */
+.landing-input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  font-size: 0.875rem;
+  background-color: #ffffff;
+  color: #1a1a2e;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  outline: none;
+}
+.landing-input:focus {
+  border-color: #00BFFF;
+  box-shadow: 0 0 0 3px rgba(0, 191, 255, 0.1);
+}
+.landing-input::placeholder {
+  color: #94a3b8;
+}
+.dark .landing-input {
+  background-color: #131724 !important;
+  color: #e2e8f0 !important;
+  border-color: #2d3348 !important;
+}
+.dark .landing-input:focus {
+  border-color: #00BFFF !important;
+  box-shadow: 0 0 0 3px rgba(0, 191, 255, 0.15) !important;
+}
+.dark .landing-input::placeholder {
+  color: #64748b !important;
+}
+
+/* Smooth scroll behavior */
+html {
+  scroll-behavior: smooth;
+}
