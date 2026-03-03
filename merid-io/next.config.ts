@@ -56,7 +56,7 @@ const nextConfig: NextConfig = {
               "worker-src 'self' blob:",
               "child-src 'self' blob:",
               "frame-src 'self' blob:",
-              "connect-src 'self' https://*.vercel-storage.com https://*.vercel.com",
+              "connect-src 'self' https://*.vercel-storage.com https://*.vercel.com https://api.emailjs.com",
               "frame-ancestors 'self'",
               "base-uri 'self'",
               "form-action 'self'",
