@@ -84,6 +84,8 @@ export const authConfig: NextAuthConfig = {
         pathname.startsWith(path)
       );
 
+      // Landing page is public (exact match to avoid making all paths public)
+      if (pathname === "/") return true;
       if (isPublicPath) return true;
 
       if (!isLoggedIn) {
