@@ -11,11 +11,13 @@ import { initBotId } from "botid/client/core";
  */
 initBotId({
   protect: [
-    // ── Auth endpoints ──
+    // ── Auth endpoints (unauthenticated — need BotID) ──
     { path: "/api/auth/callback/credentials", method: "POST" },
     { path: "/api/auth/forgot-password", method: "POST" },
     { path: "/api/auth/reset-password", method: "POST" },
-    { path: "/api/auth/2fa/*", method: "POST" },
+    // 2FA endpoints removed: they require a valid session (auth()),
+    // and the Deep Analysis Kasada challenge added client-side delay
+    // that caused SMTP timeouts and missing 2FA emails.
 
     // ── Admin endpoints ──
     { path: "/api/admin/*", method: "POST" },

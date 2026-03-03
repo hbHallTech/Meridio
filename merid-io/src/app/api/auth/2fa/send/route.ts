@@ -3,7 +3,6 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { send2FACode } from "@/lib/email";
 import { logAudit } from "@/lib/audit";
-import { isBotRequest } from "@/lib/bot-protection";
 import crypto from "crypto";
 
 export async function POST() {
@@ -11,9 +10,10 @@ export async function POST() {
     return NextResponse.json({ skipped: true });
   }
 
-  if (await isBotRequest()) {
-    return NextResponse.json({ error: "Access denied" }, { status: 403 });
-  }
+  // BotID check removed — this route requires auth() (valid session),
+  // so only authenticated users can reach it. The credentials callback
+  // is already protected by BotID client-side. The server-side checkBotId()
+  // added 2-5s latency with Deep Analysis, causing SMTP timeouts.
 
   const session = await auth();
   if (!session?.user?.id) {

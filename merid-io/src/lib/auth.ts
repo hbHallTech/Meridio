@@ -165,51 +165,53 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
           if (attempts >= MAX_LOGIN_ATTEMPTS) {
             updateData.lockedUntil = new Date(Date.now() + LOCK_DURATION_MS);
-
-            // Audit log + notification for lockout
-            await createAuditLog({
-              userId: user.id,
-              action: "ACCOUNT_LOCKED",
-              entityType: "User",
-              entityId: user.id,
-              ipAddress: deviceInfo.ip,
-              newValue: {
-                attempts,
-                lockDurationMinutes: LOCK_DURATION_MINUTES,
-                userAgent: deviceInfo.userAgent,
-              },
-            }).catch(() => {});
-
-            await notifyAccountLocked(
-              user.id,
-              LOCK_DURATION_MINUTES
-            ).catch(() => {});
-
-            // Notify admins by email (gated by company-level preference)
-            const lockedEmailEnabled = await isNotificationEnabled("ACCOUNT_LOCKED");
-            if (lockedEmailEnabled) {
-              const admins = await prisma.user.findMany({
-                where: { roles: { has: "ADMIN" }, isActive: true },
-                select: { email: true, firstName: true },
-              });
-              for (const admin of admins) {
-                await sendAccountLockedEmail(
-                  admin.email,
-                  admin.firstName,
-                  `${user.firstName} ${user.lastName}`,
-                  user.email
-                ).catch(() => {});
-              }
-            }
           }
 
+          // Critical: update fail count / lock status (must await)
           await prisma.user.update({
             where: { id: user.id },
             data: updateData,
           });
 
-          // Audit log for failed login
-          await createAuditLog({
+          // Non-critical: audit logs, notifications, lock emails — fire-and-forget
+          if (attempts >= MAX_LOGIN_ATTEMPTS) {
+            void Promise.allSettled([
+              createAuditLog({
+                userId: user.id,
+                action: "ACCOUNT_LOCKED",
+                entityType: "User",
+                entityId: user.id,
+                ipAddress: deviceInfo.ip,
+                newValue: {
+                  attempts,
+                  lockDurationMinutes: LOCK_DURATION_MINUTES,
+                  userAgent: deviceInfo.userAgent,
+                },
+              }),
+              notifyAccountLocked(user.id, LOCK_DURATION_MINUTES),
+              isNotificationEnabled("ACCOUNT_LOCKED").then(async (enabled) => {
+                if (!enabled) return;
+                const admins = await prisma.user.findMany({
+                  where: { roles: { has: "ADMIN" }, isActive: true },
+                  select: { email: true, firstName: true },
+                });
+                await Promise.allSettled(
+                  admins.map((admin) =>
+                    sendAccountLockedEmail(
+                      admin.email,
+                      admin.firstName,
+                      `${user.firstName} ${user.lastName}`,
+                      user.email
+                    )
+                  )
+                );
+              }),
+            ]);
+
+            throw new Error("ACCOUNT_LOCKED:15");
+          }
+
+          void createAuditLog({
             userId: user.id,
             action: "LOGIN_FAILED",
             entityType: "User",
@@ -217,10 +219,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             ipAddress: deviceInfo.ip,
             newValue: { attempts, userAgent: deviceInfo.userAgent },
           }).catch(() => {});
-
-          if (attempts >= MAX_LOGIN_ATTEMPTS) {
-            throw new Error("ACCOUNT_LOCKED:15");
-          }
 
           throw new Error(
             `INVALID_CREDENTIALS:${MAX_LOGIN_ATTEMPTS - attempts}`
@@ -250,81 +248,74 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             },
           });
 
-          // Send the temporary password by email
-          await sendAdminPasswordChangedEmail(
-            user.email,
-            user.firstName,
-            tempPassword
-          ).catch(() => {});
-
-          await createAuditLog({
-            userId: user.id,
-            action: "PASSWORD_AUTO_RESET",
-            entityType: "User",
-            entityId: user.id,
-            ipAddress: deviceInfo.ip,
-            newValue: { reason: "password_expired", userAgent: deviceInfo.userAgent },
-          }).catch(() => {});
+          // Non-critical: email + audit — fire-and-forget
+          void Promise.allSettled([
+            sendAdminPasswordChangedEmail(user.email, user.firstName, tempPassword),
+            createAuditLog({
+              userId: user.id,
+              action: "PASSWORD_AUTO_RESET",
+              entityType: "User",
+              entityId: user.id,
+              ipAddress: deviceInfo.ip,
+              newValue: { reason: "password_expired", userAgent: deviceInfo.userAgent },
+            }),
+          ]);
 
           throw new Error("PASSWORD_EXPIRED_RESET");
         }
 
         // ── Successful login ──
 
-        // Reset failed attempts and 2FA state on new login
+        // Reset failed attempts and 2FA state on new login (critical — must await)
         await prisma.user.update({
           where: { id: user.id },
           data: { failedLoginAttempts: 0, lockedUntil: null, twoFactorVerified: false },
         });
 
-        // Audit log for successful login
-        await createAuditLog({
-          userId: user.id,
-          action: "LOGIN_SUCCESS",
-          entityType: "User",
-          entityId: user.id,
-          ipAddress: deviceInfo.ip,
-          newValue: { userAgent: deviceInfo.userAgent },
-        }).catch(() => {});
-
-        // ── New device detection ──
+        // ── Non-critical: audit, notifications, device tracking ──
+        // Fire-and-forget to avoid blocking the login response.
+        // These operations (especially SMTP sends) can take 10-15s and
+        // were causing the "slow auth" issue reported after PRs 80-83.
         const storedDevice = user.lastLoginDevice as DeviceInfo | null;
+        const newDevice = isNewDevice(deviceInfo, storedDevice);
 
-        if (isNewDevice(deviceInfo, storedDevice)) {
-          await notifyNewLoginDetected(
-            user.id,
-            deviceInfo.ip,
-            deviceInfo.userAgent
-          ).catch(() => {});
-
-          const loginEmailEnabled = await isNotificationEnabled("NEW_LOGIN", user.id);
-          if (loginEmailEnabled) {
-            await sendNewDeviceLoginEmail(
-              user.email,
-              user.firstName,
-              deviceInfo.ip,
-              deviceInfo.userAgent
-            ).catch(() => {});
-          }
-
-          await createAuditLog({
+        void Promise.allSettled([
+          createAuditLog({
             userId: user.id,
-            action: "NEW_DEVICE_LOGIN",
+            action: "LOGIN_SUCCESS",
             entityType: "User",
             entityId: user.id,
             ipAddress: deviceInfo.ip,
-            newValue: {
-              ip: deviceInfo.ip,
-              userAgent: deviceInfo.userAgent,
-            },
-          }).catch(() => {});
-        }
-
-        // Update stored device
-        await prisma.user.update({
-          where: { id: user.id },
-          data: { lastLoginDevice: deviceInfo },
-        });
+            newValue: { userAgent: deviceInfo.userAgent },
+          }),
+          prisma.user.update({
+            where: { id: user.id },
+            data: { lastLoginDevice: deviceInfo },
+          }),
+          ...(newDevice
+            ? [
+                notifyNewLoginDetected(user.id, deviceInfo.ip, deviceInfo.userAgent),
+                isNotificationEnabled("NEW_LOGIN", user.id).then((enabled) => {
+                  if (enabled) {
+                    return sendNewDeviceLoginEmail(
+                      user.email,
+                      user.firstName,
+                      deviceInfo.ip,
+                      deviceInfo.userAgent
+                    );
+                  }
+                }),
+                createAuditLog({
+                  userId: user.id,
+                  action: "NEW_DEVICE_LOGIN",
+                  entityType: "User",
+                  entityId: user.id,
+                  ipAddress: deviceInfo.ip,
+                  newValue: { ip: deviceInfo.ip, userAgent: deviceInfo.userAgent },
+                }),
+              ]
+            : []),
+        ]);
 
         return {
           id: user.id,
