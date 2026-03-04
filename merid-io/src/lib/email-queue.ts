@@ -4,17 +4,15 @@ import type { EmailType, EmailStatus } from "@prisma/client";
 /**
  * DB-backed email queue for reliable email delivery.
  *
- * Why DB instead of BullMQ/Redis:
- * - Meridio runs on Vercel serverless — no persistent worker process
- * - Existing cron pattern (/api/cron/*) handles background jobs
- * - No Redis infrastructure to manage
- * - Full traceability via EmailLog table visible to SUPER_ADMIN
+ * Strategy: "send immediately, queue as safety net"
+ * 1. queueEmail() persists to EmailLog, then attempts immediate delivery
+ * 2. If immediate send succeeds → mark SENT, done
+ * 3. If immediate send fails → stays QUEUED for cron retry
+ * 4. Cron /api/cron/process-emails retries QUEUED/FAILED jobs
+ * 5. After maxAttempts → DEAD (dead-letter)
  *
- * Flow:
- * 1. API route calls queueEmail() → persists job to EmailLog (QUEUED)
- * 2. Cron endpoint /api/cron/process-emails picks up QUEUED/retryable jobs
- * 3. On success → SENT; on failure → increment attempts, schedule retry
- * 4. After maxAttempts → DEAD (dead-letter equivalent)
+ * This ensures emails are sent in the same request (no cron delay)
+ * while still having retry capability for transient failures.
  */
 
 export interface QueueEmailOptions {
@@ -29,7 +27,13 @@ export interface QueueEmailOptions {
 }
 
 /**
- * Enqueue an email for reliable delivery.
+ * Enqueue an email and attempt immediate delivery.
+ *
+ * - Persists to EmailLog first (crash-safe)
+ * - Tries to send right away
+ * - On success: marks SENT
+ * - On failure: logs error, leaves as QUEUED for cron retry
+ *
  * Returns the EmailLog id for tracking.
  */
 export async function queueEmail(options: QueueEmailOptions): Promise<string> {
@@ -41,7 +45,7 @@ export async function queueEmail(options: QueueEmailOptions): Promise<string> {
       payload: { html: options.html },
       status: "QUEUED",
       maxAttempts: options.maxAttempts ?? 3,
-      nextRetryAt: new Date(), // Available immediately
+      nextRetryAt: new Date(), // Available for cron immediately if direct send fails
       signupRequestId: options.signupRequestId ?? null,
       companyId: options.companyId ?? null,
       userId: options.userId ?? null,
@@ -52,12 +56,92 @@ export async function queueEmail(options: QueueEmailOptions): Promise<string> {
     `[email-queue] Enqueued: id=${log.id} type=${options.type} to=${options.to} subject="${options.subject}"`
   );
 
+  // Attempt immediate delivery (best-effort, non-blocking for the caller)
+  // We don't await this — the API response returns immediately with the emailLogId
+  void sendEmailNow(log.id, options).catch(() => {
+    // Error already logged inside sendEmailNow; job stays QUEUED for cron retry
+  });
+
   return log.id;
+}
+
+/**
+ * Attempt to send an email immediately and update its EmailLog status.
+ * Used both by queueEmail() (immediate) and processEmailQueue() (cron retry).
+ */
+async function sendEmailNow(
+  emailLogId: string,
+  options: { type: EmailType; to: string; subject: string; html: string; signupRequestId?: string | null; companyId?: string | null; userId?: string | null }
+) {
+  // Mark as SENDING + increment attempts
+  const current = await prisma.emailLog.findUnique({ where: { id: emailLogId } });
+  if (!current || current.status === "SENT" || current.status === "DEAD") return;
+
+  const newAttempts = current.attempts + 1;
+
+  await prisma.emailLog.update({
+    where: { id: emailLogId },
+    data: { status: "SENDING", attempts: newAttempts },
+  });
+
+  try {
+    const { sendEmail } = await import("@/lib/email");
+
+    await sendEmail(
+      { to: options.to, subject: options.subject, html: options.html },
+      {
+        emailType: String(options.type),
+        signupRequestId: options.signupRequestId ?? undefined,
+        companyId: options.companyId ?? undefined,
+        userId: options.userId ?? undefined,
+      }
+    );
+
+    await prisma.emailLog.update({
+      where: { id: emailLogId },
+      data: { status: "SENT", sentAt: new Date(), lastError: null },
+    });
+
+    console.log(`[email-queue] Sent immediately: id=${emailLogId} to=${options.to}`);
+  } catch (error) {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    const isDead = newAttempts >= (current.maxAttempts || 3);
+
+    // Exponential backoff for cron retry: 30s, 2min, 8min
+    const backoffMs = Math.min(30_000 * Math.pow(4, current.attempts), 600_000);
+    const nextRetry = isDead ? null : new Date(Date.now() + backoffMs);
+
+    await prisma.emailLog.update({
+      where: { id: emailLogId },
+      data: {
+        status: isDead ? "DEAD" : "FAILED",
+        lastError: errMsg.substring(0, 1000),
+        nextRetryAt: nextRetry,
+      },
+    });
+
+    if (isDead) {
+      console.error(
+        `[email-queue] DEAD LETTER: id=${emailLogId} type=${options.type} to=${options.to} ` +
+        `after ${newAttempts} attempts. Last error: ${errMsg}`
+      );
+    } else {
+      console.warn(
+        `[email-queue] Send failed, will retry via cron: id=${emailLogId} ` +
+        `attempt=${newAttempts}/${current.maxAttempts} error=${errMsg}`
+      );
+    }
+
+    throw error; // Re-throw so caller knows it failed
+  }
 }
 
 /**
  * Process pending emails from the queue.
  * Called by /api/cron/process-emails.
+ *
+ * Picks up FAILED jobs that are due for retry (nextRetryAt <= now).
+ * QUEUED jobs that failed immediate send also get retried here.
  *
  * Returns { processed, sent, failed, dead } counts.
  */
@@ -82,62 +166,25 @@ export async function processEmailQueue(batchSize = 20) {
 
   for (const job of eligible) {
     stats.processed++;
-
-    // Mark as SENDING to prevent concurrent processing
-    await prisma.emailLog.update({
-      where: { id: job.id },
-      data: { status: "SENDING", attempts: job.attempts + 1 },
-    });
+    const payload = job.payload as { html: string };
 
     try {
-      // Dynamic import to avoid circular dependency
-      const { sendEmail } = await import("@/lib/email");
-      const payload = job.payload as { html: string };
-
-      await sendEmail(
-        { to: job.to, subject: job.subject, html: payload.html },
-        {
-          emailType: job.type,
-          signupRequestId: job.signupRequestId ?? undefined,
-          companyId: job.companyId ?? undefined,
-          userId: job.userId ?? undefined,
-        }
-      );
-
-      await prisma.emailLog.update({
-        where: { id: job.id },
-        data: { status: "SENT", sentAt: new Date(), lastError: null },
+      await sendEmailNow(job.id, {
+        type: job.type,
+        to: job.to,
+        subject: job.subject,
+        html: payload.html,
+        signupRequestId: job.signupRequestId,
+        companyId: job.companyId,
+        userId: job.userId,
       });
       stats.sent++;
-    } catch (error) {
-      const errMsg = error instanceof Error ? error.message : String(error);
-      const newAttempts = job.attempts + 1;
-      const isDead = newAttempts >= job.maxAttempts;
-
-      // Exponential backoff: 30s, 2min, 8min
-      const backoffMs = Math.min(30_000 * Math.pow(4, job.attempts), 600_000);
-      const nextRetry = isDead ? null : new Date(Date.now() + backoffMs);
-
-      await prisma.emailLog.update({
-        where: { id: job.id },
-        data: {
-          status: isDead ? "DEAD" : "FAILED",
-          lastError: errMsg.substring(0, 1000),
-          nextRetryAt: nextRetry,
-        },
-      });
-
-      if (isDead) {
-        console.error(
-          `[email-queue] DEAD LETTER: id=${job.id} type=${job.type} to=${job.to} ` +
-          `after ${newAttempts} attempts. Last error: ${errMsg}`
-        );
+    } catch {
+      // sendEmailNow already updated the DB status
+      const updated = await prisma.emailLog.findUnique({ where: { id: job.id } });
+      if (updated?.status === "DEAD") {
         stats.dead++;
       } else {
-        console.warn(
-          `[email-queue] Retry scheduled: id=${job.id} attempt=${newAttempts}/${job.maxAttempts} ` +
-          `nextRetry=${nextRetry?.toISOString()} error=${errMsg}`
-        );
         stats.failed++;
       }
     }
