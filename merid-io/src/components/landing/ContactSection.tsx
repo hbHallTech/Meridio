@@ -89,7 +89,7 @@ export default function ContactSection() {
               </div>
               <div>
                 <h3 className="font-semibold text-[#001F3F] dark:text-white">Email</h3>
-                <p className="text-gray-600 dark:text-gray-400 text-sm">contact@meridio.app</p>
+                <p className="text-gray-600 dark:text-gray-400 text-sm">contact@merid.io</p>
               </div>
             </div>
             <div className="flex items-start gap-4">
@@ -98,7 +98,7 @@ export default function ContactSection() {
               </div>
               <div>
                 <h3 className="font-semibold text-[#001F3F] dark:text-white">Phone</h3>
-                <p className="text-gray-600 dark:text-gray-400 text-sm">+41 22 000 00 00</p>
+                <p className="text-gray-600 dark:text-gray-400 text-sm">+41 21 219 43 43</p>
               </div>
             </div>
             <div className="flex items-start gap-4">
@@ -108,7 +108,7 @@ export default function ContactSection() {
               <div>
                 <h3 className="font-semibold text-[#001F3F] dark:text-white">Office</h3>
                 <p className="text-gray-600 dark:text-gray-400 text-sm">
-                  Rue du Rhône 14<br />1204 Geneva, Switzerland
+                  Rue Galilée 6<br />1400 Yverdon-les-Bains, Suisse
                 </p>
               </div>
             </div>
