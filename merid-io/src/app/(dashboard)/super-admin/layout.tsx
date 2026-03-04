@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 
-export default async function HrLayout({
+export default async function SuperAdminLayout({
   children,
 }: {
   children: React.ReactNode;
@@ -9,9 +9,9 @@ export default async function HrLayout({
   const session = await auth();
   const roles = session?.user?.roles ?? [];
 
-  if (!roles.includes("HR") && !roles.includes("ADMIN") && !roles.includes("SUPER_ADMIN")) {
+  if (!roles.includes("SUPER_ADMIN")) {
     console.warn(
-      `[RBAC/layout] HR access denied: user=${session?.user?.id ?? "anonymous"} roles=[${roles}]`
+      `[RBAC/layout] Super Admin access denied: user=${session?.user?.id ?? "anonymous"} roles=[${roles}]`
     );
     redirect("/");
   }

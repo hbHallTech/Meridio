@@ -9,7 +9,7 @@ export default async function ManagerLayout({
   const session = await auth();
   const roles = session?.user?.roles ?? [];
 
-  if (!roles.includes("MANAGER") && !roles.includes("ADMIN")) {
+  if (!roles.includes("MANAGER") && !roles.includes("ADMIN") && !roles.includes("SUPER_ADMIN")) {
     console.warn(
       `[RBAC/layout] Manager access denied: user=${session?.user?.id ?? "anonymous"} roles=[${roles}]`
     );

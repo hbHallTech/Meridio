@@ -75,7 +75,9 @@
     "launchImportNow": "Run Import Now",
     "importRunning": "Import running...",
     "importSuccess": "Import started successfully",
-    "noNewDocuments": "No new documents found"
+    "noNewDocuments": "No new documents found",
+    "superAdmin": "Super Admin",
+    "signupRequests": "Signup Requests"
   },
   "leaves": {
     "title": "My Leave Requests",

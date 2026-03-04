@@ -9,7 +9,7 @@ export default async function AdminLayout({
   const session = await auth();
   const roles = session?.user?.roles ?? [];
 
-  if (!roles.includes("ADMIN")) {
+  if (!roles.includes("ADMIN") && !roles.includes("SUPER_ADMIN")) {
     console.warn(
       `[RBAC/layout] Admin access denied: user=${session?.user?.id ?? "anonymous"} roles=[${roles}]`
     );

@@ -75,7 +75,9 @@
     "launchImportNow": "Lancer l'import maintenant",
     "importRunning": "Import en cours...",
     "importSuccess": "Import lancé avec succès",
-    "noNewDocuments": "Aucun nouveau document trouvé"
+    "noNewDocuments": "Aucun nouveau document trouvé",
+    "superAdmin": "Super Admin",
+    "signupRequests": "Demandes d'inscription"
   },
   "leaves": {
     "title": "Mes demandes de congé",
