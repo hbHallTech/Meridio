@@ -32,6 +32,7 @@ import {
   ClipboardList,
   Wallet,
   FileText,
+  Crown,
 } from "lucide-react";
 import { MeridioLogo, MeridioIcon } from "@/components/MeridioLogo";
 
@@ -156,6 +157,18 @@ export function Sidebar({
         { href: "/admin/company", label: t("company"), icon: Building2, roles: ["ADMIN"] },
         { href: "/admin/delegations", label: t("delegations"), icon: ArrowLeftRight, roles: ["ADMIN"] },
         { href: "/admin/audit", label: t("audit"), icon: ScrollText, roles: ["ADMIN"] },
+      ],
+    },
+    {
+      titleKey: "superAdmin",
+      roles: ["SUPER_ADMIN"],
+      items: [
+        {
+          href: "/super-admin/signup-requests",
+          label: t("signupRequests"),
+          icon: Crown,
+          roles: ["SUPER_ADMIN"],
+        },
       ],
     },
   ];
