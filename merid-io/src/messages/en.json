@@ -77,7 +77,8 @@
     "importSuccess": "Import started successfully",
     "noNewDocuments": "No new documents found",
     "superAdmin": "Super Admin",
-    "signupRequests": "Signup Requests"
+    "signupRequests": "Signup Requests",
+    "tenants": "Tenants"
   },
   "leaves": {
     "title": "My Leave Requests",
