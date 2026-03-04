@@ -192,6 +192,20 @@ export default function LoginPage() {
             )}
           </button>
         </form>
+
+        {/* Signup link */}
+        <div className="mt-6 border-t border-gray-200 pt-5 text-center">
+          <p className="text-sm text-gray-500 mb-3">
+            Vous n&apos;avez pas encore de compte ?
+          </p>
+          <Link
+            href="/signup"
+            className="inline-flex w-full items-center justify-center rounded-lg border-2 px-4 py-2.5 text-sm font-semibold transition-colors hover:bg-[#1B3A5C]/5"
+            style={{ borderColor: "#1B3A5C", color: "#1B3A5C" }}
+          >
+            Inscription
+          </Link>
+        </div>
       </div>
     </div>
   );
