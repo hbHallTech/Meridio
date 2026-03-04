@@ -4,12 +4,6 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { motion } from "framer-motion";
 import { Send, CheckCircle2, AlertCircle, Mail, MapPin, Phone } from "lucide-react";
-import emailjs from "@emailjs/browser";
-
-// Placeholder IDs - replace with your actual EmailJS credentials
-const EMAILJS_SERVICE_ID = "service_meridio";
-const EMAILJS_TEMPLATE_ID = "template_contact";
-const EMAILJS_PUBLIC_KEY = "your_public_key";
 
 export default function ContactSection() {
   const t = useTranslations("landing.contact");
@@ -33,19 +27,18 @@ export default function ContactSection() {
 
     setStatus("sending");
     try {
-      await emailjs.send(
-        EMAILJS_SERVICE_ID,
-        EMAILJS_TEMPLATE_ID,
-        {
-          from_name: form.name,
-          from_email: form.email,
-          company: form.company,
-          message: form.message,
-        },
-        EMAILJS_PUBLIC_KEY
-      );
-      setStatus("success");
-      setForm({ name: "", email: "", company: "", message: "" });
+      const res = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+
+      if (res.ok) {
+        setStatus("success");
+        setForm({ name: "", email: "", company: "", message: "" });
+      } else {
+        setStatus("error");
+      }
     } catch {
       setStatus("error");
     }

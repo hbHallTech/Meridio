@@ -200,7 +200,7 @@ async function main() {
     update: {
       firstName: "Haithem",
       lastName: "BOUAJILA",
-      roles: [UserRole.ADMIN, UserRole.HR, UserRole.MANAGER, UserRole.EMPLOYEE],
+      roles: [UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.HR, UserRole.MANAGER, UserRole.EMPLOYEE],
       officeId: geneva.id,
       language: "fr",
     },
@@ -209,7 +209,7 @@ async function main() {
       passwordHash: hashedPassword,
       firstName: "Haithem",
       lastName: "BOUAJILA",
-      roles: [UserRole.ADMIN, UserRole.HR, UserRole.MANAGER, UserRole.EMPLOYEE],
+      roles: [UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.HR, UserRole.MANAGER, UserRole.EMPLOYEE],
       officeId: geneva.id,
       hireDate: new Date("2024-01-01"),
       language: "fr",

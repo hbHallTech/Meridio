@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import nodemailer from "nodemailer";
-import { prisma } from "@/lib/prisma";
 
 /** Escape HTML special characters to prevent injection in email templates */
 function escapeHtml(str: string): string {
@@ -16,33 +15,27 @@ export async function POST(request: Request) {
   try {
     const data = await request.json();
 
-    // Basic validation
-    if (!data.email || !data.firstName || !data.companyName) {
+    // Validation
+    if (!data.name?.trim() || !data.email?.trim()) {
       return NextResponse.json(
-        { error: "Champs obligatoires manquants." },
+        { error: "Nom et email sont obligatoires." },
         { status: 400 }
       );
     }
 
-    // Build a structured email body
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
+      return NextResponse.json(
+        { error: "Adresse email invalide." },
+        { status: 400 }
+      );
+    }
+
     const rows = [
+      ["Nom", data.name],
       ["Email", data.email],
-      ["Téléphone", data.phone],
-      ["Prénom", data.firstName],
-      ["Nom", data.lastName],
-      ["Fonction", data.jobTitle],
-      ["Entreprise", data.companyName],
-      ["Domaine d'activité", data.activityDomain],
-      ["Site Internet", data.website],
-      ["Nombre d'employés", data.employeeCount],
-      ["Nom organisation", data.orgName],
-      ["Adresse", data.street],
-      ["Code postal", data.postalCode],
-      ["Ville", data.city],
-      ["Pays", data.country],
-      ["Téléphone entreprise", data.orgPhone],
-      ["Besoins IA", data.aiNeeds],
-      ["Nombre d'entités/filiales", data.subsidiaryCount],
+      ["Entreprise", data.company],
+      ["Nombre d'employés", data.employees],
+      ["Message", data.message],
     ];
 
     const htmlRows = rows
@@ -55,16 +48,16 @@ export async function POST(request: Request) {
 
     const htmlBody = `
       <div style="font-family:system-ui,-apple-system,sans-serif;max-width:600px;margin:0 auto">
-        <div style="background:#1B3A5C;color:white;padding:20px 24px;border-radius:8px 8px 0 0">
-          <h2 style="margin:0;font-size:18px">Nouvelle demande d'inscription Meridio</h2>
-          <p style="margin:4px 0 0;opacity:0.8;font-size:14px">${escapeHtml(data.companyName)} — ${escapeHtml(data.firstName)} ${escapeHtml(data.lastName || "")}</p>
+        <div style="background:linear-gradient(135deg,#001F3F,#002855);color:white;padding:20px 24px;border-radius:8px 8px 0 0">
+          <h2 style="margin:0;font-size:18px">Nouvelle demande de démo Meridio</h2>
+          <p style="margin:4px 0 0;opacity:0.8;font-size:14px">${escapeHtml(data.name)} — ${escapeHtml(data.company || "N/A")}</p>
         </div>
         <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0">
           ${htmlRows}
         </table>
         <div style="padding:16px 24px;background:#f8fafc;border-radius:0 0 8px 8px;border:1px solid #e2e8f0;border-top:0">
           <p style="margin:0;font-size:13px;color:#64748b">
-            Cette demande nécessite l'approbation d'un super administrateur pour créer le tenant.
+            Cette personne souhaite une démonstration de Meridio. Contactez-la dans les 24h.
           </p>
         </div>
       </div>
@@ -75,30 +68,6 @@ export async function POST(request: Request) {
       .map(([label, val]) => `${label}: ${val}`)
       .join("\n");
 
-    // Persist the signup request in DB for super admin review
-    await prisma.signupRequest.create({
-      data: {
-        email: data.email.toLowerCase().trim(),
-        phone: data.phone || null,
-        firstName: data.firstName,
-        lastName: data.lastName || null,
-        jobTitle: data.jobTitle || null,
-        companyName: data.companyName,
-        activityDomain: data.activityDomain || null,
-        website: data.website || null,
-        employeeCount: data.employeeCount || null,
-        orgName: data.orgName || null,
-        street: data.street || null,
-        postalCode: data.postalCode || null,
-        city: data.city || null,
-        country: data.country || null,
-        orgPhone: data.orgPhone || null,
-        aiNeeds: data.aiNeeds || null,
-        subsidiaryCount: data.subsidiaryCount || null,
-      },
-    });
-
-    // Create transporter — use SMTP env vars if available, else try EmailJS fallback
     const smtpHost = process.env.SIGNUP_SMTP_HOST || process.env.SMTP_HOST;
     const smtpUser = process.env.SIGNUP_SMTP_USER || process.env.SMTP_USER;
     const smtpPass = process.env.SIGNUP_SMTP_PASS || process.env.SMTP_PASS;
@@ -117,20 +86,19 @@ export async function POST(request: Request) {
       await transporter.sendMail({
         from: smtpUser,
         to: "Xelor.meridio@gmail.com",
-        subject: `[Meridio] Nouvelle inscription — ${data.companyName}`,
+        subject: `[Meridio] Demande de démo — ${data.name}`,
         text: textBody,
         html: htmlBody,
       });
     } else {
-      // Fallback: log the request for manual processing
-      console.log("=== SIGNUP REQUEST (no SMTP configured) ===");
+      console.log("=== DEMO REQUEST (no SMTP configured) ===");
       console.log(textBody);
-      console.log("============================================");
+      console.log("==========================================");
     }
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Signup request error:", error);
+    console.error("Demo request error:", error);
     return NextResponse.json(
       { error: "Erreur lors de l'envoi de la demande." },
       { status: 500 }

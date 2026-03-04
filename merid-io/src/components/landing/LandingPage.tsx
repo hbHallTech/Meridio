@@ -3,6 +3,7 @@
 import { useState } from "react";
 import LandingHeader from "./LandingHeader";
 import Hero from "./Hero";
+import TrustBanner from "./TrustBanner";
 import Features from "./Features";
 import WhyMeridio from "./WhyMeridio";
 import Testimonials from "./Testimonials";
@@ -19,6 +20,7 @@ export default function LandingPage() {
       <LandingHeader />
       <main>
         <Hero onDemoClick={() => setDemoOpen(true)} />
+        <TrustBanner />
         <Features />
         <WhyMeridio />
         <Testimonials />

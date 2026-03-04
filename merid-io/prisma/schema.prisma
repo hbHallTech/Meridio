@@ -18,6 +18,13 @@ enum UserRole {
   MANAGER
   HR
   ADMIN
+  SUPER_ADMIN
+}
+
+enum SignupRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 enum LeaveStatus {
@@ -540,4 +547,50 @@ model AuditLog {
   @@index([createdAt])
   @@index([userId])
   @@index([action])
+}
+
+// ============================================================
+// SIGNUP REQUESTS (multi-tenant onboarding)
+// ============================================================
+
+model SignupRequest {
+  id              String              @id @default(cuid())
+  status          SignupRequestStatus  @default(PENDING)
+
+  // Contact
+  email           String
+  phone           String?
+  firstName       String
+  lastName        String?
+  jobTitle        String?
+
+  // Company
+  companyName     String
+  activityDomain  String?
+  website         String?
+  employeeCount   String?
+
+  // Organization
+  orgName         String?
+  street          String?
+  postalCode      String?
+  city            String?
+  country         String?
+  orgPhone        String?
+
+  // Technical
+  aiNeeds         String?
+  subsidiaryCount String?
+
+  // Admin processing
+  reviewedById    String?
+  reviewedAt      DateTime?
+  reviewNotes     String?
+  provisionedCompanyId String?  // ID of the company created upon approval
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([status])
+  @@index([email])
 }

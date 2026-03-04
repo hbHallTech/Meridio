@@ -4,12 +4,6 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, CheckCircle2, AlertCircle } from "lucide-react";
-import emailjs from "@emailjs/browser";
-
-// Placeholder IDs - replace with your actual EmailJS credentials
-const EMAILJS_SERVICE_ID = "service_meridio";
-const EMAILJS_TEMPLATE_ID = "template_demo";
-const EMAILJS_PUBLIC_KEY = "your_public_key";
 
 interface DemoModalProps {
   open: boolean;
@@ -33,19 +27,17 @@ export default function DemoModal({ open, onClose }: DemoModalProps) {
 
     setStatus("sending");
     try {
-      await emailjs.send(
-        EMAILJS_SERVICE_ID,
-        EMAILJS_TEMPLATE_ID,
-        {
-          from_name: form.name,
-          from_email: form.email,
-          company: form.company,
-          employees: form.employees,
-          message: form.message,
-        },
-        EMAILJS_PUBLIC_KEY
-      );
-      setStatus("success");
+      const res = await fetch("/api/demo-request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+
+      if (res.ok) {
+        setStatus("success");
+      } else {
+        setStatus("error");
+      }
     } catch {
       setStatus("error");
     }

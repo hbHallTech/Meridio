@@ -135,4 +135,34 @@ describe("getPermissions", () => {
     const unique = new Set(perms);
     expect(perms.length).toBe(unique.size);
   });
+
+  it("SUPER_ADMIN should have all permissions including tenant management", () => {
+    const perms = getPermissions(["SUPER_ADMIN"]);
+    expect(perms).toContain("superadmin:access");
+    expect(perms).toContain("tenant:create");
+    expect(perms).toContain("tenant:manage");
+    expect(perms).toContain("admin:access");
+    expect(perms).toContain("user:delete");
+  });
+});
+
+describe("SUPER_ADMIN role", () => {
+  it("SUPER_ADMIN should have higher hierarchy than ADMIN", () => {
+    expect(hasRole(["SUPER_ADMIN"], "ADMIN")).toBe(true);
+    expect(hasRole(["SUPER_ADMIN"], "MANAGER")).toBe(true);
+    expect(hasRole(["SUPER_ADMIN"], "HR")).toBe(true);
+    expect(hasRole(["SUPER_ADMIN"], "EMPLOYEE")).toBe(true);
+  });
+
+  it("ADMIN should not have SUPER_ADMIN role", () => {
+    expect(hasRole(["ADMIN"], "SUPER_ADMIN")).toBe(false);
+  });
+
+  it("SUPER_ADMIN should have superadmin:access permission", () => {
+    expect(hasPermission(["SUPER_ADMIN"], "superadmin:access")).toBe(true);
+  });
+
+  it("ADMIN should not have superadmin:access permission", () => {
+    expect(hasPermission(["ADMIN"], "superadmin:access")).toBe(false);
+  });
 });

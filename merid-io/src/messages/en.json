@@ -262,6 +262,9 @@
       "successTitle": "Demo Requested!",
       "successMessage": "Our team will contact you within 24 hours to schedule your personalized demo."
     },
+    "trust": {
+      "title": "Trusted by leading companies"
+    },
     "footer": {
       "description": "Intelligent HR absence management platform. Automate leaves, empower teams, and stay compliant.",
       "product": "Product",

@@ -44,6 +44,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             forcePasswordChange: true,
             twoFactorVerified: true,
             passwordChangedAt: true,
+            office: { select: { companyId: true } },
           },
         });
         if (dbUser) {
@@ -52,6 +53,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.teamId = dbUser.teamId;
           token.language = dbUser.language;
           token.forcePasswordChange = dbUser.forcePasswordChange;
+          token.companyId = dbUser.office.companyId;
           // H5: Store password change timestamp for session invalidation
           token.passwordChangedAt = dbUser.passwordChangedAt?.getTime() ?? null;
         }
@@ -122,6 +124,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         const user = await prisma.user.findUnique({
           where: { email },
+          include: { office: { select: { companyId: true } } },
         });
 
         if (!user || !user.isActive) {
@@ -326,6 +329,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           teamId: user.teamId,
           language: user.language,
           twoFactorVerified: !process.env.SMTP_USER,
+          companyId: user.office.companyId,
         };
       },
     }),

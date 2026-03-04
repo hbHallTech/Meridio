@@ -262,6 +262,9 @@
       "successTitle": "Démo Demandée !",
       "successMessage": "Notre équipe vous contactera dans les 24 heures pour planifier votre démo personnalisée."
     },
+    "trust": {
+      "title": "Ils nous font déjà confiance"
+    },
     "footer": {
       "description": "Plateforme intelligente de gestion des absences RH. Automatisez les congés, renforcez les équipes et restez conforme.",
       "product": "Produit",
