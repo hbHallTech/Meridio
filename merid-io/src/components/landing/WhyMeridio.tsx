@@ -3,7 +3,6 @@
 import { useTranslations } from "next-intl";
 import { motion } from "framer-motion";
 import { X, Check, ArrowRight } from "lucide-react";
-import Link from "next/link";
 
 const COMPARISON_KEYS = ["1", "2", "3", "4", "5"] as const;
 
@@ -97,13 +96,16 @@ export default function WhyMeridio() {
             viewport={{ once: true }}
             transition={{ duration: 0.5, delay: 0.6 }}
           >
-            <Link
-              href="/signup"
-              className="group inline-flex items-center gap-2 px-8 py-4 bg-[#00BFFF] hover:bg-[#00A3D9] text-white font-semibold text-lg rounded-xl transition-all hover:shadow-xl hover:shadow-[#00BFFF]/30 hover:-translate-y-0.5"
+            <button
+              onClick={() => {
+                const el = document.getElementById("contact");
+                if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+              }}
+              className="group inline-flex items-center gap-2 px-8 py-4 bg-[#00BFFF] hover:bg-[#00A3D9] text-white font-semibold text-lg rounded-xl transition-all hover:shadow-xl hover:shadow-[#00BFFF]/30 hover:-translate-y-0.5 cursor-pointer"
             >
               {t("cta")}
               <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-            </Link>
+            </button>
           </motion.div>
         </motion.div>
       </div>
