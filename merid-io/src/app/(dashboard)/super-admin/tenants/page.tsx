@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Building2,
   Users,
@@ -11,6 +11,10 @@ import {
   ExternalLink,
   Clock,
   UserCheck,
+  UserCog,
+  X,
+  Eye,
+  AlertTriangle,
 } from "lucide-react";
 
 interface Tenant {
@@ -27,10 +31,17 @@ interface Tenant {
   offices: { id: string; name: string; city: string; userCount: number }[];
 }
 
+interface ImpersonateModal {
+  tenant: Tenant;
+  readOnly: boolean;
+}
+
 export default function TenantListPage() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [impersonateModal, setImpersonateModal] = useState<ImpersonateModal | null>(null);
+  const [impersonateLoading, setImpersonateLoading] = useState(false);
 
   useEffect(() => {
     async function fetchTenants() {
@@ -49,6 +60,35 @@ export default function TenantListPage() {
     const timer = setTimeout(fetchTenants, search ? 300 : 0);
     return () => clearTimeout(timer);
   }, [search]);
+
+  const handleImpersonate = useCallback(async () => {
+    if (!impersonateModal) return;
+    setImpersonateLoading(true);
+
+    try {
+      const res = await fetch("/api/super-admin/impersonate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId: impersonateModal.tenant.id,
+          readOnly: impersonateModal.readOnly,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.impersonateUrl) {
+        // Redirect to the impersonation URL in a new tab
+        window.open(data.impersonateUrl, "_blank");
+        setImpersonateModal(null);
+      } else {
+        alert(data.error || "Erreur lors de l'impersonation");
+      }
+    } catch {
+      alert("Erreur réseau");
+    } finally {
+      setImpersonateLoading(false);
+    }
+  }, [impersonateModal]);
 
   return (
     <div className="space-y-6">
@@ -95,6 +135,7 @@ export default function TenantListPage() {
                   <th className="px-5 py-3 font-semibold text-gray-600 text-center">Utilisateurs</th>
                   <th className="px-5 py-3 font-semibold text-gray-600">Dernière activité</th>
                   <th className="px-5 py-3 font-semibold text-gray-600">Créé le</th>
+                  <th className="px-5 py-3 font-semibold text-gray-600 text-center">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -167,10 +208,115 @@ export default function TenantListPage() {
                         year: "numeric",
                       })}
                     </td>
+                    <td className="px-5 py-4 text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          onClick={() => setImpersonateModal({ tenant, readOnly: false })}
+                          title="Impersonner (lecture/écriture)"
+                          className="rounded-lg p-1.5 text-gray-400 hover:bg-amber-50 hover:text-amber-600 transition-colors"
+                        >
+                          <UserCog className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => setImpersonateModal({ tenant, readOnly: true })}
+                          title="Impersonner (lecture seule)"
+                          className="rounded-lg p-1.5 text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Impersonation confirmation modal */}
+      {impersonateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-100 text-amber-600">
+                  <AlertTriangle className="h-5 w-5" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Impersonation
+                </h3>
+              </div>
+              <button
+                onClick={() => setImpersonateModal(null)}
+                className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-sm text-gray-600">
+                Vous êtes sur le point d&apos;impersonner le tenant :
+              </p>
+              <div className="rounded-lg bg-gray-50 border border-gray-200 p-3">
+                <p className="font-semibold text-gray-900">
+                  {impersonateModal.tenant.name}
+                </p>
+                <p className="text-sm text-gray-500">
+                  {impersonateModal.tenant.userCount} utilisateur(s) &middot;{" "}
+                  {impersonateModal.tenant.officeCount} bureau(x)
+                </p>
+              </div>
+
+              <div className={`rounded-lg p-3 text-sm ${
+                impersonateModal.readOnly
+                  ? "bg-blue-50 border border-blue-200 text-blue-800"
+                  : "bg-amber-50 border border-amber-200 text-amber-800"
+              }`}>
+                {impersonateModal.readOnly ? (
+                  <div className="flex items-center gap-2">
+                    <Eye className="h-4 w-4 shrink-0" />
+                    <span>Mode <strong>lecture seule</strong> — aucune modification possible</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                    <span>Mode <strong>lecture/écriture</strong> — les modifications affecteront le tenant</span>
+                  </div>
+                )}
+              </div>
+
+              <p className="text-xs text-gray-500">
+                Cette action est journalisée. Un onglet s&apos;ouvrira avec la session du tenant.
+              </p>
+            </div>
+
+            <div className="mt-5 flex justify-end gap-3">
+              <button
+                onClick={() => setImpersonateModal(null)}
+                disabled={impersonateLoading}
+                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleImpersonate}
+                disabled={impersonateLoading}
+                className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 ${
+                  impersonateModal.readOnly
+                    ? "bg-blue-600 hover:bg-blue-700"
+                    : "bg-amber-600 hover:bg-amber-700"
+                }`}
+              >
+                {impersonateLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <UserCog className="h-4 w-4" />
+                )}
+                Impersonner
+              </button>
+            </div>
           </div>
         </div>
       )}

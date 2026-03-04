@@ -550,6 +550,60 @@ model AuditLog {
 }
 
 // ============================================================
+// EMAIL LOG (queue + delivery tracking)
+// ============================================================
+
+enum EmailStatus {
+  QUEUED
+  SENDING
+  SENT
+  FAILED
+  DEAD          // Exhausted all retries
+}
+
+enum EmailType {
+  TENANT_WELCOME
+  SIGNUP_REJECTION
+  PASSWORD_RESET
+  TWO_FACTOR
+  LEAVE_NOTIFICATION
+  ACCOUNT_LOCKED
+  NEW_DEVICE_LOGIN
+  PASSWORD_CHANGED
+  PASSWORD_EXPIRING
+  PASSWORD_EXPIRED_RESET
+  NEW_ACCOUNT
+  ADMIN_PASSWORD_RESET
+  OTHER
+}
+
+model EmailLog {
+  id          String      @id @default(cuid())
+  type        EmailType
+  to          String
+  subject     String
+  payload     Json        // Full email data (html, context) for retry
+  status      EmailStatus @default(QUEUED)
+  attempts    Int         @default(0)
+  maxAttempts Int         @default(3)
+  lastError   String?
+  nextRetryAt DateTime?   // Exponential backoff scheduling
+  sentAt      DateTime?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  // Optional context for traceability
+  signupRequestId String?
+  companyId       String?
+  userId          String?
+
+  @@index([status, nextRetryAt])
+  @@index([type])
+  @@index([to])
+  @@index([createdAt])
+}
+
+// ============================================================
 // SIGNUP REQUESTS (multi-tenant onboarding)
 // ============================================================
 

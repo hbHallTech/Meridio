@@ -18,6 +18,7 @@ import {
   Loader2,
   RefreshCw,
   Trash2,
+  RotateCw,
 } from "lucide-react";
 
 interface SignupRequest {
@@ -65,6 +66,8 @@ export default function SignupRequestsPage() {
   const [rejectNotes, setRejectNotes] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [resendLoading, setResendLoading] = useState<string | null>(null);
+  const [resendSuccess, setResendSuccess] = useState<Record<string, string>>({});
 
   const fetchRequests = useCallback(async () => {
     setLoading(true);
@@ -180,6 +183,33 @@ export default function SignupRequestsPage() {
       alert("Erreur réseau");
     } finally {
       setBulkLoading(false);
+    }
+  };
+
+  const handleResend = async (id: string) => {
+    if (!confirm("Renvoyer l'email de notification ?")) return;
+    setResendLoading(id);
+    try {
+      const res = await fetch(`/api/super-admin/signup-requests/${id}/resend`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setResendSuccess((prev) => ({ ...prev, [id]: data.message }));
+        setTimeout(() => {
+          setResendSuccess((prev) => {
+            const next = { ...prev };
+            delete next[id];
+            return next;
+          });
+        }, 5000);
+      } else {
+        alert(data.error || "Erreur lors du renvoi");
+      }
+    } catch {
+      alert("Erreur réseau");
+    } finally {
+      setResendLoading(null);
     }
   };
 
@@ -496,16 +526,37 @@ export default function SignupRequestsPage() {
                   {/* Review info for already processed */}
                   {req.status !== "PENDING" && req.reviewedAt && (
                     <div className="mt-4 rounded-lg bg-gray-50 border border-gray-200 p-3 text-sm text-gray-600">
-                      <span className="font-medium">Traitée le :</span>{" "}
-                      {new Date(req.reviewedAt).toLocaleDateString("fr-CH", {
-                        day: "2-digit",
-                        month: "long",
-                        year: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                      {req.reviewNotes && (
-                        <p className="mt-1 text-gray-500">Notes : {req.reviewNotes}</p>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="font-medium">Traitée le :</span>{" "}
+                          {new Date(req.reviewedAt).toLocaleDateString("fr-CH", {
+                            day: "2-digit",
+                            month: "long",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                          {req.reviewNotes && (
+                            <p className="mt-1 text-gray-500">Notes : {req.reviewNotes}</p>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => handleResend(req.id)}
+                          disabled={resendLoading === req.id}
+                          className="flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 shrink-0"
+                        >
+                          {resendLoading === req.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <RotateCw className="h-3.5 w-3.5" />
+                          )}
+                          Renvoyer l&apos;email
+                        </button>
+                      </div>
+                      {resendSuccess[req.id] && (
+                        <p className="mt-2 text-xs text-emerald-600 font-medium">
+                          {resendSuccess[req.id]}
+                        </p>
                       )}
                     </div>
                   )}

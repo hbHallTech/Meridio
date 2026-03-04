@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { sendSignupRejectionEmail } from "@/lib/email";
+import { queueEmail } from "@/lib/email-queue";
+import { buildSignupRejectionHtml } from "@/lib/email-templates";
 import { logAudit } from "@/lib/audit";
 import type { UserRole } from "@prisma/client";
 
@@ -37,6 +38,14 @@ export async function POST(request: Request) {
     );
   }
 
+  // Validate all IDs are strings
+  if (!ids.every((id: unknown) => typeof id === "string")) {
+    return NextResponse.json(
+      { error: "Tous les IDs doivent être des chaînes" },
+      { status: 400 }
+    );
+  }
+
   // Get all pending requests matching the provided IDs
   const requests = await prisma.signupRequest.findMany({
     where: { id: { in: ids }, status: "PENDING" },
@@ -60,16 +69,35 @@ export async function POST(request: Request) {
     },
   });
 
-  // Send rejection emails (non-blocking)
-  void Promise.allSettled(
-    requests.map((req) =>
-      sendSignupRejectionEmail(
-        req.email,
+  // Queue rejection emails for all (reliable delivery with retries)
+  const emailLogIds: string[] = [];
+  for (const req of requests) {
+    try {
+      const html = buildSignupRejectionHtml(
         req.firstName,
         req.companyName,
         notes || null
-      )
-    )
+      );
+
+      const emailLogId = await queueEmail({
+        type: "SIGNUP_REJECTION",
+        to: req.email,
+        subject: "Meridio - Votre demande d'inscription",
+        html,
+        signupRequestId: req.id,
+      });
+
+      emailLogIds.push(emailLogId);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(
+        `[bulk-reject] Failed to queue email for ${req.email}: ${msg}`
+      );
+    }
+  }
+
+  console.log(
+    `[bulk-reject] Rejected ${requests.length} requests, queued ${emailLogIds.length} emails`
   );
 
   void logAudit(session!.user!.id, "BULK_SIGNUP_REJECTED", {
@@ -77,6 +105,7 @@ export async function POST(request: Request) {
       count: requests.length,
       ids: requests.map((r) => r.id),
       notes: notes || null,
+      emailLogIds,
     },
   });
 
@@ -85,5 +114,6 @@ export async function POST(request: Request) {
     message: `${requests.length} demande(s) rejetée(s)`,
     rejectedCount: requests.length,
     skippedCount: ids.length - requests.length,
+    emailsQueued: emailLogIds.length,
   });
 }
