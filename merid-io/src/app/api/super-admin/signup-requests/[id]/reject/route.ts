@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { sendSignupRejectionEmail } from "@/lib/email";
+import { queueEmail } from "@/lib/email-queue";
+import { buildSignupRejectionHtml } from "@/lib/email-templates";
 import { logAudit } from "@/lib/audit";
 import type { UserRole } from "@prisma/client";
 
 /**
  * POST /api/super-admin/signup-requests/[id]/reject
  *
- * Rejects a signup request and sends a notification email to the requester.
+ * Rejects a signup request and queues a notification email to the requester.
  */
 export async function POST(
   request: Request,
@@ -48,13 +49,24 @@ export async function POST(
     },
   });
 
-  // Send rejection email (non-blocking)
-  void sendSignupRejectionEmail(
-    signupRequest.email,
+  // Queue rejection email (reliable delivery with retries)
+  const rejectionHtml = buildSignupRejectionHtml(
     signupRequest.firstName,
     signupRequest.companyName,
     body.notes || null
-  ).catch((err) => console.error("[tenant] Rejection email failed:", err));
+  );
+
+  const emailLogId = await queueEmail({
+    type: "SIGNUP_REJECTION",
+    to: signupRequest.email,
+    subject: "Meridio - Votre demande d'inscription",
+    html: rejectionHtml,
+    signupRequestId: id,
+  });
+
+  console.log(
+    `[reject] Signup request rejected: id=${id} email=${signupRequest.email} emailLogId=${emailLogId}`
+  );
 
   void logAudit(session!.user!.id, "SIGNUP_REQUEST_REJECTED", {
     entityType: "SignupRequest",
@@ -63,11 +75,13 @@ export async function POST(
       email: signupRequest.email,
       companyName: signupRequest.companyName,
       notes: body.notes || null,
+      emailLogId,
     },
   });
 
   return NextResponse.json({
     success: true,
-    message: "Demande rejetée. Un email de notification a été envoyé.",
+    message: "Demande rejetée. Un email de notification a été mis en file d'attente.",
+    emailLogId,
   });
 }

@@ -49,12 +49,14 @@ async function getSmtpConfig() {
   }
 
   // Fallback to .env
+  // Support both SMTP_PASS and SMTP_PASSWORD for backward compatibility
+  const pass = process.env.SMTP_PASS || process.env.SMTP_PASSWORD || "";
   return {
     host: process.env.SMTP_HOST || "smtp.office365.com",
     port: Number(process.env.SMTP_PORT) || 587,
     secure: (Number(process.env.SMTP_PORT) || 587) === 465,
     user: process.env.SMTP_USER || "",
-    pass: process.env.SMTP_PASS || "",
+    pass,
     from: process.env.SMTP_FROM || process.env.SMTP_USER || "",
   };
 }
@@ -116,12 +118,43 @@ interface SendEmailOptions {
   html: string;
 }
 
-export async function sendEmail({ to, subject, html }: SendEmailOptions) {
+export interface SendEmailContext {
+  emailType?: string;
+  signupRequestId?: string;
+  companyId?: string;
+  userId?: string;
+}
+
+export async function sendEmail(
+  { to, subject, html }: SendEmailOptions,
+  context: SendEmailContext = {}
+) {
+  const tag = context.emailType || "GENERIC";
+  const ctxStr = [
+    context.signupRequestId && `reqId=${context.signupRequestId}`,
+    context.companyId && `companyId=${context.companyId}`,
+    context.userId && `userId=${context.userId}`,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  console.log(`[email][${tag}] Preparing: to=${to} subject="${subject}" ${ctxStr}`.trim());
+
   const config = await getSmtpConfig();
 
   if (!config.user) {
-    console.log(`[email] Skip (SMTP non configuré): to=${to} subject="${subject}"`);
+    console.warn(
+      `[email][${tag}] SKIP — SMTP not configured (SMTP_USER is empty). ` +
+      `Check that SMTP_USER and SMTP_PASS (or SMTP_PASSWORD) env vars are set. to=${to}`
+    );
     return;
+  }
+
+  if (!config.pass) {
+    console.warn(
+      `[email][${tag}] WARNING — SMTP password is empty. ` +
+      `Check SMTP_PASS or SMTP_PASSWORD env var. host=${config.host} user=${config.user}`
+    );
   }
 
   // Fresh transporter per send — prevents stale socket ETIMEDOUT in serverless
@@ -129,7 +162,7 @@ export async function sendEmail({ to, subject, html }: SendEmailOptions) {
   const text = htmlToPlainText(html);
 
   try {
-    await transporter.sendMail({
+    const info = await transporter.sendMail({
       from: config.from,
       to,
       subject,
@@ -139,10 +172,18 @@ export async function sendEmail({ to, subject, html }: SendEmailOptions) {
         "X-Mailer": "Meridio HR Platform",
       },
     });
-    console.log(`[email] Sent: to=${to} subject="${subject}"`);
+    console.log(
+      `[email][${tag}] Sent OK: to=${to} messageId=${info.messageId} ${ctxStr}`.trim()
+    );
   } catch (error: unknown) {
     const errMsg = error instanceof Error ? error.message : String(error);
-    console.error(`[email] Failed: to=${to} subject="${subject}" error=${errMsg}`);
+    const errStack = error instanceof Error ? error.stack : undefined;
+    console.error(
+      `[email][${tag}] FAILED: to=${to} subject="${subject}" ${ctxStr} error=${errMsg}`.trim()
+    );
+    if (errStack) {
+      console.error(`[email][${tag}] Stack: ${errStack}`);
+    }
     throw error;
   } finally {
     // Always close the connection — do not leave sockets open in serverless

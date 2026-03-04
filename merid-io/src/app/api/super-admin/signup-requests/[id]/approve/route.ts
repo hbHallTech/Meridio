@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { sendTenantWelcomeEmail } from "@/lib/email";
+import { queueEmail } from "@/lib/email-queue";
 import { logAudit } from "@/lib/audit";
+import { buildTenantWelcomeHtml } from "@/lib/email-templates";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import type { UserRole } from "@prisma/client";
@@ -15,7 +16,7 @@ import type { UserRole } from "@prisma/client";
  * 2. Creates a default Office with leave types and workflow
  * 3. Creates an ADMIN user with a random password (never exposed)
  * 4. Generates a one-time password reset token (24h expiry)
- * 5. Emails the new admin a welcome email with a setup link
+ * 5. Queues a welcome email with a setup link
  */
 export async function POST(
   request: Request,
@@ -169,14 +170,30 @@ export async function POST(
       };
     });
 
-    // Send welcome email with password setup link (non-blocking)
-    void sendTenantWelcomeEmail(
-      result.adminUser.email,
+    // Queue welcome email (reliable delivery with retries)
+    const welcomeHtml = buildTenantWelcomeHtml(
       signupRequest.firstName,
       result.company.name,
-      result.resetToken
-    ).catch((err) => console.error("[tenant] Welcome email failed:", err));
+      result.resetToken,
+      result.adminUser.email
+    );
 
+    const emailLogId = await queueEmail({
+      type: "TENANT_WELCOME",
+      to: result.adminUser.email,
+      subject: `Meridio - Bienvenue ${result.company.name} !`,
+      html: welcomeHtml,
+      signupRequestId: id,
+      companyId: result.company.id,
+      userId: result.adminUser.id,
+    });
+
+    console.log(
+      `[approve] Tenant provisioned: company=${result.company.id} admin=${result.adminUser.email} ` +
+      `emailLogId=${emailLogId} signupRequestId=${id}`
+    );
+
+    // Audit (non-blocking)
     void logAudit(session!.user!.id, "TENANT_PROVISIONED", {
       entityType: "Company",
       entityId: result.company.id,
@@ -184,6 +201,7 @@ export async function POST(
         companyName: result.company.name,
         adminEmail: result.adminUser.email,
         signupRequestId: id,
+        emailLogId,
       },
     });
 
@@ -193,6 +211,7 @@ export async function POST(
       company: { id: result.company.id, name: result.company.name },
       office: { id: result.office.id, name: result.office.name },
       adminUser: result.adminUser,
+      emailLogId,
     });
   } catch (error) {
     console.error("Tenant provisioning error:", error);
