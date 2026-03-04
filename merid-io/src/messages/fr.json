@@ -77,7 +77,8 @@
     "importSuccess": "Import lancé avec succès",
     "noNewDocuments": "Aucun nouveau document trouvé",
     "superAdmin": "Super Admin",
-    "signupRequests": "Demandes d'inscription"
+    "signupRequests": "Demandes d'inscription",
+    "tenants": "Tenants"
   },
   "leaves": {
     "title": "Mes demandes de congé",

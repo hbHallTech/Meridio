@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { sendTenantWelcomeEmail } from "@/lib/email";
+import { logAudit } from "@/lib/audit";
+import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import type { UserRole } from "@prisma/client";
 
@@ -9,10 +12,10 @@ import type { UserRole } from "@prisma/client";
  *
  * Approves a signup request and provisions a new tenant:
  * 1. Creates a Company
- * 2. Creates a default Office
- * 3. Creates an ADMIN user with a temporary password
- * 4. Sets up default leave types and workflow
- * 5. Marks the signup request as APPROVED
+ * 2. Creates a default Office with leave types and workflow
+ * 3. Creates an ADMIN user with a random password (never exposed)
+ * 4. Generates a one-time password reset token (24h expiry)
+ * 5. Emails the new admin a welcome email with a setup link
  */
 export async function POST(
   request: Request,
@@ -41,11 +44,9 @@ export async function POST(
     );
   }
 
-  // Optional: read custom notes from request body
   const body = await request.json().catch(() => ({}));
 
   try {
-    // Use a transaction to ensure atomicity
     const result = await prisma.$transaction(async (tx) => {
       // 1. Create Company
       const company = await tx.company.create({
@@ -78,7 +79,7 @@ export async function POST(
         },
       });
 
-      // 3. Create default leave types for the office
+      // 3. Create default leave types
       const leaveTypes = [
         { code: "ANNUAL", label_fr: "Congé annuel", label_en: "Annual leave", deductsFromBalance: true, balanceType: "ANNUAL", requiresAttachment: false, color: "#3B82F6" },
         { code: "OFFERED", label_fr: "Congé offert", label_en: "Offered leave", deductsFromBalance: true, balanceType: "OFFERED", requiresAttachment: false, color: "#10B981" },
@@ -107,11 +108,16 @@ export async function POST(
         },
       });
 
-      // 5. Create the admin user with a temporary password
-      const tempPassword = generateTempPassword();
-      const passwordHash = await bcrypt.hash(tempPassword, 12);
+      // 5. Create admin user with crypto-random password (never exposed)
+      const randomPassword = crypto.randomBytes(32).toString("hex");
+      const passwordHash = await bcrypt.hash(randomPassword, 12);
       const passwordExpiresAt = new Date();
       passwordExpiresAt.setDate(passwordExpiresAt.getDate() + 90);
+
+      // Generate one-time reset token (same pattern as forgot-password)
+      const resetToken = crypto.randomBytes(32).toString("hex");
+      const resetTokenHash = crypto.createHash("sha256").update(resetToken).digest("hex");
+      const resetExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
 
       const adminUser = await tx.user.create({
         data: {
@@ -127,10 +133,12 @@ export async function POST(
           passwordExpiresAt,
           lastPasswordChangeAt: new Date(),
           passwordHistory: [passwordHash],
+          resetPasswordToken: resetTokenHash,
+          resetPasswordExpiry: resetExpiry,
         },
       });
 
-      // 6. Create leave balances for the admin user
+      // 6. Create leave balances
       const currentYear = new Date().getFullYear();
       await tx.leaveBalance.create({
         data: {
@@ -157,17 +165,34 @@ export async function POST(
         company,
         office,
         adminUser: { id: adminUser.id, email: adminUser.email },
-        tempPassword,
+        resetToken,
       };
+    });
+
+    // Send welcome email with password setup link (non-blocking)
+    void sendTenantWelcomeEmail(
+      result.adminUser.email,
+      signupRequest.firstName,
+      result.company.name,
+      result.resetToken
+    ).catch((err) => console.error("[tenant] Welcome email failed:", err));
+
+    void logAudit(session!.user!.id, "TENANT_PROVISIONED", {
+      entityType: "Company",
+      entityId: result.company.id,
+      newValue: {
+        companyName: result.company.name,
+        adminEmail: result.adminUser.email,
+        signupRequestId: id,
+      },
     });
 
     return NextResponse.json({
       success: true,
-      message: `Tenant "${result.company.name}" créé avec succès`,
+      message: `Tenant "${result.company.name}" créé. Un email de bienvenue avec un lien de configuration du mot de passe a été envoyé à ${result.adminUser.email}.`,
       company: { id: result.company.id, name: result.company.name },
       office: { id: result.office.id, name: result.office.name },
       adminUser: result.adminUser,
-      tempPassword: result.tempPassword,
     });
   } catch (error) {
     console.error("Tenant provisioning error:", error);
@@ -177,18 +202,4 @@ export async function POST(
       { status: 500 }
     );
   }
-}
-
-function generateTempPassword(): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
-  const specials = "!@#$%&*";
-  let password = "";
-  for (let i = 0; i < 12; i++) {
-    password += chars[Math.floor(Math.random() * chars.length)];
-  }
-  // Ensure at least one special char
-  const pos = Math.floor(Math.random() * password.length);
-  const special = specials[Math.floor(Math.random() * specials.length)];
-  password = password.slice(0, pos) + special + password.slice(pos + 1);
-  return password;
 }

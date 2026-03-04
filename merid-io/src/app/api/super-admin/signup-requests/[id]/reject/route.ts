@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { sendSignupRejectionEmail } from "@/lib/email";
+import { logAudit } from "@/lib/audit";
 import type { UserRole } from "@prisma/client";
 
 /**
  * POST /api/super-admin/signup-requests/[id]/reject
  *
- * Rejects a signup request without provisioning a tenant.
+ * Rejects a signup request and sends a notification email to the requester.
  */
 export async function POST(
   request: Request,
@@ -46,8 +48,26 @@ export async function POST(
     },
   });
 
+  // Send rejection email (non-blocking)
+  void sendSignupRejectionEmail(
+    signupRequest.email,
+    signupRequest.firstName,
+    signupRequest.companyName,
+    body.notes || null
+  ).catch((err) => console.error("[tenant] Rejection email failed:", err));
+
+  void logAudit(session!.user!.id, "SIGNUP_REQUEST_REJECTED", {
+    entityType: "SignupRequest",
+    entityId: id,
+    newValue: {
+      email: signupRequest.email,
+      companyName: signupRequest.companyName,
+      notes: body.notes || null,
+    },
+  });
+
   return NextResponse.json({
     success: true,
-    message: "Demande rejetée",
+    message: "Demande rejetée. Un email de notification a été envoyé.",
   });
 }

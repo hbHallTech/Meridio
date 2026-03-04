@@ -163,18 +163,16 @@ export function Sidebar({
       titleKey: "superAdmin",
       roles: ["SUPER_ADMIN"],
       items: [
-        {
-          href: "/super-admin/signup-requests",
-          label: t("signupRequests"),
-          icon: Crown,
-          roles: ["SUPER_ADMIN"],
-        },
+        { href: "/super-admin", label: t("dashboard"), icon: LayoutDashboard, roles: ["SUPER_ADMIN"] },
+        { href: "/super-admin/signup-requests", label: t("signupRequests"), icon: Crown, roles: ["SUPER_ADMIN"] },
+        { href: "/super-admin/tenants", label: t("tenants"), icon: Building2, roles: ["SUPER_ADMIN"] },
+        { href: "/super-admin/audit-logs", label: t("audit"), icon: ScrollText, roles: ["SUPER_ADMIN"] },
       ],
     },
   ];
 
   const isActive = (href: string) => {
-    if (href === "/dashboard") return pathname === "/dashboard";
+    if (href === "/dashboard" || href === "/super-admin") return pathname === href;
     return pathname.startsWith(href);
   };
 

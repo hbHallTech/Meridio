@@ -16,9 +16,8 @@ import {
   ChevronUp,
   AlertCircle,
   Loader2,
-  Copy,
-  Check,
   RefreshCw,
+  Trash2,
 } from "lucide-react";
 
 interface SignupRequest {
@@ -49,9 +48,9 @@ interface SignupRequest {
 
 interface ApproveResult {
   success: boolean;
+  message?: string;
   company?: { id: string; name: string };
   adminUser?: { id: string; email: string };
-  tempPassword?: string;
 }
 
 type FilterStatus = "ALL" | "PENDING" | "APPROVED" | "REJECTED";
@@ -64,7 +63,8 @@ export default function SignupRequestsPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [approveResult, setApproveResult] = useState<Record<string, ApproveResult>>({});
   const [rejectNotes, setRejectNotes] = useState<Record<string, string>>({});
-  const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkLoading, setBulkLoading] = useState(false);
 
   const fetchRequests = useCallback(async () => {
     setLoading(true);
@@ -92,6 +92,25 @@ export default function SignupRequestsPage() {
       else next.add(id);
       return next;
     });
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const pendingIds = requests.filter((r) => r.status === "PENDING").map((r) => r.id);
+
+  const toggleSelectAll = () => {
+    if (pendingIds.every((id) => selected.has(id))) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(pendingIds));
+    }
   };
 
   const handleApprove = async (id: string) => {
@@ -139,10 +158,29 @@ export default function SignupRequestsPage() {
     }
   };
 
-  const copyToClipboard = (text: string, field: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedField(field);
-    setTimeout(() => setCopiedField(null), 2000);
+  const handleBulkReject = async () => {
+    const ids = Array.from(selected);
+    if (ids.length === 0) return;
+    if (!confirm(`Rejeter ${ids.length} demande(s) sélectionnée(s) ?`)) return;
+    setBulkLoading(true);
+    try {
+      const res = await fetch("/api/super-admin/signup-requests/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reject", ids }),
+      });
+      if (res.ok) {
+        setSelected(new Set());
+        fetchRequests();
+      } else {
+        const data = await res.json();
+        alert(data.error || "Erreur lors du rejet groupé");
+      }
+    } catch {
+      alert("Erreur réseau");
+    } finally {
+      setBulkLoading(false);
+    }
   };
 
   const statusBadge = (status: string) => {
@@ -216,35 +254,66 @@ export default function SignupRequestsPage() {
         ))}
       </div>
 
-      {/* Filter tabs */}
-      <div className="flex gap-2 border-b border-gray-200 pb-0">
-        {(["ALL", "PENDING", "APPROVED", "REJECTED"] as FilterStatus[]).map((s) => {
-          const labels: Record<FilterStatus, string> = {
-            ALL: "Toutes",
-            PENDING: "En attente",
-            APPROVED: "Approuvées",
-            REJECTED: "Rejetées",
-          };
-          return (
-            <button
-              key={s}
-              onClick={() => setFilter(s)}
-              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-                filter === s
-                  ? "border-[#1B3A5C] text-[#1B3A5C]"
-                  : "border-transparent text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              {labels[s]}
-              {s === "PENDING" && pendingCount > 0 && (
-                <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[11px] font-bold text-amber-700">
-                  {pendingCount}
-                </span>
-              )}
-            </button>
-          );
-        })}
+      {/* Filter tabs + bulk actions */}
+      <div className="flex items-center justify-between border-b border-gray-200 pb-0">
+        <div className="flex gap-2">
+          {(["ALL", "PENDING", "APPROVED", "REJECTED"] as FilterStatus[]).map((s) => {
+            const labels: Record<FilterStatus, string> = {
+              ALL: "Toutes",
+              PENDING: "En attente",
+              APPROVED: "Approuvées",
+              REJECTED: "Rejetées",
+            };
+            return (
+              <button
+                key={s}
+                onClick={() => setFilter(s)}
+                className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                  filter === s
+                    ? "border-[#1B3A5C] text-[#1B3A5C]"
+                    : "border-transparent text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                {labels[s]}
+                {s === "PENDING" && pendingCount > 0 && (
+                  <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[11px] font-bold text-amber-700">
+                    {pendingCount}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+        {selected.size > 0 && (
+          <button
+            onClick={handleBulkReject}
+            disabled={bulkLoading}
+            className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50 mb-1"
+          >
+            {bulkLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Trash2 className="h-4 w-4" />
+            )}
+            Rejeter ({selected.size})
+          </button>
+        )}
       </div>
+
+      {/* Select all for pending */}
+      {pendingIds.length > 1 && (
+        <div className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={pendingIds.length > 0 && pendingIds.every((id) => selected.has(id))}
+            onChange={toggleSelectAll}
+            className="h-4 w-4 rounded border-gray-300 text-[#1B3A5C] focus:ring-[#1B3A5C]"
+          />
+          <span className="text-sm text-gray-500">
+            Sélectionner toutes les demandes en attente
+          </span>
+        </div>
+      )}
 
       {/* List */}
       {loading ? (
@@ -264,42 +333,52 @@ export default function SignupRequestsPage() {
               className="rounded-xl border border-gray-200 bg-white overflow-hidden"
             >
               {/* Summary row */}
-              <button
-                onClick={() => toggleExpand(req.id)}
-                className="flex w-full items-center gap-4 p-4 text-left hover:bg-gray-50 transition-colors"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-3">
-                    <span className="font-semibold text-gray-900 truncate">
-                      {req.companyName}
-                    </span>
-                    {statusBadge(req.status)}
-                  </div>
-                  <div className="mt-1 flex items-center gap-4 text-sm text-gray-500">
-                    <span className="flex items-center gap-1">
-                      <Mail className="h-3.5 w-3.5" />
-                      {req.email}
-                    </span>
-                    <span>
-                      {req.firstName} {req.lastName}
-                    </span>
-                    <span className="text-gray-400">
-                      {new Date(req.createdAt).toLocaleDateString("fr-CH", {
-                        day: "2-digit",
-                        month: "short",
-                        year: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </span>
-                  </div>
-                </div>
-                {expanded.has(req.id) ? (
-                  <ChevronUp className="h-5 w-5 text-gray-400" />
-                ) : (
-                  <ChevronDown className="h-5 w-5 text-gray-400" />
+              <div className="flex items-center gap-2 p-4">
+                {req.status === "PENDING" && (
+                  <input
+                    type="checkbox"
+                    checked={selected.has(req.id)}
+                    onChange={() => toggleSelect(req.id)}
+                    className="h-4 w-4 rounded border-gray-300 text-[#1B3A5C] focus:ring-[#1B3A5C] shrink-0"
+                  />
                 )}
-              </button>
+                <button
+                  onClick={() => toggleExpand(req.id)}
+                  className="flex flex-1 items-center gap-4 text-left hover:bg-gray-50 transition-colors rounded-lg -m-1 p-1"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-3">
+                      <span className="font-semibold text-gray-900 truncate">
+                        {req.companyName}
+                      </span>
+                      {statusBadge(req.status)}
+                    </div>
+                    <div className="mt-1 flex items-center gap-4 text-sm text-gray-500">
+                      <span className="flex items-center gap-1">
+                        <Mail className="h-3.5 w-3.5" />
+                        {req.email}
+                      </span>
+                      <span>
+                        {req.firstName} {req.lastName}
+                      </span>
+                      <span className="text-gray-400">
+                        {new Date(req.createdAt).toLocaleDateString("fr-CH", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    </div>
+                  </div>
+                  {expanded.has(req.id) ? (
+                    <ChevronUp className="h-5 w-5 text-gray-400" />
+                  ) : (
+                    <ChevronDown className="h-5 w-5 text-gray-400" />
+                  )}
+                </button>
+              </div>
 
               {/* Detail panel */}
               {expanded.has(req.id) && (
@@ -352,57 +431,19 @@ export default function SignupRequestsPage() {
                     )}
                   </div>
 
-                  {/* Approve result (temp password) */}
+                  {/* Approve result */}
                   {approveResult[req.id] && (
                     <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
                       <h4 className="font-semibold text-emerald-800 mb-2">
                         Tenant créé avec succès
                       </h4>
                       <div className="space-y-2 text-sm">
-                        <div className="flex items-center gap-2">
-                          <span className="text-emerald-700">Email admin :</span>
-                          <code className="rounded bg-emerald-100 px-2 py-0.5 text-emerald-900">
-                            {approveResult[req.id].adminUser?.email}
-                          </code>
-                          <button
-                            onClick={() =>
-                              copyToClipboard(
-                                approveResult[req.id].adminUser?.email || "",
-                                `email-${req.id}`
-                              )
-                            }
-                            className="text-emerald-600 hover:text-emerald-800"
-                          >
-                            {copiedField === `email-${req.id}` ? (
-                              <Check className="h-4 w-4" />
-                            ) : (
-                              <Copy className="h-4 w-4" />
-                            )}
-                          </button>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-emerald-700">Mot de passe temporaire :</span>
-                          <code className="rounded bg-emerald-100 px-2 py-0.5 font-mono text-emerald-900">
-                            {approveResult[req.id].tempPassword}
-                          </code>
-                          <button
-                            onClick={() =>
-                              copyToClipboard(
-                                approveResult[req.id].tempPassword || "",
-                                `pwd-${req.id}`
-                              )
-                            }
-                            className="text-emerald-600 hover:text-emerald-800"
-                          >
-                            {copiedField === `pwd-${req.id}` ? (
-                              <Check className="h-4 w-4" />
-                            ) : (
-                              <Copy className="h-4 w-4" />
-                            )}
-                          </button>
-                        </div>
+                        <p className="text-emerald-700">
+                          {approveResult[req.id].message ||
+                            `Un email de bienvenue avec un lien de configuration du mot de passe a été envoyé à ${approveResult[req.id].adminUser?.email}.`}
+                        </p>
                         <p className="text-emerald-600 text-xs mt-2">
-                          Envoyez ces identifiants au client. Le mot de passe devra être changé à la première connexion.
+                          L&apos;administrateur recevra un email avec un lien sécurisé pour configurer son mot de passe (valide 24h).
                         </p>
                       </div>
                     </div>
