@@ -7,6 +7,7 @@ const roleHierarchy: Record<Role, number> = {
   MANAGER: 1,
   HR: 2,
   ADMIN: 3,
+  SUPER_ADMIN: 4,
 };
 
 export function hasRole(userRoles: Role[], requiredRole: Role): boolean {
@@ -35,7 +36,10 @@ export type Permission =
   | "report:export"
   | "admin:access"
   | "hr:access"
-  | "manager:access";
+  | "manager:access"
+  | "superadmin:access"
+  | "tenant:create"
+  | "tenant:manage";
 
 const rolePermissions: Record<Role, Permission[]> = {
   EMPLOYEE: ["leave:create", "leave:read", "leave:cancel"],
@@ -75,6 +79,25 @@ const rolePermissions: Record<Role, Permission[]> = {
     "admin:access",
     "hr:access",
     "manager:access",
+  ],
+  SUPER_ADMIN: [
+    "leave:create",
+    "leave:read",
+    "leave:approve",
+    "leave:cancel",
+    "user:read",
+    "user:create",
+    "user:update",
+    "user:delete",
+    "team:manage",
+    "report:view",
+    "report:export",
+    "admin:access",
+    "hr:access",
+    "manager:access",
+    "superadmin:access",
+    "tenant:create",
+    "tenant:manage",
   ],
 };
 

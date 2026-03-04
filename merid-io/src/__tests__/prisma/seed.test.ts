@@ -35,6 +35,7 @@ jest.mock("@prisma/client", () => {
     MANAGER: "MANAGER",
     HR: "HR",
     ADMIN: "ADMIN",
+    SUPER_ADMIN: "SUPER_ADMIN",
   };
 
   class PrismaClient {
@@ -351,10 +352,10 @@ describe("prisma/seed.ts", () => {
       expect(call.where).toEqual({ email: "hbo@halley-technologies.ch" });
     });
 
-    it("should assign all 4 roles to admin", async () => {
+    it("should assign all 5 roles to admin (including SUPER_ADMIN)", async () => {
       await runSeed();
       const call = mockUserUpsert.mock.calls[0][0];
-      expect(call.create.roles).toEqual(["ADMIN", "HR", "MANAGER", "EMPLOYEE"]);
+      expect(call.create.roles).toEqual(["SUPER_ADMIN", "ADMIN", "HR", "MANAGER", "EMPLOYEE"]);
     });
 
     it("should assign admin to Geneva office", async () => {

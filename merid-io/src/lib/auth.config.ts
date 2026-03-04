@@ -8,20 +8,24 @@ declare module "next-auth" {
     teamId?: string | null;
     language?: string;
     twoFactorVerified?: boolean;
+    companyId?: string;
   }
 }
 
 /**
  * Role-based route access control.
  * Maps route prefixes to the roles allowed to access them.
+ * SUPER_ADMIN inherits access to all restricted routes.
  */
 const ROUTE_ROLE_MAP: { prefix: string; roles: UserRole[] }[] = [
-  { prefix: "/admin", roles: ["ADMIN"] },
-  { prefix: "/api/admin", roles: ["ADMIN"] },
-  { prefix: "/manager", roles: ["MANAGER", "ADMIN"] },
-  { prefix: "/api/manager", roles: ["MANAGER", "ADMIN"] },
-  { prefix: "/hr", roles: ["HR", "ADMIN"] },
-  { prefix: "/api/hr", roles: ["HR", "ADMIN"] },
+  { prefix: "/super-admin", roles: ["SUPER_ADMIN"] },
+  { prefix: "/api/super-admin", roles: ["SUPER_ADMIN"] },
+  { prefix: "/admin", roles: ["ADMIN", "SUPER_ADMIN"] },
+  { prefix: "/api/admin", roles: ["ADMIN", "SUPER_ADMIN"] },
+  { prefix: "/manager", roles: ["MANAGER", "ADMIN", "SUPER_ADMIN"] },
+  { prefix: "/api/manager", roles: ["MANAGER", "ADMIN", "SUPER_ADMIN"] },
+  { prefix: "/hr", roles: ["HR", "ADMIN", "SUPER_ADMIN"] },
+  { prefix: "/api/hr", roles: ["HR", "ADMIN", "SUPER_ADMIN"] },
 ];
 
 function hasRequiredRole(pathname: string, userRoles: UserRole[]): boolean {
@@ -49,6 +53,7 @@ export const authConfig: NextAuthConfig = {
         token.teamId = user.teamId;
         token.language = user.language;
         token.twoFactorVerified = user.twoFactorVerified;
+        token.companyId = user.companyId;
       }
       if (trigger === "update" && session) {
         // C1: twoFactorVerified is only read from DB server-side, never from client
@@ -68,6 +73,8 @@ export const authConfig: NextAuthConfig = {
       session.user.language = (token.language as string) ?? "fr";
       session.user.twoFactorVerified =
         (token.twoFactorVerified as boolean) ?? false;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (session.user as any).companyId = (token.companyId as string) ?? "";
       return session;
     },
     authorized({ auth, request: { nextUrl } }) {
@@ -75,10 +82,14 @@ export const authConfig: NextAuthConfig = {
       const { pathname } = nextUrl;
       const publicPaths = [
         "/login",
+        "/signup",
         "/forgot-password",
         "/reset-password",
         "/api/auth",
         "/api/cron",
+        "/api/signup-request",
+        "/api/demo-request",
+        "/api/contact",
       ];
       const isPublicPath = publicPaths.some((path) =>
         pathname.startsWith(path)
