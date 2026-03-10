@@ -136,6 +136,7 @@ export function Sidebar({
       roles: ["HR", "ADMIN"],
       items: [
         { href: "/hr/approvals", label: `${t("approvals")} HR`, icon: ClipboardList, roles: ["HR", "ADMIN"] },
+        { href: "/admin/users", label: t("users"), icon: UserCog, roles: ["HR", "ADMIN"] },
         { href: "/hr/dashboard", label: t("dashboard"), icon: LayoutDashboard, roles: ["HR", "ADMIN"] },
         { href: "/hr/balances", label: t("balances"), icon: Wallet, roles: ["HR", "ADMIN"] },
         { href: "/hr/reports", label: t("reports"), icon: BarChart3, roles: ["HR", "ADMIN"] },

@@ -10,7 +10,7 @@ import {
 
 export async function GET() {
   const session = await auth();
-  if (!session?.user?.roles?.includes("ADMIN")) {
+  if (!session?.user?.roles?.some((r: string) => ["HR", "ADMIN", "SUPER_ADMIN"].includes(r))) {
     return NextResponse.json({ error: "Accès non autorisé" }, { status: 403 });
   }
 
@@ -47,7 +47,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   const session = await auth();
-  if (!session?.user?.roles?.includes("ADMIN")) {
+  if (!session?.user?.roles?.some((r: string) => ["HR", "ADMIN", "SUPER_ADMIN"].includes(r))) {
     return NextResponse.json({ error: "Accès non autorisé" }, { status: 403 });
   }
 
@@ -145,7 +145,7 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   const session = await auth();
-  if (!session?.user?.roles?.includes("ADMIN")) {
+  if (!session?.user?.roles?.some((r: string) => ["HR", "ADMIN", "SUPER_ADMIN"].includes(r))) {
     return NextResponse.json({ error: "Accès non autorisé" }, { status: 403 });
   }
 
@@ -308,7 +308,7 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
   const session = await auth();
-  if (!session?.user?.roles?.includes("ADMIN")) {
+  if (!session?.user?.roles?.some((r: string) => ["HR", "ADMIN", "SUPER_ADMIN"].includes(r))) {
     return NextResponse.json({ error: "Accès non autorisé" }, { status: 403 });
   }
 

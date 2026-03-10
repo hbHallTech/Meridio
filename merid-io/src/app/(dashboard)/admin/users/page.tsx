@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useForm, Controller, type UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useRouter } from "next/navigation";
 import { Loader2, Users, Plus, Pencil, Trash2, KeyRound, Copy, Check, Mail } from "lucide-react";
 import { Dialog, ConfirmDialog } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
@@ -106,6 +107,7 @@ function generateStrongPassword(): string {
 // ---------------------------------------------------------------------------
 export default function AdminUsersPage() {
   const { addToast } = useToast();
+  const router = useRouter();
 
   // Data state
   const [users, setUsers] = useState<UserData[]>([]);
@@ -726,7 +728,7 @@ export default function AdminUsersPage() {
                   <tr
                     key={user.id}
                     className="hover:bg-gray-50/50 cursor-pointer"
-                    onClick={() => openEdit(user)}
+                    onClick={() => router.push(`/admin/users/${user.id}`)}
                   >
                     <td className="whitespace-nowrap px-6 py-4 font-medium text-gray-900">
                       {user.firstName} {user.lastName}
@@ -780,7 +782,7 @@ export default function AdminUsersPage() {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            openEdit(user);
+                            router.push(`/admin/users/${user.id}`);
                           }}
                           className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-[#1B3A5C] transition-colors"
                           title="Modifier"
