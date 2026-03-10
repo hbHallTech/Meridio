@@ -15,8 +15,35 @@ export default function Verify2FAPage() {
   const [isResending, setIsResending] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [success, setSuccess] = useState(false);
+  const [sendFailed, setSendFailed] = useState(false);
 
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const hasSentRef = useRef(false);
+
+  // Auto-send 2FA code on mount (in case login page send failed)
+  useEffect(() => {
+    if (hasSentRef.current) return;
+    hasSentRef.current = true;
+
+    // Small delay to ensure session is established
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch("/api/auth/2fa/send", { method: "POST" });
+        const data = await res.json();
+        if (data.skipped) return;
+        if (!res.ok) {
+          setSendFailed(true);
+          setError(data.error || "Échec de l'envoi du code. Cliquez sur « Renvoyer le code ».");
+        } else {
+          setResendCooldown(60);
+        }
+      } catch {
+        setSendFailed(true);
+        setError("Échec de l'envoi du code. Cliquez sur « Renvoyer le code ».");
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Focus first input on mount
   useEffect(() => {
@@ -105,14 +132,22 @@ export default function Verify2FAPage() {
   async function handleResend() {
     setIsResending(true);
     setError("");
+    setSendFailed(false);
 
     try {
-      await fetch("/api/auth/2fa/send", { method: "POST" });
+      const res = await fetch("/api/auth/2fa/send", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        setSendFailed(true);
+        setError(data.error || "Impossible de renvoyer le code. Vérifiez votre connexion.");
+        return;
+      }
       setResendCooldown(60);
       setCode(["", "", "", "", "", ""]);
       inputRefs.current[0]?.focus();
     } catch {
-      setError("Impossible de renvoyer le code.");
+      setSendFailed(true);
+      setError("Impossible de renvoyer le code. Vérifiez votre connexion.");
     } finally {
       setIsResending(false);
     }

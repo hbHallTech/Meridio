@@ -40,7 +40,16 @@ export async function POST() {
     },
   });
 
-  await send2FACode(user.email, code, user.firstName);
+  try {
+    await send2FACode(user.email, code, user.firstName);
+  } catch (error: unknown) {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    console.error(`[2FA] Failed to send code to ${user.email}: ${errMsg}`);
+    return NextResponse.json(
+      { error: "Impossible d'envoyer le code de vérification. Veuillez réessayer." },
+      { status: 502 }
+    );
+  }
 
   logAudit(session.user.id, "2FA_CODE_SENT", {
     entityType: "User",

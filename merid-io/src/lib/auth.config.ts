@@ -95,7 +95,6 @@ export const authConfig: NextAuthConfig = {
         "/api/cron",
         "/api/signup-request",
         "/api/demo-request",
-        "/api/debug-auth",
         "/api/contact",
       ];
       const isPublicPath = publicPaths.some((path) =>
