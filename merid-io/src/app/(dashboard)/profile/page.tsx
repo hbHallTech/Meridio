@@ -1597,15 +1597,89 @@ function ProfessionnelTab({ profile, lang }: { profile: UserProfile; lang: strin
 
 // ─── Contrat Tab ───
 
+interface ContractData {
+  id: string;
+  type: string;
+  status: string;
+  contractNumber: string | null;
+  startDate: string;
+  endDate: string | null;
+  trialPeriodEnd: string | null;
+  weeklyHours: number | null;
+  currency: string;
+  jobTitle: string;
+  department: string | null;
+  conventionCollective: string | null;
+  location: string | null;
+  remoteAllowed: boolean;
+  remotePercentage: number | null;
+  signedAt: string | null;
+  terminatedAt?: string | null;
+  manager: { id: string; firstName: string; lastName: string } | null;
+}
+
+interface ContractHistory {
+  id: string;
+  type: string;
+  status: string;
+  contractNumber: string | null;
+  startDate: string;
+  endDate: string | null;
+  jobTitle: string;
+  signedAt: string | null;
+  terminatedAt: string | null;
+}
+
+const CONTRACT_TYPE_LABELS: Record<string, { fr: string; en: string }> = {
+  CDI: { fr: "CDI", en: "Permanent" },
+  CDD: { fr: "CDD", en: "Fixed-term" },
+  SIVP: { fr: "SIVP", en: "SIVP" },
+  STAGE: { fr: "Stage", en: "Internship" },
+  ALTERNANCE: { fr: "Alternance", en: "Apprenticeship" },
+  FREELANCE: { fr: "Freelance", en: "Freelance" },
+  AUTRE: { fr: "Autre", en: "Other" },
+};
+
+const CONTRACT_STATUS_LABELS: Record<string, { fr: string; en: string; color: string }> = {
+  ACTIF: { fr: "Actif", en: "Active", color: "bg-green-100 text-green-700" },
+  TERMINE: { fr: "Terminé", en: "Ended", color: "bg-gray-100 text-gray-600" },
+  SUSPENDU: { fr: "Suspendu", en: "Suspended", color: "bg-amber-100 text-amber-700" },
+  EN_PROLONGATION: { fr: "En prolongation", en: "Extended", color: "bg-blue-100 text-blue-700" },
+  EN_ATTENTE_SIGNATURE: { fr: "En attente", en: "Pending", color: "bg-purple-100 text-purple-700" },
+};
+
 function ContratTab({ profile, lang }: { profile: UserProfile; lang: string }) {
+  const [activeContract, setActiveContract] = useState<ContractData | null>(null);
+  const [history, setHistory] = useState<ContractHistory[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchContract() {
+      try {
+        const res = await fetch("/api/profile/contract", { cache: "no-store" });
+        if (res.ok) {
+          const data = await res.json();
+          setActiveContract(data.active);
+          setHistory(data.history ?? []);
+        }
+      } catch {
+        // silent
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchContract();
+  }, []);
+
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <h3 className="text-base font-semibold text-gray-900">
           {lang === "en" ? "Contract information" : "Informations contractuelles"}
         </h3>
         <span className="rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-500">
-          {lang === "en" ? "Read only" : "Lecture seule"}
+          {lang === "en" ? "Managed by HR" : "Géré par les RH"}
         </span>
       </div>
 
@@ -1615,6 +1689,8 @@ function ContratTab({ profile, lang }: { profile: UserProfile; lang: string }) {
           : "Ces informations sont gérées par les RH. Contactez votre service RH pour toute modification."}
       </p>
 
+      {/* Legacy fields from User */}
+      <SectionTitle icon={Building2} label={lang === "en" ? "Employment" : "Emploi"} />
       <div className="grid grid-cols-1 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
         <ReadonlyField
           icon={CalendarDays}
@@ -1652,6 +1728,164 @@ function ContratTab({ profile, lang }: { profile: UserProfile; lang: string }) {
             .join(", ")}
         />
       </div>
+
+      {/* Active Contract */}
+      <SectionTitle icon={FileText} label={lang === "en" ? "Active contract" : "Contrat actif"} />
+
+      {loading ? (
+        <div className="flex justify-center py-6">
+          <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+        </div>
+      ) : activeContract ? (
+        <div className="space-y-4">
+          {/* Status + Type badges */}
+          <div className="flex items-center gap-3">
+            <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${CONTRACT_STATUS_LABELS[activeContract.status]?.color ?? "bg-gray-100 text-gray-600"}`}>
+              {lang === "en"
+                ? CONTRACT_STATUS_LABELS[activeContract.status]?.en
+                : CONTRACT_STATUS_LABELS[activeContract.status]?.fr}
+            </span>
+            <span className="rounded-full bg-[#1B3A5C]/10 px-2.5 py-0.5 text-xs font-medium text-[#1B3A5C]">
+              {lang === "en"
+                ? CONTRACT_TYPE_LABELS[activeContract.type]?.en
+                : CONTRACT_TYPE_LABELS[activeContract.type]?.fr}
+            </span>
+            {activeContract.contractNumber && (
+              <span className="text-xs text-gray-400">
+                N° {activeContract.contractNumber}
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+            <ReadonlyField
+              icon={Briefcase}
+              label={lang === "en" ? "Job title" : "Poste"}
+              value={activeContract.jobTitle}
+            />
+            {activeContract.department && (
+              <ReadonlyField
+                icon={Building2}
+                label={lang === "en" ? "Department" : "Service"}
+                value={activeContract.department}
+              />
+            )}
+            <ReadonlyField
+              icon={CalendarDays}
+              label={lang === "en" ? "Start date" : "Date de début"}
+              value={formatDate(activeContract.startDate, lang)}
+            />
+            {activeContract.endDate && (
+              <ReadonlyField
+                icon={CalendarDays}
+                label={lang === "en" ? "End date" : "Date de fin"}
+                value={formatDate(activeContract.endDate, lang)}
+              />
+            )}
+            {activeContract.trialPeriodEnd && (
+              <ReadonlyField
+                icon={Clock}
+                label={lang === "en" ? "Trial period end" : "Fin période d'essai"}
+                value={formatDate(activeContract.trialPeriodEnd, lang)}
+              />
+            )}
+            {activeContract.weeklyHours != null && (
+              <ReadonlyField
+                icon={Clock}
+                label={lang === "en" ? "Weekly hours" : "Heures/semaine"}
+                value={`${activeContract.weeklyHours}h`}
+              />
+            )}
+            {activeContract.location && (
+              <ReadonlyField
+                icon={MapPin}
+                label={lang === "en" ? "Work location" : "Lieu de travail"}
+                value={activeContract.location}
+              />
+            )}
+            {activeContract.remoteAllowed && (
+              <ReadonlyField
+                icon={Globe}
+                label={lang === "en" ? "Remote work" : "Télétravail"}
+                value={
+                  activeContract.remotePercentage != null
+                    ? `${lang === "en" ? "Yes" : "Oui"} — ${activeContract.remotePercentage}%`
+                    : lang === "en" ? "Yes" : "Oui"
+                }
+              />
+            )}
+            {activeContract.manager && (
+              <ReadonlyField
+                icon={User}
+                label={lang === "en" ? "Manager" : "Responsable"}
+                value={`${activeContract.manager.firstName} ${activeContract.manager.lastName}`}
+              />
+            )}
+            {activeContract.conventionCollective && (
+              <ReadonlyField
+                icon={FileText}
+                label={lang === "en" ? "Collective agreement" : "Convention collective"}
+                value={activeContract.conventionCollective}
+              />
+            )}
+            {activeContract.signedAt && (
+              <ReadonlyField
+                icon={Check}
+                label={lang === "en" ? "Signed on" : "Signé le"}
+                value={formatDate(activeContract.signedAt, lang)}
+              />
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+          <FileText className="h-4 w-4 text-gray-400" />
+          <p className="text-sm text-gray-500">
+            {lang === "en" ? "No active contract found." : "Aucun contrat actif trouvé."}
+          </p>
+        </div>
+      )}
+
+      {/* Contract History */}
+      {history.length > 1 && (
+        <>
+          <SectionTitle icon={Clock} label={lang === "en" ? "Contract history" : "Historique des contrats"} />
+          <div className="overflow-x-auto rounded-lg border border-gray-200">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-gray-50 text-xs font-medium uppercase text-gray-500">
+                <tr>
+                  <th className="px-4 py-2">{lang === "en" ? "Type" : "Type"}</th>
+                  <th className="px-4 py-2">{lang === "en" ? "Status" : "Statut"}</th>
+                  <th className="px-4 py-2">{lang === "en" ? "Job title" : "Poste"}</th>
+                  <th className="px-4 py-2">{lang === "en" ? "Start" : "Début"}</th>
+                  <th className="px-4 py-2">{lang === "en" ? "End" : "Fin"}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {history.map((c) => (
+                  <tr key={c.id} className={c.status === "ACTIF" ? "bg-green-50/50" : ""}>
+                    <td className="px-4 py-2 font-medium">
+                      {lang === "en"
+                        ? CONTRACT_TYPE_LABELS[c.type]?.en ?? c.type
+                        : CONTRACT_TYPE_LABELS[c.type]?.fr ?? c.type}
+                    </td>
+                    <td className="px-4 py-2">
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${CONTRACT_STATUS_LABELS[c.status]?.color ?? "bg-gray-100 text-gray-600"}`}>
+                        {lang === "en"
+                          ? CONTRACT_STATUS_LABELS[c.status]?.en
+                          : CONTRACT_STATUS_LABELS[c.status]?.fr}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2">{c.jobTitle}</td>
+                    <td className="px-4 py-2">{formatDate(c.startDate, lang)}</td>
+                    <td className="px-4 py-2">{c.endDate ? formatDate(c.endDate, lang) : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </div>
   );
 }

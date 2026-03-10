@@ -306,6 +306,8 @@ model User {
   createdDocuments  Document[]             @relation("DocumentCreatedBy")
   modifiedDocuments Document[]             @relation("DocumentModifiedBy")
   emergencyContacts EmergencyContact[]
+  contracts         Contract[]             @relation("UserContracts")
+  managedContracts  Contract[]             @relation("ContractManagedBy")
 
   @@index([resetPasswordToken])
   @@index([isActive])
@@ -566,6 +568,7 @@ model Document {
   user       User? @relation("UserDocuments", fields: [userId], references: [id])
   createdBy  User? @relation("DocumentCreatedBy", fields: [createdById], references: [id])
   modifiedBy User? @relation("DocumentModifiedBy", fields: [modifiedById], references: [id])
+  contracts  Contract[]
 
   @@index([userId, status])
   @@index([userId, type])
@@ -716,4 +719,66 @@ model SignupRequest {
 
   @@index([status])
   @@index([email])
+}
+
+// ============================================================
+// CONTRACT
+// ============================================================
+
+enum ContractType {
+  CDI
+  CDD
+  SIVP
+  STAGE
+  ALTERNANCE
+  FREELANCE
+  AUTRE
+}
+
+enum ContractStatus {
+  ACTIF
+  TERMINE
+  SUSPENDU
+  EN_PROLONGATION
+  EN_ATTENTE_SIGNATURE
+}
+
+model Contract {
+  id                   String         @id @default(cuid())
+  userId               String
+  type                 ContractType
+  status               ContractStatus @default(EN_ATTENTE_SIGNATURE)
+  contractNumber       String?        // Numéro interne du contrat
+  startDate            DateTime
+  endDate              DateTime?      // null = CDI durée indéterminée
+  trialPeriodEnd       DateTime?      // Fin période d'essai
+  weeklyHours          Float?         // Durée hebdo (ex: 35, 40)
+  salaryGrossMonthly   Float?         // Salaire brut mensuel
+  salaryGrossHourly    Float?         // Salaire brut horaire (si applicable)
+  currency             String         @default("TND") // TND, EUR, USD
+  paymentFrequency     String?        // "Mensuel", "Quinzaine"
+  paymentMethod        String?        // "Virement", "Chèque"
+  jobTitle             String         // Poste / Fonction
+  department           String?        // Service / Direction
+  managerId            String?        // Manager responsable (User)
+  conventionCollective String?        // Convention collective applicable
+  location             String?        // Lieu de travail principal
+  remoteAllowed        Boolean        @default(false)
+  remotePercentage     Int?           // % télétravail si applicable
+  notes                String?        // Notes RH internes (non visible user)
+  documentId           String?        // Lien vers Document signé (PDF contrat)
+  createdBy            String?        // User ID du RH qui a créé
+  signedAt             DateTime?      // Date de signature
+  terminatedAt         DateTime?      // Date effective de fin
+  terminationReason    String?        // Motif de rupture
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
+  user     User      @relation("UserContracts", fields: [userId], references: [id], onDelete: Cascade)
+  manager  User?     @relation("ContractManagedBy", fields: [managerId], references: [id])
+  document Document? @relation(fields: [documentId], references: [id])
+
+  @@index([userId])
+  @@index([userId, status])
+  @@index([status])
 }
