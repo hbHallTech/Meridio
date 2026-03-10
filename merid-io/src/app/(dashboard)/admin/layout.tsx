@@ -9,7 +9,14 @@ export default async function AdminLayout({
   const session = await auth();
   const roles = session?.user?.roles ?? [];
 
-  if (!roles.includes("ADMIN") && !roles.includes("SUPER_ADMIN")) {
+  // HR, ADMIN, and SUPER_ADMIN can access admin pages.
+  // Fine-grained route restrictions (e.g. HR only sees /admin/users)
+  // are enforced by the middleware RBAC in auth.config.ts.
+  if (
+    !roles.includes("HR") &&
+    !roles.includes("ADMIN") &&
+    !roles.includes("SUPER_ADMIN")
+  ) {
     console.warn(
       `[RBAC/layout] Admin access denied: user=${session?.user?.id ?? "anonymous"} roles=[${roles}]`
     );
