@@ -308,6 +308,9 @@ model User {
   emergencyContacts EmergencyContact[]
   contracts         Contract[]             @relation("UserContracts")
   managedContracts  Contract[]             @relation("ContractManagedBy")
+  skills            Skill[]
+  objectives        Objective[]            @relation("UserObjectives")
+  assignedObjectives Objective[]           @relation("ObjectivesAssignedBy")
 
   @@index([resetPasswordToken])
   @@index([isActive])
@@ -781,4 +784,70 @@ model Contract {
   @@index([userId])
   @@index([userId, status])
   @@index([status])
+}
+
+// ============================================================
+// SKILLS & OBJECTIVES
+// ============================================================
+
+enum SkillType {
+  TECHNICAL
+  SOFT
+  BEHAVIORAL
+  OTHER
+}
+
+enum SkillLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  EXPERT
+}
+
+enum ObjectiveStatus {
+  IN_PROGRESS
+  ACHIEVED
+  PARTIALLY_ACHIEVED
+  NOT_ACHIEVED
+  CANCELLED
+}
+
+model Skill {
+  id           String     @id @default(cuid())
+  userId       String
+  name         String     // ex: "React", "Leadership", "Communication"
+  type         SkillType
+  selfLevel    SkillLevel? // Auto-évaluation par le collaborateur
+  managerLevel SkillLevel? // Évaluation par le manager
+  description  String?     // Description libre de la compétence
+  evidence     String?     // Lien preuve / certification / commentaire
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, name]) // Un user ne peut pas avoir la même compétence 2x
+  @@index([userId])
+}
+
+model Objective {
+  id             String          @id @default(cuid())
+  userId         String
+  managerId      String          // Manager ou HR qui a assigné l'objectif
+  title          String
+  description    String
+  deadline       DateTime
+  status         ObjectiveStatus @default(IN_PROGRESS)
+  progress       Int?            @default(0) // 0-100 %
+  selfComment    String?         // Commentaire du collaborateur en fin de période
+  managerComment String?         // Commentaire du manager
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  user    User @relation("UserObjectives", fields: [userId], references: [id], onDelete: Cascade)
+  manager User @relation("ObjectivesAssignedBy", fields: [managerId], references: [id])
+
+  @@index([userId])
+  @@index([userId, status])
+  @@index([managerId])
 }
