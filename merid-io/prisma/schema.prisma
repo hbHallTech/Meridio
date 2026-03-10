@@ -21,6 +21,22 @@ enum UserRole {
   SUPER_ADMIN
 }
 
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  PREFER_NOT_TO_SAY
+}
+
+enum MaritalStatus {
+  SINGLE
+  MARRIED
+  DIVORCED
+  WIDOWED
+  PACSED
+  OTHER
+}
+
 enum SignupRequestStatus {
   PENDING
   APPROVED
@@ -34,7 +50,7 @@ enum LeaveStatus {
   APPROVED
   REFUSED
   CANCELLED
-  RETURNED   // Renvoyé en brouillon pour clarification
+  RETURNED // Renvoyé en brouillon pour clarification
 }
 
 enum HalfDay {
@@ -79,20 +95,20 @@ enum DocumentStatus {
 // ============================================================
 
 model Company {
-  id                String   @id @default(cuid())
-  name              String
-  logoUrl           String?
-  websiteUrl        String?
+  id         String  @id @default(cuid())
+  name       String
+  logoUrl    String?
+  websiteUrl String?
 
   // ── Informations enrichies ──
-  legalForm         String?  // SA, SARL, Sàrl, Association, etc.
+  legalForm         String? // SA, SARL, Sàrl, Association, etc.
   contactLastName   String?
   contactFirstName  String?
   address           String?
   addressComplement String?
   postalCode        String?
   city              String?
-  country           String   @default("CH")
+  country           String  @default("CH")
   email             String?
   phone             String?
   mobile            String?
@@ -104,9 +120,9 @@ model Company {
   // ── SMTP Configuration ──
   smtpHost          String?
   smtpPort          Int?
-  smtpSecure        Boolean  @default(false)
+  smtpSecure        Boolean @default(false)
   smtpUser          String?
-  smtpPassEncrypted String?  // AES-256-GCM encrypted
+  smtpPassEncrypted String? // AES-256-GCM encrypted
   smtpFrom          String?
 
   // ── Password Policy ──
@@ -123,44 +139,44 @@ model Company {
   pwdCheckDictionary    Boolean @default(false)
 
   // ── Advanced Settings ──
-  enforce2FA            Boolean @default(false)
-  inactivityTimeoutMin  Int     @default(30)
-  auditRetentionDays    Int     @default(365)
-  trialModeEnabled      Boolean @default(false)
-  csvSeparator          String  @default(",")  // Global CSV export delimiter (, ; | \t)
-  documentsModuleEnabled Boolean @default(false)
-  documentsAiEnabled     Boolean @default(false)
-  documentsNotifyEmail   String?  // Email pour réception de notifications documents
-  documentsWebhookUrl    String?  // URL webhook ERP pour intégration
-  documentsWebhookSecret String?  // Secret HMAC pour signature webhook
+  enforce2FA              Boolean @default(false)
+  inactivityTimeoutMin    Int     @default(30)
+  auditRetentionDays      Int     @default(365)
+  trialModeEnabled        Boolean @default(false)
+  csvSeparator            String  @default(",") // Global CSV export delimiter (, ; | \t)
+  documentsModuleEnabled  Boolean @default(false)
+  documentsAiEnabled      Boolean @default(false)
+  documentsNotifyEmail    String? // Email pour réception de notifications documents
+  documentsWebhookUrl     String? // URL webhook ERP pour intégration
+  documentsWebhookSecret  String? // Secret HMAC pour signature webhook
   documentsWebhookEnabled Boolean @default(false)
 
   // ── IMAP Import Configuration ──
   docsImapHost          String?
-  docsImapPort          Int?     @default(993)
+  docsImapPort          Int?    @default(993)
   docsImapUser          String?
-  docsImapPassEncrypted String?  // AES-256-GCM encrypted
-  docsImapSecure        Boolean  @default(true)
+  docsImapPassEncrypted String? // AES-256-GCM encrypted
+  docsImapSecure        Boolean @default(true)
   emailLogoUrl          String?
   privacyPolicyUrl      String?
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  offices     Office[]
+  offices              Office[]
   notificationSettings CompanyNotificationSetting[]
   documentTemplates    DocumentTemplate[]
 }
 
 model CompanyNotificationSetting {
-  id          String   @id @default(cuid())
-  companyId   String
-  type        String   // "NEW_REQUEST", "APPROVED", "REFUSED", "RETURNED", "REMINDER", "PASSWORD_EXPIRING", "NEW_LOGIN", "ACCOUNT_LOCKED", "PASSWORD_CHANGED", "CLOSURE"
-  enabled     Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(cuid())
+  companyId String
+  type      String // "NEW_REQUEST", "APPROVED", "REFUSED", "RETURNED", "REMINDER", "PASSWORD_EXPIRING", "NEW_LOGIN", "ACCOUNT_LOCKED", "PASSWORD_CHANGED", "CLOSURE"
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  company     Company  @relation(fields: [companyId], references: [id])
+  company Company @relation(fields: [companyId], references: [id])
 
   @@unique([companyId, type])
 }
@@ -168,34 +184,34 @@ model CompanyNotificationSetting {
 model UserNotificationPref {
   id        String   @id @default(cuid())
   userId    String
-  type      String   // Same types as CompanyNotificationSetting
+  type      String // Same types as CompanyNotificationSetting
   enabled   Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user      User     @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 
   @@unique([userId, type])
 }
 
 model Office {
-  id                    String   @id @default(cuid())
-  name                  String   // ex: "Bureau de Genève", "Bureau de Tunis"
-  country               String   // ex: "CH", "TN"
-  city                  String   // ex: "Genève", "Tunis"
-  defaultAnnualLeave    Int      @default(25) // Jours de congé annuel par défaut
-  defaultOfferedDays    Int      @default(0)  // Congés offerts (ex-RTT)
-  minNoticeDays         Int      @default(2)  // Délai minimum pour warning
-  maxCarryOverDays      Int      @default(10) // Max jours reportables
-  carryOverDeadline     String   @default("03-31") // Date limite report (MM-DD)
-  probationMonths       Int      @default(3)  // Période d'essai en mois
-  sickLeaveJustifFromDay Int     @default(2)  // Justificatif maladie à partir de X jours
-  workingDays           String[] @default(["MON", "TUE", "WED", "THU", "FRI"])
-  companyId             String
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  id                     String   @id @default(cuid())
+  name                   String // ex: "Bureau de Genève", "Bureau de Tunis"
+  country                String // ex: "CH", "TN"
+  city                   String // ex: "Genève", "Tunis"
+  defaultAnnualLeave     Int      @default(25) // Jours de congé annuel par défaut
+  defaultOfferedDays     Int      @default(0) // Congés offerts (ex-RTT)
+  minNoticeDays          Int      @default(2) // Délai minimum pour warning
+  maxCarryOverDays       Int      @default(10) // Max jours reportables
+  carryOverDeadline      String   @default("03-31") // Date limite report (MM-DD)
+  probationMonths        Int      @default(3) // Période d'essai en mois
+  sickLeaveJustifFromDay Int      @default(2) // Justificatif maladie à partir de X jours
+  workingDays            String[] @default(["MON", "TUE", "WED", "THU", "FRI"])
+  companyId              String
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
-  company               Company  @relation(fields: [companyId], references: [id])
+  company               Company                @relation(fields: [companyId], references: [id])
   users                 User[]
   teams                 Team[]
   publicHolidays        PublicHoliday[]
@@ -210,52 +226,86 @@ model Office {
 // ============================================================
 
 model User {
-  id                String    @id @default(cuid())
-  email             String    @unique // doit être @halley-technologies.ch
-  passwordHash      String
-  firstName         String
-  lastName          String
-  cin               String?   @unique // Carte d'Identité Nationale (ex: 09815606, TN09815606)
-  cnss              String?   @unique // Numéro CNSS / sécurité sociale (ex: 1753436706)
-  roles             UserRole[]
-  officeId          String
-  teamId            String?
-  hireDate          DateTime
-  profilePictureUrl String?
-  language          String    @default("fr") // "fr" ou "en"
-  isActive          Boolean   @default(true)
-  twoFactorCode     String?
-  twoFactorExpiry   DateTime?
-  twoFactorAttempts Int       @default(0)
-  twoFactorVerified Boolean   @default(false) // Server-side 2FA session flag, reset on login
-  passwordChangedAt DateTime?
-  failedLoginAttempts Int     @default(0)
-  lockedUntil       DateTime?
-  resetPasswordToken String?
-  resetPasswordExpiry DateTime?
-  forcePasswordChange Boolean  @default(false)
-  passwordExpiresAt   DateTime?
-  lastPasswordChangeAt DateTime @default(now())
-  passwordHistory     Json?    // Array of last 3 bcrypt hashes
-  lastLoginDevice     Json?    // { ip, userAgent, lastSeen }
-  theme             String    @default("system") // "light" | "dark" | "system"
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  id                   String     @id @default(cuid())
+  email                String     @unique // doit être @halley-technologies.ch
+  passwordHash         String
+  firstName            String
+  lastName             String
+  cin                  String?    @unique // Carte d'Identité Nationale (ex: 09815606, TN09815606)
+  cnss                 String?    @unique // Numéro CNSS / sécurité sociale (ex: 1753436706)
+  roles                UserRole[]
+  officeId             String
+  teamId               String?
+  hireDate             DateTime
+  profilePictureUrl    String?
+  language             String     @default("fr") // "fr" ou "en"
+  isActive             Boolean    @default(true)
+  twoFactorCode        String?
+  twoFactorExpiry      DateTime?
+  twoFactorAttempts    Int        @default(0)
+  twoFactorVerified    Boolean    @default(false) // Server-side 2FA session flag, reset on login
+  passwordChangedAt    DateTime?
+  failedLoginAttempts  Int        @default(0)
+  lockedUntil          DateTime?
+  resetPasswordToken   String?
+  resetPasswordExpiry  DateTime?
+  forcePasswordChange  Boolean    @default(false)
+  passwordExpiresAt    DateTime?
+  lastPasswordChangeAt DateTime   @default(now())
+  passwordHistory      Json? // Array of last 3 bcrypt hashes
+  lastLoginDevice      Json? // { ip, userAgent, lastSeen }
+  theme                String     @default("system") // "light" | "dark" | "system"
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
 
-  office            Office    @relation(fields: [officeId], references: [id])
-  team              Team?     @relation("TeamMembers", fields: [teamId], references: [id])
-  managedTeam       Team?     @relation("TeamManager")
+  // ── Contacts personnels (éditable par l'utilisateur) ──
+  personalEmail  String?
+  personalPhone  String?
+  personalMobile String?
+
+  // ── Adresse personnelle (éditable par l'utilisateur) ──
+  // TODO: extract to Address model if multiple addresses needed
+  personalAddressStreet  String?
+  personalAddressZip     String?
+  personalAddressCity    String?
+  personalAddressCountry String?
+
+  // ── Identité & naissance (éditable par l'utilisateur, validé par admin) ──
+  birthDate     DateTime?
+  birthCity     String?
+  birthCountry  String?
+  nationality   String?
+  gender        Gender?
+  maritalStatus MaritalStatus?
+
+  // ── Situation familiale ──
+  dependentsCount Int @default(0)
+
+  // ── Professionnel (HR / ADMIN seulement) ──
+  professionalPhone String?
+  internalNumber    String?
+  service           String? // Département: "Direction", "IT", "Finance"
+  jobFunction       String? // Poste: "Responsable d'équipe", "Développeur Senior"
+  arrivalDate       DateTime? // Date effective de prise de poste (peut différer de hireDate = date contrat)
+  departureDate     DateTime? // Date de départ (si quitté l'entreprise)
+  accountingCode    String? // Code comptable pour la paie
+
+  // ── Relations ──
+  office            Office                 @relation(fields: [officeId], references: [id])
+  team              Team?                  @relation("TeamMembers", fields: [teamId], references: [id])
+  managedTeam       Team?                  @relation("TeamManager")
   leaveRequests     LeaveRequest[]
   leaveBalances     LeaveBalance[]
   approvals         ApprovalStep[]
-  delegationsFrom   Delegation[] @relation("DelegationFrom")
-  delegationsTo     Delegation[] @relation("DelegationTo")
+  delegationsFrom   Delegation[]           @relation("DelegationFrom")
+  delegationsTo     Delegation[]           @relation("DelegationTo")
   auditLogs         AuditLog[]
   notifications     Notification[]
   notificationPrefs UserNotificationPref[]
-  documents         Document[]     @relation("UserDocuments")
-  createdDocuments  Document[]     @relation("DocumentCreatedBy")
-  modifiedDocuments Document[]     @relation("DocumentModifiedBy")
+  documents         Document[]             @relation("UserDocuments")
+  createdDocuments  Document[]             @relation("DocumentCreatedBy")
+  modifiedDocuments Document[]             @relation("DocumentModifiedBy")
+  emergencyContacts EmergencyContact[]
 
   @@index([resetPasswordToken])
   @@index([isActive])
@@ -263,31 +313,48 @@ model User {
 }
 
 model Team {
-  id         String   @id @default(cuid())
-  name       String
-  managerId  String   @unique
-  officeId   String
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        String   @id @default(cuid())
+  name      String
+  managerId String   @unique
+  officeId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  manager    User     @relation("TeamManager", fields: [managerId], references: [id])
-  office     Office   @relation(fields: [officeId], references: [id])
-  members    User[]   @relation("TeamMembers")
-  workflows  WorkflowConfig[] @relation("WorkflowTeams")
+  manager   User             @relation("TeamManager", fields: [managerId], references: [id])
+  office    Office           @relation(fields: [officeId], references: [id])
+  members   User[]           @relation("TeamMembers")
+  workflows WorkflowConfig[] @relation("WorkflowTeams")
+}
+
+model EmergencyContact {
+  id           String   @id @default(cuid())
+  userId       String
+  priority     Int      @default(1) // 1 = principal, 2 = secondaire, etc.
+  firstName    String
+  lastName     String
+  relationship String // ex: "Conjoint", "Parent", "Frère/Sœur"
+  phone        String
+  email        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Delegation {
-  id          String    @id @default(cuid())
-  fromUserId  String    // Manager qui délègue
-  toUserId    String    // Utilisateur qui reçoit la délégation
-  startDate   DateTime
-  endDate     DateTime
-  createdBy   String    // "MANAGER" ou "ADMIN"
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
+  id         String   @id @default(cuid())
+  fromUserId String // Manager qui délègue
+  toUserId   String // Utilisateur qui reçoit la délégation
+  startDate  DateTime
+  endDate    DateTime
+  createdBy  String // "MANAGER" ou "ADMIN"
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
 
-  fromUser    User      @relation("DelegationFrom", fields: [fromUserId], references: [id])
-  toUser      User      @relation("DelegationTo", fields: [toUserId], references: [id])
+  fromUser User @relation("DelegationFrom", fields: [fromUserId], references: [id])
+  toUser   User @relation("DelegationTo", fields: [toUserId], references: [id])
 }
 
 // ============================================================
@@ -295,37 +362,37 @@ model Delegation {
 // ============================================================
 
 model LeaveTypeConfig {
-  id                  String   @id @default(cuid())
-  officeId            String
-  code                String   // ex: "ANNUAL", "OFFERED", "SICK", "UNPAID", "MATERNITY", "PATERNITY", "EXCEPTIONAL", "TELEWORK"
-  label_fr            String   // ex: "Congé annuel"
-  label_en            String   // ex: "Annual leave"
-  requiresAttachment  Boolean  @default(false)
-  attachmentFromDay   Int?     // Justificatif à partir de X jours (pour maladie)
-  deductsFromBalance  Boolean  @default(true)
-  balanceType         String?  // "ANNUAL", "OFFERED", null (pour types sans solde)
-  isActive            Boolean  @default(true)
-  color               String   @default("#3B82F6") // Couleur pour le calendrier
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id                 String   @id @default(cuid())
+  officeId           String
+  code               String // ex: "ANNUAL", "OFFERED", "SICK", "UNPAID", "MATERNITY", "PATERNITY", "EXCEPTIONAL", "TELEWORK"
+  label_fr           String // ex: "Congé annuel"
+  label_en           String // ex: "Annual leave"
+  requiresAttachment Boolean  @default(false)
+  attachmentFromDay  Int? // Justificatif à partir de X jours (pour maladie)
+  deductsFromBalance Boolean  @default(true)
+  balanceType        String? // "ANNUAL", "OFFERED", null (pour types sans solde)
+  isActive           Boolean  @default(true)
+  color              String   @default("#3B82F6") // Couleur pour le calendrier
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
-  office              Office   @relation(fields: [officeId], references: [id])
-  leaveRequests       LeaveRequest[]
+  office        Office         @relation(fields: [officeId], references: [id])
+  leaveRequests LeaveRequest[]
 
   @@unique([officeId, code])
 }
 
 model ExceptionalLeaveRule {
-  id         String   @id @default(cuid())
-  officeId   String
-  reason_fr  String   // ex: "Mariage"
-  reason_en  String   // ex: "Wedding"
-  maxDays    Int      // ex: 3
-  isActive   Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        String   @id @default(cuid())
+  officeId  String
+  reason_fr String // ex: "Mariage"
+  reason_en String // ex: "Wedding"
+  maxDays   Int // ex: 3
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  office     Office   @relation(fields: [officeId], references: [id])
+  office Office @relation(fields: [officeId], references: [id])
 }
 
 // ============================================================
@@ -333,27 +400,27 @@ model ExceptionalLeaveRule {
 // ============================================================
 
 model WorkflowConfig {
-  id         String       @id @default(cuid())
-  officeId   String?
-  mode       WorkflowMode @default(SEQUENTIAL)
-  isActive   Boolean      @default(true)
-  createdAt  DateTime     @default(now())
-  updatedAt  DateTime     @updatedAt
+  id        String       @id @default(cuid())
+  officeId  String?
+  mode      WorkflowMode @default(SEQUENTIAL)
+  isActive  Boolean      @default(true)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
 
-  office     Office?      @relation(fields: [officeId], references: [id])
-  steps      WorkflowStep[]
-  teams      Team[]       @relation("WorkflowTeams")
+  office Office?        @relation(fields: [officeId], references: [id])
+  steps  WorkflowStep[]
+  teams  Team[]         @relation("WorkflowTeams")
 }
 
 model WorkflowStep {
   id               String           @id @default(cuid())
   workflowConfigId String
-  stepOrder        Int              // 1, 2, ...
+  stepOrder        Int // 1, 2, ...
   stepType         WorkflowStepType // MANAGER ou HR
   isRequired       Boolean          @default(true)
   createdAt        DateTime         @default(now())
 
-  workflowConfig   WorkflowConfig   @relation(fields: [workflowConfigId], references: [id])
+  workflowConfig WorkflowConfig @relation(fields: [workflowConfigId], references: [id])
 
   @@unique([workflowConfigId, stepOrder])
 }
@@ -363,43 +430,43 @@ model WorkflowStep {
 // ============================================================
 
 model LeaveRequest {
-  id                  String      @id @default(cuid())
-  userId              String
-  leaveTypeConfigId   String
-  startDate           DateTime
-  endDate             DateTime
-  startHalfDay        HalfDay     @default(FULL_DAY)
-  endHalfDay          HalfDay     @default(FULL_DAY)
-  totalDays           Float       // Calculé: nombre de jours ouvrés
-  status              LeaveStatus @default(DRAFT)
-  reason              String?     // Motif (optionnel pour l'employé)
-  exceptionalReason   String?     // Raison du congé exceptionnel
-  attachmentUrls      String[]    // Chemins vers les justificatifs
-  isCompanyClosure    Boolean     @default(false) // Si c'est un congé imposé
-  createdAt           DateTime    @default(now())
-  updatedAt           DateTime    @updatedAt
+  id                String      @id @default(cuid())
+  userId            String
+  leaveTypeConfigId String
+  startDate         DateTime
+  endDate           DateTime
+  startHalfDay      HalfDay     @default(FULL_DAY)
+  endHalfDay        HalfDay     @default(FULL_DAY)
+  totalDays         Float // Calculé: nombre de jours ouvrés
+  status            LeaveStatus @default(DRAFT)
+  reason            String? // Motif (optionnel pour l'employé)
+  exceptionalReason String? // Raison du congé exceptionnel
+  attachmentUrls    String[] // Chemins vers les justificatifs
+  isCompanyClosure  Boolean     @default(false) // Si c'est un congé imposé
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
 
-  user                User        @relation(fields: [userId], references: [id])
-  leaveTypeConfig     LeaveTypeConfig @relation(fields: [leaveTypeConfigId], references: [id])
-  approvalSteps       ApprovalStep[]
+  user            User            @relation(fields: [userId], references: [id])
+  leaveTypeConfig LeaveTypeConfig @relation(fields: [leaveTypeConfigId], references: [id])
+  approvalSteps   ApprovalStep[]
 
   @@index([userId])
   @@index([status])
 }
 
 model ApprovalStep {
-  id              String         @id @default(cuid())
-  leaveRequestId  String
-  approverId      String
-  stepType        WorkflowStepType
-  stepOrder       Int
-  action          ApprovalAction?
-  comment         String?        // Motif obligatoire si REFUSED ou RETURNED
-  decidedAt       DateTime?
-  createdAt       DateTime       @default(now())
+  id             String           @id @default(cuid())
+  leaveRequestId String
+  approverId     String
+  stepType       WorkflowStepType
+  stepOrder      Int
+  action         ApprovalAction?
+  comment        String? // Motif obligatoire si REFUSED ou RETURNED
+  decidedAt      DateTime?
+  createdAt      DateTime         @default(now())
 
-  leaveRequest    LeaveRequest   @relation(fields: [leaveRequestId], references: [id])
-  approver        User           @relation(fields: [approverId], references: [id])
+  leaveRequest LeaveRequest @relation(fields: [leaveRequestId], references: [id])
+  approver     User         @relation(fields: [approverId], references: [id])
 }
 
 // ============================================================
@@ -409,16 +476,16 @@ model ApprovalStep {
 model LeaveBalance {
   id              String   @id @default(cuid())
   userId          String
-  year            Int      // ex: 2026
-  balanceType     String   // "ANNUAL", "OFFERED"
-  totalDays       Float    // Total alloué (prorata inclus)
+  year            Int // ex: 2026
+  balanceType     String // "ANNUAL", "OFFERED"
+  totalDays       Float // Total alloué (prorata inclus)
   usedDays        Float    @default(0)
   pendingDays     Float    @default(0) // Jours en attente de validation
   carriedOverDays Float    @default(0) // Jours reportés de l'année précédente
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  user            User     @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 
   @@unique([userId, year, balanceType])
 }
@@ -436,7 +503,7 @@ model PublicHoliday {
   type      String   @default("PUBLIC") // "PUBLIC", "RELIGIOUS", "NATIONAL"
   createdAt DateTime @default(now())
 
-  office    Office   @relation(fields: [officeId], references: [id])
+  office Office @relation(fields: [officeId], references: [id])
 
   @@unique([officeId, date])
 }
@@ -452,7 +519,7 @@ model CompanyClosure {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  office    Office   @relation(fields: [officeId], references: [id])
+  office Office @relation(fields: [officeId], references: [id])
 }
 
 // ============================================================
@@ -460,19 +527,19 @@ model CompanyClosure {
 // ============================================================
 
 model Notification {
-  id        String   @id @default(cuid())
-  userId    String
-  type      String   // "NEW_REQUEST", "APPROVED", "REFUSED", "RETURNED", "REMINDER", "CLOSURE", "PASSWORD_CHANGED"
-  title_fr  String
-  title_en  String
-  body_fr   String
-  body_en   String
-  data      Json?    // Données supplémentaires (ex: leaveRequestId)
-  isRead    Boolean  @default(false)
-  sentByEmail Boolean @default(false)
-  createdAt DateTime @default(now())
+  id          String   @id @default(cuid())
+  userId      String
+  type        String // "NEW_REQUEST", "APPROVED", "REFUSED", "RETURNED", "REMINDER", "CLOSURE", "PASSWORD_CHANGED"
+  title_fr    String
+  title_en    String
+  body_fr     String
+  body_en     String
+  data        Json? // Données supplémentaires (ex: leaveRequestId)
+  isRead      Boolean  @default(false)
+  sentByEmail Boolean  @default(false)
+  createdAt   DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 }
 
 // ============================================================
@@ -480,23 +547,23 @@ model Notification {
 // ============================================================
 
 model Document {
-  id              String         @id @default(cuid())
-  userId          String?        // null = document non assigné (en attente d'affectation RH)
-  name            String         // ex: "Fiche_Paie_02-2026.pdf"
-  type            DocumentType
-  status          DocumentStatus @default(NOUVEAU)
-  filePath        String         // Vercel Blob URL (private)
-  fileSize        Int            @default(0)   // bytes
-  mimeType        String         @default("application/pdf")
-  metadata        Json?          // ex: { "mois": "02", "annee": "2026" }
-  createdById     String?        // user_id RH/admin ou null pour SYSTEM
-  modifiedById    String?
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  id           String         @id @default(cuid())
+  userId       String? // null = document non assigné (en attente d'affectation RH)
+  name         String // ex: "Fiche_Paie_02-2026.pdf"
+  type         DocumentType
+  status       DocumentStatus @default(NOUVEAU)
+  filePath     String // Vercel Blob URL (private)
+  fileSize     Int            @default(0) // bytes
+  mimeType     String         @default("application/pdf")
+  metadata     Json? // ex: { "mois": "02", "annee": "2026" }
+  createdById  String? // user_id RH/admin ou null pour SYSTEM
+  modifiedById String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
 
-  user            User?          @relation("UserDocuments", fields: [userId], references: [id])
-  createdBy       User?          @relation("DocumentCreatedBy", fields: [createdById], references: [id])
-  modifiedBy      User?          @relation("DocumentModifiedBy", fields: [modifiedById], references: [id])
+  user       User? @relation("UserDocuments", fields: [userId], references: [id])
+  createdBy  User? @relation("DocumentCreatedBy", fields: [createdById], references: [id])
+  modifiedBy User? @relation("DocumentModifiedBy", fields: [modifiedById], references: [id])
 
   @@index([userId, status])
   @@index([userId, type])
@@ -508,19 +575,19 @@ model Document {
 // ============================================================
 
 model DocumentTemplate {
-  id          String       @id @default(cuid())
-  companyId   String
-  name        String       // ex: "Fiche de paie standard"
-  type        DocumentType // Lié au type de document
-  subject     String?      // Sujet (pour emails associés)
-  content     String       // Contenu HTML/Markdown du template
-  variables   String[]     // Variables disponibles: ["employee_name", "month", "year", ...]
-  isActive    Boolean      @default(true)
-  isDefault   Boolean      @default(false) // Template par défaut pour ce type
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id        String       @id @default(cuid())
+  companyId String
+  name      String // ex: "Fiche de paie standard"
+  type      DocumentType // Lié au type de document
+  subject   String? // Sujet (pour emails associés)
+  content   String // Contenu HTML/Markdown du template
+  variables String[] // Variables disponibles: ["employee_name", "month", "year", ...]
+  isActive  Boolean      @default(true)
+  isDefault Boolean      @default(false) // Template par défaut pour ce type
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
 
-  company     Company      @relation(fields: [companyId], references: [id])
+  company Company @relation(fields: [companyId], references: [id])
 
   @@unique([companyId, name])
   @@index([companyId, type])
@@ -533,16 +600,16 @@ model DocumentTemplate {
 model AuditLog {
   id         String   @id @default(cuid())
   userId     String?
-  action     String   // ex: "LOGIN_SUCCESS", "CREATE_LEAVE", "RBAC_DENIED"
+  action     String // ex: "LOGIN_SUCCESS", "CREATE_LEAVE", "RBAC_DENIED"
   success    Boolean  @default(true)
-  entityType String?  // ex: "User", "LeaveRequest", "Office"
+  entityType String? // ex: "User", "LeaveRequest", "Office"
   entityId   String?
   oldValue   Json?
   newValue   Json?
   ipAddress  String?
   createdAt  DateTime @default(now())
 
-  user       User?    @relation(fields: [userId], references: [id])
+  user User? @relation(fields: [userId], references: [id])
 
   @@index([createdAt])
   @@index([userId])
@@ -558,7 +625,7 @@ enum EmailStatus {
   SENDING
   SENT
   FAILED
-  DEAD          // Exhausted all retries
+  DEAD // Exhausted all retries
 }
 
 enum EmailType {
@@ -582,12 +649,12 @@ model EmailLog {
   type        EmailType
   to          String
   subject     String
-  payload     Json        // Full email data (html, context) for retry
+  payload     Json // Full email data (html, context) for retry
   status      EmailStatus @default(QUEUED)
   attempts    Int         @default(0)
   maxAttempts Int         @default(3)
   lastError   String?
-  nextRetryAt DateTime?   // Exponential backoff scheduling
+  nextRetryAt DateTime? // Exponential backoff scheduling
   sentAt      DateTime?
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
@@ -608,42 +675,42 @@ model EmailLog {
 // ============================================================
 
 model SignupRequest {
-  id              String              @id @default(cuid())
-  status          SignupRequestStatus  @default(PENDING)
+  id     String              @id @default(cuid())
+  status SignupRequestStatus @default(PENDING)
 
   // Contact
-  email           String
-  phone           String?
-  firstName       String
-  lastName        String?
-  jobTitle        String?
+  email     String
+  phone     String?
+  firstName String
+  lastName  String?
+  jobTitle  String?
 
   // Company
-  companyName     String
-  activityDomain  String?
-  website         String?
-  employeeCount   String?
+  companyName    String
+  activityDomain String?
+  website        String?
+  employeeCount  String?
 
   // Organization
-  orgName         String?
-  street          String?
-  postalCode      String?
-  city            String?
-  country         String?
-  orgPhone        String?
+  orgName    String?
+  street     String?
+  postalCode String?
+  city       String?
+  country    String?
+  orgPhone   String?
 
   // Technical
   aiNeeds         String?
   subsidiaryCount String?
 
   // Admin processing
-  reviewedById    String?
-  reviewedAt      DateTime?
-  reviewNotes     String?
-  provisionedCompanyId String?  // ID of the company created upon approval
+  reviewedById         String?
+  reviewedAt           DateTime?
+  reviewNotes          String?
+  provisionedCompanyId String? // ID of the company created upon approval
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([status])
   @@index([email])

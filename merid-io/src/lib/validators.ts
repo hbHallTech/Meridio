@@ -186,6 +186,48 @@ export const templateUpdateSchema = z.object({
   isDefault: z.boolean().optional(),
 });
 
+// ─── User Personal Info (self-service) ───
+
+export const userPersonalSchema = z.object({
+  personalEmail: z.string().email("Adresse email invalide").optional().nullable().or(z.literal("")),
+  personalPhone: z.string().max(20).optional().nullable().or(z.literal("")),
+  personalMobile: z.string().max(20).optional().nullable().or(z.literal("")),
+  personalAddressStreet: z.string().max(255).optional().nullable().or(z.literal("")),
+  personalAddressZip: z.string().max(20).optional().nullable().or(z.literal("")),
+  personalAddressCity: z.string().max(100).optional().nullable().or(z.literal("")),
+  personalAddressCountry: z.string().max(100).optional().nullable().or(z.literal("")),
+  birthDate: z.string().optional().nullable().or(z.literal("")),
+  birthCity: z.string().max(100).optional().nullable().or(z.literal("")),
+  birthCountry: z.string().max(100).optional().nullable().or(z.literal("")),
+  nationality: z.string().max(100).optional().nullable().or(z.literal("")),
+  gender: z.enum(["MALE", "FEMALE", "OTHER", "PREFER_NOT_TO_SAY"]).optional().nullable(),
+  maritalStatus: z.enum(["SINGLE", "MARRIED", "DIVORCED", "WIDOWED", "PACSED", "OTHER"]).optional().nullable(),
+  dependentsCount: z.number().int().min(0).max(50).optional(),
+});
+
+// ─── User Professional Info (HR/ADMIN only) ───
+
+export const userProfessionalSchema = z.object({
+  professionalPhone: z.string().max(20).optional().nullable().or(z.literal("")),
+  internalNumber: z.string().max(50).optional().nullable().or(z.literal("")),
+  service: z.string().max(100).optional().nullable().or(z.literal("")),
+  jobFunction: z.string().max(100).optional().nullable().or(z.literal("")),
+  arrivalDate: z.string().optional().nullable().or(z.literal("")),
+  departureDate: z.string().optional().nullable().or(z.literal("")),
+  accountingCode: z.string().max(50).optional().nullable().or(z.literal("")),
+});
+
+// ─── Emergency Contact ───
+
+export const emergencyContactSchema = z.object({
+  priority: z.number().int().min(1).max(10).optional(),
+  firstName: z.string().min(1, "Le prénom est requis"),
+  lastName: z.string().min(1, "Le nom est requis"),
+  relationship: z.string().min(1, "La relation est requise"),
+  phone: z.string().min(1, "Le téléphone est requis").max(20),
+  email: z.string().email("Adresse email invalide").optional().or(z.literal("")),
+});
+
 export type LoginInput = z.infer<typeof loginSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
@@ -203,3 +245,6 @@ export type DocumentUpdateInput = z.infer<typeof documentUpdateSchema>;
 export type DocumentListQuery = z.infer<typeof documentListQuerySchema>;
 export type TemplateCreateInput = z.infer<typeof templateCreateSchema>;
 export type TemplateUpdateInput = z.infer<typeof templateUpdateSchema>;
+export type UserPersonalInput = z.infer<typeof userPersonalSchema>;
+export type UserProfessionalInput = z.infer<typeof userProfessionalSchema>;
+export type EmergencyContactInput = z.infer<typeof emergencyContactSchema>;

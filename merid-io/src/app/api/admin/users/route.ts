@@ -30,6 +30,14 @@ export async function GET() {
       createdAt: true,
       office: { select: { id: true, name: true } },
       team: { select: { id: true, name: true } },
+      // Professional fields
+      service: true,
+      jobFunction: true,
+      professionalPhone: true,
+      internalNumber: true,
+      arrivalDate: true,
+      departureDate: true,
+      accountingCode: true,
     },
     orderBy: { lastName: "asc" },
   });
@@ -158,6 +166,14 @@ export async function PATCH(request: Request) {
       sendNotification,
       cin,
       cnss,
+      // Professional fields
+      professionalPhone,
+      internalNumber,
+      service,
+      jobFunction,
+      arrivalDate,
+      departureDate,
+      accountingCode,
     } = body;
 
     if (!id) {
@@ -188,6 +204,14 @@ export async function PATCH(request: Request) {
     if (forcePasswordChange !== undefined) updateData.forcePasswordChange = forcePasswordChange;
     if (cin !== undefined) updateData.cin = cin || null;
     if (cnss !== undefined) updateData.cnss = cnss || null;
+    // Professional fields
+    if (professionalPhone !== undefined) updateData.professionalPhone = professionalPhone || null;
+    if (internalNumber !== undefined) updateData.internalNumber = internalNumber || null;
+    if (service !== undefined) updateData.service = service || null;
+    if (jobFunction !== undefined) updateData.jobFunction = jobFunction || null;
+    if (arrivalDate !== undefined) updateData.arrivalDate = arrivalDate ? new Date(arrivalDate) : null;
+    if (departureDate !== undefined) updateData.departureDate = departureDate ? new Date(departureDate) : null;
+    if (accountingCode !== undefined) updateData.accountingCode = accountingCode || null;
 
     let passwordChanged = false;
     if (password && password.trim().length > 0) {
@@ -235,6 +259,13 @@ export async function PATCH(request: Request) {
         createdAt: true,
         office: { select: { id: true, name: true } },
         team: { select: { id: true, name: true } },
+        service: true,
+        jobFunction: true,
+        professionalPhone: true,
+        internalNumber: true,
+        arrivalDate: true,
+        departureDate: true,
+        accountingCode: true,
       },
     });
 
