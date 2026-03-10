@@ -260,3 +260,69 @@ export type TemplateUpdateInput = z.infer<typeof templateUpdateSchema>;
 export type UserPersonalInput = z.infer<typeof userPersonalSchema>;
 export type UserProfessionalInput = z.infer<typeof userProfessionalSchema>;
 export type EmergencyContactInput = z.infer<typeof emergencyContactSchema>;
+
+// ─── Contract (HR/Admin only) ───
+
+const CONTRACT_TYPES = ["CDI", "CDD", "SIVP", "STAGE", "ALTERNANCE", "FREELANCE", "AUTRE"] as const;
+const CONTRACT_STATUSES = ["ACTIF", "TERMINE", "SUSPENDU", "EN_PROLONGATION", "EN_ATTENTE_SIGNATURE"] as const;
+
+export const contractCreateSchema = z
+  .object({
+    type: z.enum(CONTRACT_TYPES, { message: "Le type de contrat est requis" }),
+    status: z.enum(CONTRACT_STATUSES).optional(),
+    contractNumber: z.string().max(50).optional().nullable(),
+    startDate: z.string().min(1, "La date de début est requise"), // ISO string
+    endDate: z.string().optional().nullable(),
+    trialPeriodEnd: z.string().optional().nullable(),
+    weeklyHours: z.number().min(0).max(168).optional().nullable(),
+    salaryGrossMonthly: z.number().min(0, "Le salaire doit être positif").optional().nullable(),
+    salaryGrossHourly: z.number().min(0).optional().nullable(),
+    currency: z.string().length(3).default("TND"),
+    paymentFrequency: z.string().max(50).optional().nullable(),
+    paymentMethod: z.string().max(50).optional().nullable(),
+    jobTitle: z.string().min(1, "Le poste est requis").max(200),
+    department: z.string().max(200).optional().nullable(),
+    managerId: z.string().optional().nullable(),
+    conventionCollective: z.string().max(200).optional().nullable(),
+    location: z.string().max(200).optional().nullable(),
+    remoteAllowed: z.boolean().default(false),
+    remotePercentage: z.number().int().min(0).max(100).optional().nullable(),
+    notes: z.string().max(2000).optional().nullable(),
+    documentId: z.string().optional().nullable(),
+    signedAt: z.string().optional().nullable(),
+  })
+  .refine(
+    (data) => {
+      // CDD must have an endDate
+      if (data.type === "CDD" && !data.endDate) return false;
+      return true;
+    },
+    { message: "Un CDD doit avoir une date de fin", path: ["endDate"] }
+  )
+  .refine(
+    (data) => {
+      // endDate must be after startDate
+      if (data.endDate && data.startDate) {
+        return new Date(data.endDate) > new Date(data.startDate);
+      }
+      return true;
+    },
+    { message: "La date de fin doit être postérieure à la date de début", path: ["endDate"] }
+  )
+  .refine(
+    (data) => {
+      // trialPeriodEnd must be after startDate and before/equal endDate
+      if (data.trialPeriodEnd && data.startDate) {
+        const trial = new Date(data.trialPeriodEnd);
+        if (trial <= new Date(data.startDate)) return false;
+        if (data.endDate && trial > new Date(data.endDate)) return false;
+      }
+      return true;
+    },
+    { message: "La fin de période d'essai doit être entre le début et la fin du contrat", path: ["trialPeriodEnd"] }
+  );
+
+export const contractUpdateSchema = contractCreateSchema;
+
+export type ContractCreateInput = z.infer<typeof contractCreateSchema>;
+export type ContractUpdateInput = z.infer<typeof contractUpdateSchema>;
