@@ -326,3 +326,58 @@ export const contractUpdateSchema = contractCreateSchema;
 
 export type ContractCreateInput = z.infer<typeof contractCreateSchema>;
 export type ContractUpdateInput = z.infer<typeof contractUpdateSchema>;
+
+// ─── Skills ───
+
+const SKILL_TYPES = ["TECHNICAL", "SOFT", "BEHAVIORAL", "OTHER"] as const;
+const SKILL_LEVELS = ["BEGINNER", "INTERMEDIATE", "ADVANCED", "EXPERT"] as const;
+
+export const skillCreateSchema = z.object({
+  name: z.string().min(1, "Le nom est requis").max(100),
+  type: z.enum(SKILL_TYPES, { message: "Type de compétence invalide" }),
+  selfLevel: z.enum(SKILL_LEVELS).optional().nullable(),
+  description: z.string().max(500).optional().nullable().or(z.literal("")),
+  evidence: z.string().max(500).optional().nullable().or(z.literal("")),
+});
+
+export const skillSelfUpdateSchema = z.object({
+  selfLevel: z.enum(SKILL_LEVELS, { message: "Niveau invalide" }),
+  evidence: z.string().max(500).optional().nullable().or(z.literal("")),
+});
+
+export const skillManagerUpdateSchema = z.object({
+  managerLevel: z.enum(SKILL_LEVELS, { message: "Niveau invalide" }),
+});
+
+export type SkillCreateInput = z.infer<typeof skillCreateSchema>;
+export type SkillSelfUpdateInput = z.infer<typeof skillSelfUpdateSchema>;
+export type SkillManagerUpdateInput = z.infer<typeof skillManagerUpdateSchema>;
+
+// ─── Objectives ───
+
+const OBJECTIVE_STATUSES = ["IN_PROGRESS", "ACHIEVED", "PARTIALLY_ACHIEVED", "NOT_ACHIEVED", "CANCELLED"] as const;
+
+export const objectiveCreateSchema = z.object({
+  title: z.string().min(1, "Le titre est requis").max(200),
+  description: z.string().min(1, "La description est requise").max(2000),
+  deadline: z.string().min(1, "La date limite est requise"),
+  status: z.enum(OBJECTIVE_STATUSES).optional(),
+  progress: z.number().int().min(0).max(100).optional().nullable(),
+});
+
+export const objectiveManagerUpdateSchema = z.object({
+  title: z.string().min(1).max(200).optional(),
+  description: z.string().min(1).max(2000).optional(),
+  deadline: z.string().optional(),
+  status: z.enum(OBJECTIVE_STATUSES).optional(),
+  progress: z.number().int().min(0).max(100).optional().nullable(),
+  managerComment: z.string().max(2000).optional().nullable().or(z.literal("")),
+});
+
+export const objectiveSelfCommentSchema = z.object({
+  selfComment: z.string().max(2000, "Commentaire trop long"),
+});
+
+export type ObjectiveCreateInput = z.infer<typeof objectiveCreateSchema>;
+export type ObjectiveManagerUpdateInput = z.infer<typeof objectiveManagerUpdateSchema>;
+export type ObjectiveSelfCommentInput = z.infer<typeof objectiveSelfCommentSchema>;

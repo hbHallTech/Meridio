@@ -9,9 +9,13 @@ import {
   changePasswordSchema,
   userPersonalSchema,
   emergencyContactSchema,
+  skillCreateSchema,
+  skillSelfUpdateSchema,
   type ChangePasswordInput,
   type UserPersonalInput,
   type EmergencyContactInput,
+  type SkillCreateInput,
+  type SkillSelfUpdateInput,
 } from "@/lib/validators";
 import { useToast } from "@/components/ui/toast";
 import { useTheme } from "next-themes";
@@ -48,6 +52,8 @@ import {
   Pencil,
   Trash2,
   AlertTriangle,
+  Target,
+  Star,
 } from "lucide-react";
 import { Dialog, ConfirmDialog } from "@/components/ui/dialog";
 
@@ -168,12 +174,13 @@ const MARITAL_LABELS: Record<string, { fr: string; en: string }> = {
   OTHER: { fr: "Autre", en: "Other" },
 };
 
-type TabId = "personnel" | "professionnel" | "contrat";
+type TabId = "personnel" | "professionnel" | "contrat" | "competences";
 
 const TABS: { id: TabId; fr: string; en: string; icon: typeof User }[] = [
   { id: "personnel", fr: "Personnel", en: "Personal", icon: User },
   { id: "professionnel", fr: "Professionnel", en: "Professional", icon: Briefcase },
   { id: "contrat", fr: "Contrat", en: "Contract", icon: FileText },
+  { id: "competences", fr: "Compétences", en: "Skills & Goals", icon: Target },
 ];
 
 // ─── Password strength checker ───
@@ -649,6 +656,10 @@ export default function ProfilePage() {
 
           {activeTab === "contrat" && (
             <ContratTab profile={profile} lang={lang} />
+          )}
+
+          {activeTab === "competences" && (
+            <CompetencesTab lang={lang} />
           )}
         </div>
       </div>
@@ -1591,6 +1602,580 @@ function ProfessionnelTab({ profile, lang }: { profile: UserProfile; lang: strin
           value={profile.team?.name ?? (lang === "en" ? "No team" : "Aucune équipe")}
         />
       </div>
+    </div>
+  );
+}
+
+// ─── Compétences & Objectifs Tab ───
+
+interface SkillData {
+  id: string;
+  name: string;
+  type: string;
+  selfLevel: string | null;
+  managerLevel: string | null;
+  description: string | null;
+  evidence: string | null;
+  updatedAt: string;
+}
+
+interface ObjectiveData {
+  id: string;
+  title: string;
+  description: string;
+  deadline: string;
+  status: string;
+  progress: number | null;
+  selfComment: string | null;
+  managerComment: string | null;
+  createdAt: string;
+  manager: { id: string; firstName: string; lastName: string } | null;
+}
+
+const SKILL_TYPE_LABELS: Record<string, { fr: string; en: string; color: string }> = {
+  TECHNICAL: { fr: "Technique", en: "Technical", color: "bg-blue-100 text-blue-700" },
+  SOFT: { fr: "Soft skill", en: "Soft skill", color: "bg-green-100 text-green-700" },
+  BEHAVIORAL: { fr: "Comportemental", en: "Behavioral", color: "bg-purple-100 text-purple-700" },
+  OTHER: { fr: "Autre", en: "Other", color: "bg-gray-100 text-gray-600" },
+};
+
+const SKILL_LEVEL_LABELS: Record<string, { fr: string; en: string; order: number }> = {
+  BEGINNER: { fr: "Débutant", en: "Beginner", order: 1 },
+  INTERMEDIATE: { fr: "Intermédiaire", en: "Intermediate", order: 2 },
+  ADVANCED: { fr: "Avancé", en: "Advanced", order: 3 },
+  EXPERT: { fr: "Expert", en: "Expert", order: 4 },
+};
+
+const OBJECTIVE_STATUS_LABELS: Record<string, { fr: string; en: string; color: string }> = {
+  IN_PROGRESS: { fr: "En cours", en: "In progress", color: "bg-blue-100 text-blue-700" },
+  ACHIEVED: { fr: "Atteint", en: "Achieved", color: "bg-green-100 text-green-700" },
+  PARTIALLY_ACHIEVED: { fr: "Partiellement atteint", en: "Partially achieved", color: "bg-amber-100 text-amber-700" },
+  NOT_ACHIEVED: { fr: "Non atteint", en: "Not achieved", color: "bg-red-100 text-red-700" },
+  CANCELLED: { fr: "Annulé", en: "Cancelled", color: "bg-gray-100 text-gray-500" },
+};
+
+const SKILL_TYPE_OPTIONS = ["TECHNICAL", "SOFT", "BEHAVIORAL", "OTHER"] as const;
+const SKILL_LEVEL_OPTIONS = ["BEGINNER", "INTERMEDIATE", "ADVANCED", "EXPERT"] as const;
+
+function CompetencesTab({ lang }: { lang: string }) {
+  const { addToast } = useToast();
+
+  // ─── Skills state ───
+  const [skills, setSkills] = useState<SkillData[]>([]);
+  const [skillsLoading, setSkillsLoading] = useState(true);
+  const [skillDialogOpen, setSkillDialogOpen] = useState(false);
+  const [editingSkill, setEditingSkill] = useState<SkillData | null>(null);
+  const [skillSubmitting, setSkillSubmitting] = useState(false);
+
+  // ─── Objectives state ───
+  const [objectives, setObjectives] = useState<ObjectiveData[]>([]);
+  const [objectivesLoading, setObjectivesLoading] = useState(true);
+  const [objectiveStats, setObjectiveStats] = useState<{
+    total: number; achieved: number; inProgress: number; achievementRate: number | null;
+  } | null>(null);
+  const [commentingId, setCommentingId] = useState<string | null>(null);
+  const [commentText, setCommentText] = useState("");
+  const [commentSubmitting, setCommentSubmitting] = useState(false);
+
+  const skillForm = useForm<SkillCreateInput>({
+    resolver: zodResolver(skillCreateSchema),
+    defaultValues: { name: "", type: "TECHNICAL", selfLevel: undefined, description: "", evidence: "" },
+  });
+
+  const selfUpdateForm = useForm<SkillSelfUpdateInput>({
+    resolver: zodResolver(skillSelfUpdateSchema),
+  });
+
+  // ─── Fetch data ───
+  const fetchSkills = useCallback(async () => {
+    try {
+      const res = await fetch("/api/profile/skills", { cache: "no-store" });
+      if (res.ok) setSkills(await res.json());
+    } catch { /* silent */ } finally { setSkillsLoading(false); }
+  }, []);
+
+  const fetchObjectives = useCallback(async () => {
+    try {
+      const res = await fetch("/api/profile/objectives", { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        setObjectives(data.objectives);
+        setObjectiveStats(data.stats);
+      }
+    } catch { /* silent */ } finally { setObjectivesLoading(false); }
+  }, []);
+
+  useEffect(() => { fetchSkills(); fetchObjectives(); }, [fetchSkills, fetchObjectives]);
+
+  // ─── Skill handlers ───
+  const openAddSkill = () => {
+    setEditingSkill(null);
+    skillForm.reset({ name: "", type: "TECHNICAL", selfLevel: undefined, description: "", evidence: "" });
+    setSkillDialogOpen(true);
+  };
+
+  const openEditSelfLevel = (skill: SkillData) => {
+    setEditingSkill(skill);
+    selfUpdateForm.reset({
+      selfLevel: (skill.selfLevel as "BEGINNER" | "INTERMEDIATE" | "ADVANCED" | "EXPERT") ?? "BEGINNER",
+      evidence: skill.evidence ?? "",
+    });
+    setSkillDialogOpen(true);
+  };
+
+  const handleSkillCreate = async (values: SkillCreateInput) => {
+    setSkillSubmitting(true);
+    try {
+      const res = await fetch("/api/profile/skills", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(values),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        addToast({ type: "error", title: lang === "en" ? "Error" : "Erreur", message: err.error });
+        return;
+      }
+      const created = await res.json();
+      setSkills((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+      setSkillDialogOpen(false);
+      addToast({ type: "success", title: lang === "en" ? "Skill added" : "Compétence ajoutée" });
+    } catch {
+      addToast({ type: "error", title: lang === "en" ? "Error" : "Erreur" });
+    } finally { setSkillSubmitting(false); }
+  };
+
+  const handleSelfLevelUpdate = async (values: SkillSelfUpdateInput) => {
+    if (!editingSkill) return;
+    setSkillSubmitting(true);
+    try {
+      const res = await fetch(`/api/profile/skills/${editingSkill.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(values),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        addToast({ type: "error", title: lang === "en" ? "Error" : "Erreur", message: err.error });
+        return;
+      }
+      const updated = await res.json();
+      setSkills((prev) => prev.map((s) => (s.id === updated.id ? { ...s, ...updated } : s)));
+      setSkillDialogOpen(false);
+      addToast({ type: "success", title: lang === "en" ? "Updated" : "Mis à jour" });
+    } catch {
+      addToast({ type: "error", title: lang === "en" ? "Error" : "Erreur" });
+    } finally { setSkillSubmitting(false); }
+  };
+
+  const handleDeleteSkill = async (skillId: string) => {
+    try {
+      const res = await fetch(`/api/profile/skills/${skillId}`, { method: "DELETE" });
+      if (res.ok) {
+        setSkills((prev) => prev.filter((s) => s.id !== skillId));
+        addToast({ type: "success", title: lang === "en" ? "Skill removed" : "Compétence supprimée" });
+      }
+    } catch {
+      addToast({ type: "error", title: lang === "en" ? "Error" : "Erreur" });
+    }
+  };
+
+  // ─── Objective comment handler ───
+  const handleSelfComment = async (objectiveId: string) => {
+    setCommentSubmitting(true);
+    try {
+      const res = await fetch(`/api/profile/objectives/${objectiveId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ selfComment: commentText }),
+      });
+      if (res.ok) {
+        setObjectives((prev) => prev.map((o) => (o.id === objectiveId ? { ...o, selfComment: commentText } : o)));
+        setCommentingId(null);
+        setCommentText("");
+        addToast({ type: "success", title: lang === "en" ? "Comment saved" : "Commentaire enregistré" });
+      }
+    } catch {
+      addToast({ type: "error", title: lang === "en" ? "Error" : "Erreur" });
+    } finally { setCommentSubmitting(false); }
+  };
+
+  // ─── Level comparison helper ───
+  const renderLevelComparison = (selfLevel: string | null, managerLevel: string | null) => {
+    const selfLabel = selfLevel ? (lang === "en" ? SKILL_LEVEL_LABELS[selfLevel]?.en : SKILL_LEVEL_LABELS[selfLevel]?.fr) : null;
+    const mgrLabel = managerLevel ? (lang === "en" ? SKILL_LEVEL_LABELS[managerLevel]?.en : SKILL_LEVEL_LABELS[managerLevel]?.fr) : null;
+    const mismatch = selfLevel && managerLevel && selfLevel !== managerLevel;
+
+    return (
+      <div className="flex items-center gap-2 text-xs">
+        {selfLabel && (
+          <span className="rounded bg-blue-50 px-1.5 py-0.5 text-blue-700">
+            {lang === "en" ? "Self" : "Auto"}: {selfLabel}
+          </span>
+        )}
+        {mgrLabel && (
+          <span className={`rounded px-1.5 py-0.5 ${mismatch ? "bg-amber-50 text-amber-700" : "bg-green-50 text-green-700"}`}>
+            {lang === "en" ? "Mgr" : "Mgr"}: {mgrLabel}
+          </span>
+        )}
+        {!selfLabel && !mgrLabel && (
+          <span className="text-gray-400">{lang === "en" ? "Not assessed" : "Non évalué"}</span>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-8">
+      {/* ═══ SKILLS SECTION ═══ */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Star className="h-5 w-5 text-gray-500" />
+            <h3 className="text-base font-semibold text-gray-900">
+              {lang === "en" ? "Skills" : "Compétences"}
+            </h3>
+            <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">
+              {skills.length}
+            </span>
+          </div>
+          <button
+            onClick={openAddSkill}
+            className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            {lang === "en" ? "Add skill" : "Ajouter"}
+          </button>
+        </div>
+
+        <p className="text-xs text-gray-400">
+          {lang === "en"
+            ? "Self-assess your skills. Your manager can also provide their evaluation."
+            : "Auto-évaluez vos compétences. Votre manager peut également fournir son évaluation."}
+        </p>
+
+        {skillsLoading ? (
+          <div className="flex justify-center py-6">
+            <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+          </div>
+        ) : skills.length === 0 ? (
+          <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+            <Star className="h-4 w-4 text-gray-400" />
+            <p className="text-sm text-gray-500">
+              {lang === "en" ? "No skills added yet. Start by adding your first skill." : "Aucune compétence ajoutée. Commencez par ajouter vos compétences."}
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {skills.map((skill) => (
+              <div
+                key={skill.id}
+                className="group relative rounded-lg border border-gray-100 bg-gray-50 p-3 transition-colors hover:bg-gray-100"
+              >
+                <div className="mb-2 flex items-start justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{skill.name}</p>
+                    <span className={`mt-0.5 inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${SKILL_TYPE_LABELS[skill.type]?.color ?? "bg-gray-100"}`}>
+                      {lang === "en" ? SKILL_TYPE_LABELS[skill.type]?.en : SKILL_TYPE_LABELS[skill.type]?.fr}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                    <button
+                      onClick={() => openEditSelfLevel(skill)}
+                      className="rounded p-1 text-gray-400 hover:bg-white hover:text-[#1B3A5C]"
+                      title={lang === "en" ? "Self-assess" : "Auto-évaluer"}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteSkill(skill.id)}
+                      className="rounded p-1 text-gray-400 hover:bg-white hover:text-red-600"
+                      title={lang === "en" ? "Remove" : "Supprimer"}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+                {renderLevelComparison(skill.selfLevel, skill.managerLevel)}
+                {skill.description && (
+                  <p className="mt-1.5 text-xs text-gray-500 line-clamp-2">{skill.description}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ═══ OBJECTIVES SECTION ═══ */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Target className="h-5 w-5 text-gray-500" />
+            <h3 className="text-base font-semibold text-gray-900">
+              {lang === "en" ? "Objectives" : "Objectifs"}
+            </h3>
+            {objectiveStats && objectiveStats.total > 0 && (
+              <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">
+                {objectiveStats.achievementRate != null
+                  ? `${objectiveStats.achievementRate}% ${lang === "en" ? "achieved" : "atteint"}`
+                  : `${objectiveStats.inProgress} ${lang === "en" ? "in progress" : "en cours"}`}
+              </span>
+            )}
+          </div>
+          <span className="rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-500">
+            {lang === "en" ? "Assigned by manager" : "Assigné par le manager"}
+          </span>
+        </div>
+
+        <p className="text-xs text-gray-400">
+          {lang === "en"
+            ? "Objectives are assigned by your manager. You can add a self-assessment comment."
+            : "Les objectifs sont assignés par votre manager. Vous pouvez ajouter un commentaire d'auto-évaluation."}
+        </p>
+
+        {objectivesLoading ? (
+          <div className="flex justify-center py-6">
+            <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+          </div>
+        ) : objectives.length === 0 ? (
+          <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+            <Target className="h-4 w-4 text-gray-400" />
+            <p className="text-sm text-gray-500">
+              {lang === "en" ? "No objectives assigned yet." : "Aucun objectif assigné pour le moment."}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {objectives.filter((o) => o.status !== "CANCELLED").map((obj) => (
+              <div key={obj.id} className="rounded-lg border border-gray-100 bg-gray-50 p-4">
+                <div className="mb-2 flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-gray-900">{obj.title}</p>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${OBJECTIVE_STATUS_LABELS[obj.status]?.color ?? "bg-gray-100"}`}>
+                        {lang === "en" ? OBJECTIVE_STATUS_LABELS[obj.status]?.en : OBJECTIVE_STATUS_LABELS[obj.status]?.fr}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-gray-500 line-clamp-2">{obj.description}</p>
+                  </div>
+                </div>
+
+                {/* Progress bar */}
+                {obj.progress != null && (
+                  <div className="mb-2">
+                    <div className="flex items-center justify-between text-xs text-gray-500">
+                      <span>{lang === "en" ? "Progress" : "Progression"}</span>
+                      <span>{obj.progress}%</span>
+                    </div>
+                    <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-gray-200">
+                      <div
+                        className={`h-full rounded-full transition-all ${obj.progress >= 100 ? "bg-green-500" : obj.progress >= 50 ? "bg-blue-500" : "bg-amber-500"}`}
+                        style={{ width: `${Math.min(obj.progress, 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Metadata */}
+                <div className="flex flex-wrap items-center gap-3 text-xs text-gray-400">
+                  <span>
+                    {lang === "en" ? "Deadline" : "Échéance"}: {formatDate(obj.deadline, lang)}
+                  </span>
+                  {obj.manager && (
+                    <span>
+                      {lang === "en" ? "By" : "Par"} {obj.manager.firstName} {obj.manager.lastName}
+                    </span>
+                  )}
+                </div>
+
+                {/* Manager comment */}
+                {obj.managerComment && (
+                  <div className="mt-2 rounded bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                    <span className="font-medium">Manager:</span> {obj.managerComment}
+                  </div>
+                )}
+
+                {/* Self comment */}
+                {obj.selfComment && commentingId !== obj.id && (
+                  <div className="mt-2 flex items-start justify-between rounded bg-gray-100 px-3 py-2 text-xs text-gray-600">
+                    <div>
+                      <span className="font-medium">{lang === "en" ? "Your comment" : "Votre commentaire"}:</span> {obj.selfComment}
+                    </div>
+                    <button
+                      onClick={() => { setCommentingId(obj.id); setCommentText(obj.selfComment || ""); }}
+                      className="ml-2 shrink-0 text-gray-400 hover:text-[#1B3A5C]"
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Self comment editor */}
+                {commentingId === obj.id ? (
+                  <div className="mt-2 space-y-2">
+                    <textarea
+                      value={commentText}
+                      onChange={(e) => setCommentText(e.target.value)}
+                      rows={2}
+                      maxLength={2000}
+                      placeholder={lang === "en" ? "Your self-assessment comment..." : "Votre commentaire d'auto-évaluation..."}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#1B3A5C] focus:outline-none focus:ring-1 focus:ring-[#1B3A5C]"
+                    />
+                    <div className="flex justify-end gap-2">
+                      <button
+                        onClick={() => { setCommentingId(null); setCommentText(""); }}
+                        className="rounded-lg border border-gray-300 px-3 py-1 text-xs text-gray-600 hover:bg-gray-50"
+                      >
+                        {lang === "en" ? "Cancel" : "Annuler"}
+                      </button>
+                      <button
+                        disabled={commentSubmitting}
+                        onClick={() => handleSelfComment(obj.id)}
+                        className="inline-flex items-center gap-1 rounded-lg bg-[#1B3A5C] px-3 py-1 text-xs text-white hover:bg-[#15304d] disabled:opacity-50"
+                      >
+                        {commentSubmitting && <Loader2 className="h-3 w-3 animate-spin" />}
+                        {lang === "en" ? "Save" : "Enregistrer"}
+                      </button>
+                    </div>
+                  </div>
+                ) : !obj.selfComment && (
+                  <button
+                    onClick={() => { setCommentingId(obj.id); setCommentText(""); }}
+                    className="mt-2 inline-flex items-center gap-1 text-xs text-gray-400 hover:text-[#1B3A5C]"
+                  >
+                    <Plus className="h-3 w-3" />
+                    {lang === "en" ? "Add your comment" : "Ajouter votre commentaire"}
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ═══ SKILL CREATE / SELF-LEVEL DIALOG ═══ */}
+      <Dialog
+        open={skillDialogOpen}
+        onClose={() => setSkillDialogOpen(false)}
+        title={
+          editingSkill
+            ? (lang === "en" ? `Assess: ${editingSkill.name}` : `Évaluer : ${editingSkill.name}`)
+            : (lang === "en" ? "Add a skill" : "Ajouter une compétence")
+        }
+        maxWidth="md"
+      >
+        {editingSkill ? (
+          /* Self-level update form */
+          <form onSubmit={selfUpdateForm.handleSubmit(handleSelfLevelUpdate)} className="space-y-4">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">
+                {lang === "en" ? "Your level" : "Votre niveau"}
+              </label>
+              <select
+                {...selfUpdateForm.register("selfLevel")}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#1B3A5C] focus:outline-none focus:ring-1 focus:ring-[#1B3A5C]"
+              >
+                {SKILL_LEVEL_OPTIONS.map((level) => (
+                  <option key={level} value={level}>
+                    {lang === "en" ? SKILL_LEVEL_LABELS[level]?.en : SKILL_LEVEL_LABELS[level]?.fr}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">
+                {lang === "en" ? "Evidence / notes" : "Preuves / notes"}
+              </label>
+              <textarea
+                {...selfUpdateForm.register("evidence")}
+                rows={3}
+                placeholder={lang === "en" ? "Certifications, projects, etc." : "Certifications, projets, etc."}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#1B3A5C] focus:outline-none focus:ring-1 focus:ring-[#1B3A5C]"
+              />
+            </div>
+            {editingSkill.managerLevel && (
+              <div className="rounded bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                {lang === "en" ? "Manager assessment" : "Évaluation manager"}: <strong>{lang === "en" ? SKILL_LEVEL_LABELS[editingSkill.managerLevel]?.en : SKILL_LEVEL_LABELS[editingSkill.managerLevel]?.fr}</strong>
+              </div>
+            )}
+            <div className="flex justify-end gap-3 border-t border-gray-100 pt-4">
+              <button type="button" onClick={() => setSkillDialogOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                {lang === "en" ? "Cancel" : "Annuler"}
+              </button>
+              <button type="submit" disabled={skillSubmitting} className="inline-flex items-center gap-2 rounded-lg bg-[#1B3A5C] px-4 py-2 text-sm text-white hover:bg-[#15304d] disabled:opacity-50">
+                {skillSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                {lang === "en" ? "Save" : "Enregistrer"}
+              </button>
+            </div>
+          </form>
+        ) : (
+          /* Create skill form */
+          <form onSubmit={skillForm.handleSubmit(handleSkillCreate)} className="space-y-4">
+            <FormField
+              label={lang === "en" ? "Skill name *" : "Nom de la compétence *"}
+              register={skillForm.register("name")}
+              error={skillForm.formState.errors.name?.message}
+            />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  {lang === "en" ? "Type" : "Type"}
+                </label>
+                <select
+                  {...skillForm.register("type")}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#1B3A5C] focus:outline-none focus:ring-1 focus:ring-[#1B3A5C]"
+                >
+                  {SKILL_TYPE_OPTIONS.map((t) => (
+                    <option key={t} value={t}>
+                      {lang === "en" ? SKILL_TYPE_LABELS[t]?.en : SKILL_TYPE_LABELS[t]?.fr}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  {lang === "en" ? "Your level" : "Votre niveau"}
+                </label>
+                <select
+                  {...skillForm.register("selfLevel")}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#1B3A5C] focus:outline-none focus:ring-1 focus:ring-[#1B3A5C]"
+                >
+                  <option value="">—</option>
+                  {SKILL_LEVEL_OPTIONS.map((level) => (
+                    <option key={level} value={level}>
+                      {lang === "en" ? SKILL_LEVEL_LABELS[level]?.en : SKILL_LEVEL_LABELS[level]?.fr}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">
+                {lang === "en" ? "Description" : "Description"}
+              </label>
+              <textarea
+                {...skillForm.register("description")}
+                rows={2}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#1B3A5C] focus:outline-none focus:ring-1 focus:ring-[#1B3A5C]"
+              />
+            </div>
+            <FormField
+              label={lang === "en" ? "Evidence / certification" : "Preuve / certification"}
+              register={skillForm.register("evidence")}
+              error={skillForm.formState.errors.evidence?.message}
+            />
+            <div className="flex justify-end gap-3 border-t border-gray-100 pt-4">
+              <button type="button" onClick={() => setSkillDialogOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                {lang === "en" ? "Cancel" : "Annuler"}
+              </button>
+              <button type="submit" disabled={skillSubmitting} className="inline-flex items-center gap-2 rounded-lg bg-[#1B3A5C] px-4 py-2 text-sm text-white hover:bg-[#15304d] disabled:opacity-50">
+                {skillSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                {lang === "en" ? "Add" : "Ajouter"}
+              </button>
+            </div>
+          </form>
+        )}
+      </Dialog>
     </div>
   );
 }
