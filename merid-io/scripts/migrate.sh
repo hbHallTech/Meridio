@@ -19,6 +19,9 @@ BASELINE_MIGRATIONS=(
   "20260222150000_add_imap_config"
   "20260223120000_document_user_optional"
   "20260224120000_add_cin_cnss_to_user"
+  "20260310120000_enrich_emergency_contacts"
+  "20260310150000_add_contract_model"
+  "20260310180000_add_skills_and_objectives"
 )
 
 echo ">> Ensuring baseline migrations are marked as applied..."
