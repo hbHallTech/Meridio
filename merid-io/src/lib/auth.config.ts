@@ -42,6 +42,9 @@ export function hasRequiredRole(pathname: string, userRoles: UserRole[]): boolea
 }
 
 export const authConfig: NextAuthConfig = {
+  // Trust the Host header from the request. Required for Vercel preview
+  // deployments where the URL differs from NEXTAUTH_URL (production).
+  trustHost: true,
   session: { strategy: "jwt" },
   pages: {
     signIn: "/login",
