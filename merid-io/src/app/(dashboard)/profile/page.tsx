@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { usePathname } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -8,8 +8,10 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import {
   changePasswordSchema,
   userPersonalSchema,
+  emergencyContactSchema,
   type ChangePasswordInput,
   type UserPersonalInput,
+  type EmergencyContactInput,
 } from "@/lib/validators";
 import { useToast } from "@/components/ui/toast";
 import { useTheme } from "next-themes";
@@ -42,7 +44,12 @@ import {
   Flag,
   Hash,
   Clock,
+  Plus,
+  Pencil,
+  Trash2,
+  AlertTriangle,
 } from "lucide-react";
+import { Dialog, ConfirmDialog } from "@/components/ui/dialog";
 
 // ─── Types ───
 
@@ -63,7 +70,9 @@ interface EmergencyContact {
   priority: number;
   firstName: string;
   lastName: string;
-  relationship: string;
+  relation: string;
+  mobile: string | null;
+  address: string | null;
   phone: string;
   email: string | null;
 }
@@ -1108,32 +1117,420 @@ function PersonnelTab({
         />
       </div>
 
-      {/* Contacts d'urgence */}
-      {profile.emergencyContacts && profile.emergencyContacts.length > 0 && (
-        <>
-          <SectionTitle icon={Phone} label={lang === "en" ? "Emergency contacts" : "Contacts d'urgence"} />
-          <div className="space-y-3">
-            {profile.emergencyContacts.map((c) => (
-              <div
-                key={c.id}
-                className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-4 py-3"
-              >
+      {/* Contacts d'urgence — CRUD */}
+      <EmergencyContactsSection lang={lang} />
+    </div>
+  );
+}
+
+// ─── Emergency Contacts Section (CRUD) ───
+
+const RELATION_OPTIONS = [
+  { value: "Conjoint", fr: "Conjoint(e)", en: "Spouse" },
+  { value: "Parent", fr: "Parent", en: "Parent" },
+  { value: "Enfant", fr: "Enfant", en: "Child" },
+  { value: "Frère/Sœur", fr: "Frère/Sœur", en: "Sibling" },
+  { value: "Ami", fr: "Ami(e)", en: "Friend" },
+  { value: "Autre", fr: "Autre", en: "Other" },
+];
+
+function EmergencyContactsSection({ lang }: { lang: string }) {
+  const { addToast } = useToast();
+
+  const [contacts, setContacts] = useState<EmergencyContact[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [editingContact, setEditingContact] = useState<EmergencyContact | null>(null);
+  const [deletingContact, setDeletingContact] = useState<EmergencyContact | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const form = useForm<EmergencyContactInput>({
+    resolver: zodResolver(emergencyContactSchema),
+    defaultValues: {
+      priority: 1,
+      firstName: "",
+      lastName: "",
+      relation: "",
+      phone: "",
+      mobile: "",
+      email: "",
+      address: "",
+    },
+  });
+
+  const fetchContacts = useCallback(async () => {
+    try {
+      const res = await fetch("/api/profile/emergency-contacts", { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        setContacts(data);
+      }
+    } catch {
+      // silent
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchContacts();
+  }, [fetchContacts]);
+
+  const openCreate = () => {
+    setEditingContact(null);
+    const nextPriority = contacts.length > 0
+      ? Math.max(...contacts.map((c) => c.priority)) + 1
+      : 1;
+    form.reset({
+      priority: Math.min(nextPriority, 5),
+      firstName: "",
+      lastName: "",
+      relation: "",
+      phone: "",
+      mobile: "",
+      email: "",
+      address: "",
+    });
+    setDialogOpen(true);
+  };
+
+  const openEdit = (contact: EmergencyContact) => {
+    setEditingContact(contact);
+    form.reset({
+      priority: contact.priority,
+      firstName: contact.firstName,
+      lastName: contact.lastName,
+      relation: contact.relation,
+      phone: contact.phone,
+      mobile: contact.mobile || "",
+      email: contact.email || "",
+      address: contact.address || "",
+    });
+    setDialogOpen(true);
+  };
+
+  const openDelete = (contact: EmergencyContact) => {
+    setDeletingContact(contact);
+    setDeleteOpen(true);
+  };
+
+  const handleSubmit = async (values: EmergencyContactInput) => {
+    setSubmitting(true);
+    try {
+      const isEdit = !!editingContact;
+      const url = isEdit
+        ? `/api/profile/emergency-contacts/${editingContact.id}`
+        : "/api/profile/emergency-contacts";
+      const method = isEdit ? "PATCH" : "POST";
+
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(values),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        addToast({ type: "error", title: lang === "en" ? "Error" : "Erreur", message: err.error });
+        return;
+      }
+
+      const saved = await res.json();
+
+      // Optimistic update
+      if (isEdit) {
+        setContacts((prev) => prev.map((c) => (c.id === saved.id ? saved : c)).sort((a, b) => a.priority - b.priority));
+      } else {
+        setContacts((prev) => [...prev, saved].sort((a, b) => a.priority - b.priority));
+      }
+
+      setDialogOpen(false);
+      addToast({
+        type: "success",
+        title: isEdit
+          ? (lang === "en" ? "Contact updated" : "Contact mis à jour")
+          : (lang === "en" ? "Contact added" : "Contact ajouté"),
+      });
+    } catch {
+      addToast({ type: "error", title: lang === "en" ? "Error" : "Erreur" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deletingContact) return;
+    setSubmitting(true);
+    try {
+      const res = await fetch(`/api/profile/emergency-contacts/${deletingContact.id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        addToast({ type: "error", title: lang === "en" ? "Error" : "Erreur", message: err.error });
+        return;
+      }
+      setContacts((prev) => prev.filter((c) => c.id !== deletingContact.id));
+      setDeleteOpen(false);
+      setDeletingContact(null);
+      addToast({
+        type: "success",
+        title: lang === "en" ? "Contact deleted" : "Contact supprimé",
+      });
+    } catch {
+      addToast({ type: "error", title: lang === "en" ? "Error" : "Erreur" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const hasPriority1 = contacts.some((c) => c.priority === 1);
+
+  return (
+    <>
+      <div className="flex items-center justify-between border-b border-gray-100 pb-2 pt-2">
+        <div className="flex items-center gap-2">
+          <Phone className="h-4 w-4 text-gray-400" />
+          <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+            {lang === "en" ? "Emergency contacts" : "Contacts d'urgence"}
+          </span>
+          <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">
+            {contacts.length}/5
+          </span>
+        </div>
+        {contacts.length < 5 && (
+          <button
+            onClick={openCreate}
+            className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            {lang === "en" ? "Add" : "Ajouter"}
+          </button>
+        )}
+      </div>
+
+      {/* Alert: no priority 1 contact */}
+      {!loading && contacts.length > 0 && !hasPriority1 && (
+        <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 mt-3">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
+          <p className="text-xs text-amber-700">
+            {lang === "en"
+              ? "No primary contact (priority #1). Please designate one."
+              : "Aucun contact principal (priorité #1). Veuillez en désigner un."}
+          </p>
+        </div>
+      )}
+
+      {/* Alert: no contacts at all */}
+      {!loading && contacts.length === 0 && (
+        <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 mt-3">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
+          <p className="text-xs text-amber-700">
+            {lang === "en"
+              ? "No emergency contacts configured. Please add at least one."
+              : "Aucun contact d'urgence configuré. Veuillez en ajouter au moins un."}
+          </p>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex justify-center py-4">
+          <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+        </div>
+      ) : (
+        <div className="mt-3 space-y-2">
+          {contacts.map((c) => (
+            <div
+              key={c.id}
+              className="group flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-4 py-3 transition-colors hover:bg-gray-100"
+            >
+              <div className="flex items-center gap-3">
+                <span
+                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                    c.priority === 1
+                      ? "bg-[#1B3A5C] text-white"
+                      : "bg-gray-200 text-gray-600"
+                  }`}
+                >
+                  {c.priority}
+                </span>
                 <div>
                   <p className="text-sm font-medium text-gray-900">
                     {c.firstName} {c.lastName}
-                    <span className="ml-2 text-xs text-gray-500">({c.relationship})</span>
+                    <span className="ml-2 text-xs font-normal text-gray-500">({c.relation})</span>
                   </p>
-                  <p className="text-xs text-gray-500">{c.phone}{c.email ? ` — ${c.email}` : ""}</p>
+                  <p className="text-xs text-gray-500">
+                    {c.phone}
+                    {c.mobile ? ` / ${c.mobile}` : ""}
+                    {c.email ? ` — ${c.email}` : ""}
+                  </p>
+                  {c.address && (
+                    <p className="text-xs text-gray-400">{c.address}</p>
+                  )}
                 </div>
-                <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-medium text-gray-600">
-                  #{c.priority}
-                </span>
               </div>
-            ))}
-          </div>
-        </>
+              <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                <button
+                  onClick={() => openEdit(c)}
+                  className="rounded-lg p-1.5 text-gray-400 hover:bg-white hover:text-[#1B3A5C]"
+                  title={lang === "en" ? "Edit" : "Modifier"}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={() => openDelete(c)}
+                  className="rounded-lg p-1.5 text-gray-400 hover:bg-white hover:text-red-600"
+                  title={lang === "en" ? "Delete" : "Supprimer"}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
       )}
-    </div>
+
+      {/* Create/Edit Dialog */}
+      <Dialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        title={
+          editingContact
+            ? (lang === "en" ? "Edit emergency contact" : "Modifier le contact d'urgence")
+            : (lang === "en" ? "Add emergency contact" : "Ajouter un contact d'urgence")
+        }
+        maxWidth="md"
+      >
+        <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+          {/* Priority + Relation */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">
+                {lang === "en" ? "Priority" : "Priorité"}
+              </label>
+              <select
+                {...form.register("priority", { valueAsNumber: true })}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#1B3A5C] focus:outline-none focus:ring-1 focus:ring-[#1B3A5C]"
+              >
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <option key={n} value={n}>
+                    #{n} {n === 1 ? (lang === "en" ? "(Primary)" : "(Principal)") : ""}
+                  </option>
+                ))}
+              </select>
+              {form.formState.errors.priority && (
+                <p className="mt-1 text-xs text-red-600">{form.formState.errors.priority.message}</p>
+              )}
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">
+                {lang === "en" ? "Relationship" : "Relation"}
+              </label>
+              <select
+                {...form.register("relation")}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#1B3A5C] focus:outline-none focus:ring-1 focus:ring-[#1B3A5C]"
+              >
+                <option value="">—</option>
+                {RELATION_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {lang === "en" ? opt.en : opt.fr}
+                  </option>
+                ))}
+              </select>
+              {form.formState.errors.relation && (
+                <p className="mt-1 text-xs text-red-600">{form.formState.errors.relation.message}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Name */}
+          <div className="grid grid-cols-2 gap-4">
+            <FormField
+              label={lang === "en" ? "First name" : "Prénom"}
+              register={form.register("firstName")}
+              error={form.formState.errors.firstName?.message}
+            />
+            <FormField
+              label={lang === "en" ? "Last name" : "Nom"}
+              register={form.register("lastName")}
+              error={form.formState.errors.lastName?.message}
+            />
+          </div>
+
+          {/* Phone + Mobile */}
+          <div className="grid grid-cols-2 gap-4">
+            <FormField
+              label={lang === "en" ? "Phone *" : "Téléphone *"}
+              register={form.register("phone")}
+              error={form.formState.errors.phone?.message}
+            />
+            <FormField
+              label={lang === "en" ? "Mobile" : "Mobile"}
+              register={form.register("mobile")}
+              error={form.formState.errors.mobile?.message}
+            />
+          </div>
+
+          {/* Email */}
+          <FormField
+            label={lang === "en" ? "Email" : "Email"}
+            type="email"
+            register={form.register("email")}
+            error={form.formState.errors.email?.message}
+          />
+
+          {/* Address */}
+          <FormField
+            label={lang === "en" ? "Address" : "Adresse"}
+            register={form.register("address")}
+            error={form.formState.errors.address?.message}
+          />
+
+          {/* Actions */}
+          <div className="flex justify-end gap-3 border-t border-gray-100 pt-4">
+            <button
+              type="button"
+              onClick={() => setDialogOpen(false)}
+              disabled={submitting}
+              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              {lang === "en" ? "Cancel" : "Annuler"}
+            </button>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="inline-flex items-center gap-2 rounded-lg bg-[#1B3A5C] px-4 py-2 text-sm font-medium text-white hover:bg-[#15304d] disabled:opacity-50"
+            >
+              {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+              {editingContact
+                ? (lang === "en" ? "Save" : "Enregistrer")
+                : (lang === "en" ? "Add" : "Ajouter")}
+            </button>
+          </div>
+        </form>
+      </Dialog>
+
+      {/* Delete Confirm */}
+      <ConfirmDialog
+        open={deleteOpen}
+        onClose={() => {
+          setDeleteOpen(false);
+          setDeletingContact(null);
+        }}
+        onConfirm={handleDelete}
+        title={lang === "en" ? "Delete contact" : "Supprimer le contact"}
+        message={
+          deletingContact
+            ? lang === "en"
+              ? `Are you sure you want to delete ${deletingContact.firstName} ${deletingContact.lastName}?`
+              : `Êtes-vous sûr de vouloir supprimer ${deletingContact.firstName} ${deletingContact.lastName} ?`
+            : ""
+        }
+        confirmLabel={lang === "en" ? "Delete" : "Supprimer"}
+        loading={submitting}
+      />
+    </>
   );
 }
 

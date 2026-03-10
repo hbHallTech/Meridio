@@ -332,9 +332,11 @@ model EmergencyContact {
   priority     Int      @default(1) // 1 = principal, 2 = secondaire, etc.
   firstName    String
   lastName     String
-  relationship String // ex: "Conjoint", "Parent", "Frère/Sœur"
+  relation     String // ex: "Conjoint", "Parent", "Frère/Sœur", "Enfant", "Ami"
   phone        String
+  mobile       String?
   email        String?
+  address      String? // adresse optionnelle du contact
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
