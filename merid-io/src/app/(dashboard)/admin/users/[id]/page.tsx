@@ -596,8 +596,8 @@ export default function AdminUserEditPage({ params }: { params: Promise<{ id: st
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200">
-        <nav className="flex gap-1">
+      <div className="overflow-x-auto border-b border-gray-200">
+        <nav className="flex min-w-max gap-1">
           {TABS.map((tab) => {
             const Icon = tab.icon;
             const active = activeTab === tab.id;
@@ -605,7 +605,7 @@ export default function AdminUserEditPage({ params }: { params: Promise<{ id: st
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
+                className={`flex items-center gap-2 whitespace-nowrap border-b-2 px-3 py-3 text-sm font-medium transition-colors sm:px-4 ${
                   active
                     ? "border-[#1B3A5C] text-[#1B3A5C]"
                     : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
@@ -620,10 +620,10 @@ export default function AdminUserEditPage({ params }: { params: Promise<{ id: st
       </div>
 
       {/* Tab content */}
-      <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+      <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
         {activeTab === "identite" && (
           <form onSubmit={identityForm.handleSubmit(saveIdentity)} className="space-y-6">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className={labelClass}>Prénom</label>
                 <input {...identityForm.register("firstName")} className={inputClass} />
@@ -640,7 +640,7 @@ export default function AdminUserEditPage({ params }: { params: Promise<{ id: st
               <input type="email" {...identityForm.register("email")} className={inputClass} />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className={labelClass}>CIN</label>
                 <input {...identityForm.register("cin")} placeholder="09815606 ou TN09815606" className={`${inputClass} font-mono`} />
@@ -700,7 +700,7 @@ export default function AdminUserEditPage({ params }: { params: Promise<{ id: st
             </div>
 
             {/* Office & Team */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className={labelClass}>Bureau</label>
                 <select {...identityForm.register("officeId")} className={inputClass}>
@@ -776,7 +776,7 @@ export default function AdminUserEditPage({ params }: { params: Promise<{ id: st
               <h3 className="text-base font-semibold text-gray-900">Informations personnelles</h3>
 
               {/* Birth info */}
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <div>
                   <label className={labelClass}>Date de naissance</label>
                   <input type="date" {...personalForm.register("birthDate")} className={inputClass} />
@@ -791,7 +791,7 @@ export default function AdminUserEditPage({ params }: { params: Promise<{ id: st
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <div>
                   <label className={labelClass}>Nationalité</label>
                   <input {...personalForm.register("nationality")} className={inputClass} />
@@ -823,7 +823,7 @@ export default function AdminUserEditPage({ params }: { params: Promise<{ id: st
 
               {/* Contact */}
               <h4 className="text-sm font-semibold text-gray-700">Contact personnel</h4>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <div>
                   <label className={labelClass}>Email personnel</label>
                   <input type="email" {...personalForm.register("personalEmail")} className={inputClass} />
@@ -840,7 +840,7 @@ export default function AdminUserEditPage({ params }: { params: Promise<{ id: st
 
               {/* Address */}
               <h4 className="text-sm font-semibold text-gray-700">Adresse</h4>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="col-span-2">
                   <label className={labelClass}>Rue</label>
                   <input {...personalForm.register("personalAddressStreet")} className={inputClass} />
@@ -894,7 +894,7 @@ export default function AdminUserEditPage({ params }: { params: Promise<{ id: st
                           {ec.email && <span>{ec.email}</span>}
                         </div>
                       </div>
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
+                      <div className="flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100">
                         <button onClick={() => openEditEc(ec)} className="rounded p-1.5 text-gray-400 hover:bg-white hover:text-[#1B3A5C]">
                           <Pencil className="h-3.5 w-3.5" />
                         </button>
@@ -914,7 +914,7 @@ export default function AdminUserEditPage({ params }: { params: Promise<{ id: st
           <form onSubmit={professionalForm.handleSubmit(saveProfessional)} className="space-y-6">
             <h3 className="text-base font-semibold text-gray-900">Informations professionnelles</h3>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className={labelClass}>Poste / Fonction</label>
                 <input {...professionalForm.register("jobFunction")} className={inputClass} />
@@ -925,7 +925,7 @@ export default function AdminUserEditPage({ params }: { params: Promise<{ id: st
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className={labelClass}>Téléphone professionnel</label>
                 <input {...professionalForm.register("professionalPhone")} className={inputClass} />
@@ -936,7 +936,7 @@ export default function AdminUserEditPage({ params }: { params: Promise<{ id: st
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className={labelClass}>Date d&apos;arrivée effective</label>
                 <input type="date" {...professionalForm.register("arrivalDate")} className={inputClass} />
@@ -984,7 +984,7 @@ export default function AdminUserEditPage({ params }: { params: Promise<{ id: st
                         </div>
                         {c.contractNumber && <span className="text-xs font-mono text-gray-400">#{c.contractNumber}</span>}
                       </div>
-                      <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-gray-500 sm:grid-cols-4">
+                      <div className="mt-2 grid grid-cols-1 gap-x-6 gap-y-1 text-xs text-gray-500 sm:grid-cols-2 lg:grid-cols-4">
                         <div>Début: {formatDate(c.startDate)}</div>
                         <div>Fin: {c.endDate ? formatDate(c.endDate) : "—"}</div>
                         {c.weeklyHours && <div>{c.weeklyHours}h/sem</div>}
@@ -1031,7 +1031,7 @@ export default function AdminUserEditPage({ params }: { params: Promise<{ id: st
                         </div>
                         <button
                           onClick={() => openSkillAssess(skill)}
-                          className="rounded p-1 text-gray-400 opacity-0 transition-opacity hover:bg-white hover:text-[#1B3A5C] group-hover:opacity-100"
+                          className="rounded p-1 text-gray-400 transition-opacity hover:bg-white hover:text-[#1B3A5C] sm:opacity-0 sm:group-hover:opacity-100"
                           title="Évaluer (manager)"
                         >
                           <Pencil className="h-3.5 w-3.5" />
@@ -1070,7 +1070,7 @@ export default function AdminUserEditPage({ params }: { params: Promise<{ id: st
         maxWidth="md"
       >
         <form onSubmit={ecForm.handleSubmit(saveEc)} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className={labelClass}>Prénom *</label>
               <input {...ecForm.register("firstName")} className={inputClass} />
@@ -1081,7 +1081,7 @@ export default function AdminUserEditPage({ params }: { params: Promise<{ id: st
               <input {...ecForm.register("lastName")} className={inputClass} />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className={labelClass}>Relation *</label>
               <input {...ecForm.register("relation")} placeholder="Ex: Conjoint, Parent" className={inputClass} />
@@ -1091,7 +1091,7 @@ export default function AdminUserEditPage({ params }: { params: Promise<{ id: st
               <input type="number" min={1} max={5} {...ecForm.register("priority", { valueAsNumber: true })} className={inputClass} />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className={labelClass}>Téléphone *</label>
               <input {...ecForm.register("phone")} className={inputClass} />

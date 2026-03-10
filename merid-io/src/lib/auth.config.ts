@@ -31,7 +31,7 @@ const ROUTE_ROLE_MAP: { prefix: string; roles: UserRole[] }[] = [
   { prefix: "/api/hr", roles: ["HR", "ADMIN", "SUPER_ADMIN"] },
 ];
 
-function hasRequiredRole(pathname: string, userRoles: UserRole[]): boolean {
+export function hasRequiredRole(pathname: string, userRoles: UserRole[]): boolean {
   for (const route of ROUTE_ROLE_MAP) {
     if (pathname.startsWith(route.prefix)) {
       return userRoles.some((r) => route.roles.includes(r));

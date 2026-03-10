@@ -196,7 +196,22 @@ export async function PATCH(request: Request) {
     if (firstName !== undefined) updateData.firstName = firstName;
     if (lastName !== undefined) updateData.lastName = lastName;
     if (email !== undefined) updateData.email = email;
-    if (roles !== undefined) updateData.roles = roles;
+
+    // Role change security: only ADMIN/SUPER_ADMIN can assign elevated roles
+    if (roles !== undefined) {
+      const callerRoles = session.user.roles as string[];
+      const callerIsAdmin = callerRoles.some((r: string) => ["ADMIN", "SUPER_ADMIN"].includes(r));
+
+      // HR cannot assign ADMIN or SUPER_ADMIN roles
+      if (!callerIsAdmin && roles.some((r: string) => ["ADMIN", "SUPER_ADMIN"].includes(r))) {
+        return NextResponse.json({ error: "Seuls les administrateurs peuvent attribuer le rôle ADMIN ou SUPER_ADMIN" }, { status: 403 });
+      }
+      // Nobody can self-escalate their own roles (except SUPER_ADMIN)
+      if (id === session.user.id && !callerRoles.includes("SUPER_ADMIN")) {
+        return NextResponse.json({ error: "Vous ne pouvez pas modifier vos propres rôles" }, { status: 403 });
+      }
+      updateData.roles = roles;
+    }
     if (officeId !== undefined) updateData.officeId = officeId;
     if (teamId !== undefined) updateData.teamId = teamId || null;
     if (hireDate !== undefined) updateData.hireDate = new Date(hireDate);

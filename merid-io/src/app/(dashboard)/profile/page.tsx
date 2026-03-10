@@ -1383,7 +1383,7 @@ function EmergencyContactsSection({ lang }: { lang: string }) {
                   )}
                 </div>
               </div>
-              <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+              <div className="flex items-center gap-1 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
                 <button
                   onClick={() => openEdit(c)}
                   className="rounded-lg p-1.5 text-gray-400 hover:bg-white hover:text-[#1B3A5C]"
@@ -1417,7 +1417,7 @@ function EmergencyContactsSection({ lang }: { lang: string }) {
       >
         <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
           {/* Priority + Relation */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">
                 {lang === "en" ? "Priority" : "Priorité"}
@@ -1458,7 +1458,7 @@ function EmergencyContactsSection({ lang }: { lang: string }) {
           </div>
 
           {/* Name */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <FormField
               label={lang === "en" ? "First name" : "Prénom"}
               register={form.register("firstName")}
@@ -1472,7 +1472,7 @@ function EmergencyContactsSection({ lang }: { lang: string }) {
           </div>
 
           {/* Phone + Mobile */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <FormField
               label={lang === "en" ? "Phone *" : "Téléphone *"}
               register={form.register("phone")}
@@ -1881,7 +1881,7 @@ function CompetencesTab({ lang }: { lang: string }) {
                       {lang === "en" ? SKILL_TYPE_LABELS[skill.type]?.en : SKILL_TYPE_LABELS[skill.type]?.fr}
                     </span>
                   </div>
-                  <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                  <div className="flex items-center gap-1 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
                     <button
                       onClick={() => openEditSelfLevel(skill)}
                       className="rounded p-1 text-gray-400 hover:bg-white hover:text-[#1B3A5C]"
@@ -2118,7 +2118,7 @@ function CompetencesTab({ lang }: { lang: string }) {
               register={skillForm.register("name")}
               error={skillForm.formState.errors.name?.message}
             />
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700">
                   {lang === "en" ? "Type" : "Type"}
