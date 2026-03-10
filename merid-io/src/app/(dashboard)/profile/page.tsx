@@ -609,25 +609,27 @@ export default function ProfilePage() {
 
       {/* ─── Tabs ─── */}
       <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-        <div className="flex border-b border-gray-200">
-          {TABS.map((tab) => {
-            const Icon = tab.icon;
-            const active = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-6 py-3.5 text-sm font-medium transition-all border-b-2 ${
-                  active
-                    ? "border-[#1B3A5C] text-[#1B3A5C]"
-                    : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                }`}
-              >
-                <Icon className="h-4 w-4" />
-                {lang === "en" ? tab.en : tab.fr}
-              </button>
-            );
-          })}
+        <div className="overflow-x-auto border-b border-gray-200">
+          <div className="flex min-w-max">
+            {TABS.map((tab) => {
+              const Icon = tab.icon;
+              const active = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex items-center gap-2 whitespace-nowrap px-4 py-3.5 text-sm font-medium transition-all border-b-2 sm:px-6 ${
+                    active
+                      ? "border-[#1B3A5C] text-[#1B3A5C]"
+                      : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                  }`}
+                >
+                  <Icon className="h-4 w-4" />
+                  {lang === "en" ? tab.en : tab.fr}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         <div className="p-6">

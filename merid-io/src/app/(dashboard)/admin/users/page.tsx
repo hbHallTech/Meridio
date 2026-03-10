@@ -25,15 +25,7 @@ const createUserSchema = userSchema.extend({
   sendNotification: z.boolean().optional(),
 });
 
-const editUserSchema = userSchema.extend({
-  isActive: z.boolean().optional(),
-  password: z.string().optional(),
-  forcePasswordChange: z.boolean().optional(),
-  sendNotification: z.boolean().optional(),
-});
-
 type CreateUserForm = z.infer<typeof createUserSchema>;
-type EditUserForm = z.infer<typeof editUserSchema>;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -117,7 +109,6 @@ export default function AdminUsersPage() {
 
   // Dialog state
   const [createOpen, setCreateOpen] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserData | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -182,7 +173,8 @@ export default function AdminUsersPage() {
   // -------------------------------------------------------------------------
   // Password helpers
   // -------------------------------------------------------------------------
-  const handleGeneratePassword = (form: UseFormReturn<CreateUserForm> | UseFormReturn<EditUserForm>) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleGeneratePassword = (form: UseFormReturn<any>) => {
     const pwd = generateStrongPassword();
     setGeneratedPwd(pwd);
     setCopiedPwd(false);
@@ -237,97 +229,6 @@ export default function AdminUsersPage() {
       addToast({ type: "success", title: "Succès", message: "Utilisateur créé avec succès" });
       setCreateOpen(false);
       createForm.reset();
-      setGeneratedPwd("");
-      await fetchUsers();
-    } catch (err) {
-      addToast({
-        type: "error",
-        title: "Erreur",
-        message: err instanceof Error ? err.message : "Erreur inconnue",
-      });
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // -------------------------------------------------------------------------
-  // Edit form
-  // -------------------------------------------------------------------------
-  const editForm = useForm<EditUserForm>({
-    resolver: zodResolver(editUserSchema),
-    defaultValues: {
-      firstName: "",
-      lastName: "",
-      email: "",
-      password: "",
-      roles: [],
-      officeId: "",
-      teamId: "",
-      hireDate: "",
-      cin: "",
-      cnss: "",
-      isActive: true,
-      forcePasswordChange: false,
-      sendNotification: false,
-    },
-  });
-
-  const openEdit = (user: UserData) => {
-    setSelectedUser(user);
-    setGeneratedPwd("");
-    setCopiedPwd(false);
-    editForm.reset({
-      firstName: user.firstName,
-      lastName: user.lastName,
-      email: user.email,
-      password: "",
-      roles: user.roles as ("EMPLOYEE" | "MANAGER" | "HR" | "ADMIN")[],
-      officeId: user.office?.id || "",
-      teamId: user.team?.id || "",
-      hireDate: user.hireDate ? new Date(user.hireDate).toISOString().split("T")[0] : "",
-      cin: user.cin || "",
-      cnss: user.cnss || "",
-      isActive: user.isActive,
-      forcePasswordChange: user.forcePasswordChange,
-      sendNotification: false,
-    });
-    setEditOpen(true);
-  };
-
-  const handleEdit = async (data: EditUserForm) => {
-    if (!selectedUser) return;
-    setSubmitting(true);
-    try {
-      const payload: Record<string, unknown> = {
-        id: selectedUser.id,
-        firstName: data.firstName,
-        lastName: data.lastName,
-        email: data.email,
-        roles: data.roles,
-        officeId: data.officeId,
-        teamId: data.teamId || null,
-        hireDate: data.hireDate,
-        cin: data.cin || "",
-        cnss: data.cnss || "",
-        isActive: data.isActive,
-        forcePasswordChange: data.forcePasswordChange,
-        sendNotification: data.sendNotification,
-      };
-      if (data.password && data.password.trim().length > 0) {
-        payload.password = data.password;
-      }
-      const res = await fetch("/api/admin/users", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Erreur lors de la mise à jour");
-      }
-      addToast({ type: "success", title: "Succès", message: "Utilisateur mis à jour avec succès" });
-      setEditOpen(false);
-      setSelectedUser(null);
       setGeneratedPwd("");
       await fetchUsers();
     } catch (err) {
@@ -835,49 +736,6 @@ export default function AdminUsersPage() {
             >
               {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
               Créer
-            </button>
-          </div>
-        </form>
-      </Dialog>
-
-      {/* Edit Dialog */}
-      <Dialog
-        open={editOpen}
-        onClose={() => {
-          setEditOpen(false);
-          setSelectedUser(null);
-          setGeneratedPwd("");
-        }}
-        title="Modifier l'utilisateur"
-        description={
-          selectedUser
-            ? `${selectedUser.firstName} ${selectedUser.lastName} (${selectedUser.email})`
-            : undefined
-        }
-        maxWidth="lg"
-      >
-        <form onSubmit={editForm.handleSubmit(handleEdit)}>
-          <UserFormFields form={editForm} isCreate={false} />
-          <div className="mt-6 flex justify-end gap-3">
-            <button
-              type="button"
-              onClick={() => {
-                setEditOpen(false);
-                setSelectedUser(null);
-                setGeneratedPwd("");
-              }}
-              disabled={submitting}
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
-              Annuler
-            </button>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="inline-flex items-center gap-2 rounded-lg bg-[#1B3A5C] px-4 py-2 text-sm font-medium text-white hover:bg-[#15304d] disabled:opacity-50"
-            >
-              {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-              Enregistrer
             </button>
           </div>
         </form>
