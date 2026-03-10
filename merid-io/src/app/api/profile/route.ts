@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { userPersonalSchema } from "@/lib/validators";
 
 // ─── GET: user profile with balances ───
 
@@ -124,7 +125,7 @@ export async function GET() {
   });
 }
 
-// ─── PATCH: update language or theme preference ───
+// ─── PATCH: update language, theme, or personal info ───
 
 export async function PATCH(request: NextRequest) {
   const session = await auth();
@@ -133,9 +134,10 @@ export async function PATCH(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { language, theme } = body;
+  const { language, theme, personal } = body;
 
-  const updateData: Record<string, string> = {};
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const updateData: Record<string, any> = {};
 
   if (language) {
     if (!["fr", "en"].includes(language)) {
@@ -151,6 +153,32 @@ export async function PATCH(request: NextRequest) {
     updateData.theme = theme;
   }
 
+  // Personal info update (self-service)
+  if (personal) {
+    const parsed = userPersonalSchema.safeParse(personal);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Données personnelles invalides", details: parsed.error.flatten().fieldErrors },
+        { status: 400 }
+      );
+    }
+    const p = parsed.data;
+    if (p.personalEmail !== undefined) updateData.personalEmail = p.personalEmail || null;
+    if (p.personalPhone !== undefined) updateData.personalPhone = p.personalPhone || null;
+    if (p.personalMobile !== undefined) updateData.personalMobile = p.personalMobile || null;
+    if (p.personalAddressStreet !== undefined) updateData.personalAddressStreet = p.personalAddressStreet || null;
+    if (p.personalAddressZip !== undefined) updateData.personalAddressZip = p.personalAddressZip || null;
+    if (p.personalAddressCity !== undefined) updateData.personalAddressCity = p.personalAddressCity || null;
+    if (p.personalAddressCountry !== undefined) updateData.personalAddressCountry = p.personalAddressCountry || null;
+    if (p.birthDate !== undefined) updateData.birthDate = p.birthDate ? new Date(p.birthDate) : null;
+    if (p.birthCity !== undefined) updateData.birthCity = p.birthCity || null;
+    if (p.birthCountry !== undefined) updateData.birthCountry = p.birthCountry || null;
+    if (p.nationality !== undefined) updateData.nationality = p.nationality || null;
+    if (p.gender !== undefined) updateData.gender = p.gender || null;
+    if (p.maritalStatus !== undefined) updateData.maritalStatus = p.maritalStatus || null;
+    if (p.dependentsCount !== undefined) updateData.dependentsCount = p.dependentsCount;
+  }
+
   if (Object.keys(updateData).length === 0) {
     return NextResponse.json({ error: "Aucune donnée à mettre à jour" }, { status: 400 });
   }
@@ -160,5 +188,5 @@ export async function PATCH(request: NextRequest) {
     data: updateData,
   });
 
-  return NextResponse.json(updateData);
+  return NextResponse.json({ success: true });
 }
