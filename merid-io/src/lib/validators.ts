@@ -220,12 +220,24 @@ export const userProfessionalSchema = z.object({
 // ─── Emergency Contact ───
 
 export const emergencyContactSchema = z.object({
-  priority: z.number().int().min(1).max(10).optional(),
-  firstName: z.string().min(1, "Le prénom est requis"),
-  lastName: z.string().min(1, "Le nom est requis"),
-  relationship: z.string().min(1, "La relation est requise"),
-  phone: z.string().min(1, "Le téléphone est requis").max(20),
-  email: z.string().email("Adresse email invalide").optional().or(z.literal("")),
+  priority: z.number().int().min(1).max(5, "Priorité max : 5"),
+  firstName: z.string().min(1, "Le prénom est requis").max(100),
+  lastName: z.string().min(1, "Le nom est requis").max(100),
+  relation: z.string().min(1, "La relation est requise").max(50),
+  phone: z
+    .string()
+    .min(1, "Le téléphone est requis")
+    .max(20)
+    .regex(/^[+]?[\d\s\-().]{6,20}$/, "Format de téléphone invalide"),
+  mobile: z
+    .string()
+    .max(20)
+    .regex(/^[+]?[\d\s\-().]{6,20}$/, "Format de mobile invalide")
+    .optional()
+    .nullable()
+    .or(z.literal("")),
+  email: z.string().email("Adresse email invalide").optional().nullable().or(z.literal("")),
+  address: z.string().max(255).optional().nullable().or(z.literal("")),
 });
 
 export type LoginInput = z.infer<typeof loginSchema>;
