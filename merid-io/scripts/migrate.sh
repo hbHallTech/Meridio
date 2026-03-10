@@ -1,18 +1,26 @@
 #!/bin/bash
 # Safe migration script for transitioning from "db push" to "migrate deploy".
 #
-# Problem: Production was using "prisma db push" which doesn't track migrations.
-# The DB has tables but no _prisma_migrations table, so "migrate deploy" fails
-# with P3005 ("database schema is not empty").
+# Strategy: Try "migrate deploy" first. If it succeeds (all migrations already
+# baselined), we're done. If it fails with P3005 (no _prisma_migrations table),
+# baseline all existing migrations and retry.
 #
-# Solution: Always attempt to baseline (idempotent), then deploy.
+# This avoids exhausting Neon's connection pool with unnecessary resolve commands.
 
 set -e
 
 echo "=== Meridio Migration Script ==="
 
+# Try migrate deploy first — this works when _prisma_migrations table exists
+echo ">> Attempting prisma migrate deploy..."
+if npx prisma migrate deploy 2>&1; then
+  echo "=== Migration complete ==="
+  exit 0
+fi
+
+echo ">> migrate deploy failed — baselining existing migrations..."
+
 # Baseline migrations: these were already applied via db push.
-# "prisma migrate resolve --applied" is idempotent — safe to re-run.
 BASELINE_MIGRATIONS=(
   "20260210064059_init"
   "20260210064436_add_auth_fields"
@@ -24,13 +32,14 @@ BASELINE_MIGRATIONS=(
   "20260310180000_add_skills_and_objectives"
 )
 
-echo ">> Ensuring baseline migrations are marked as applied..."
 for migration in "${BASELINE_MIGRATIONS[@]}"; do
   echo "   Resolving: $migration"
   npx prisma migrate resolve --applied "$migration" 2>&1 || true
+  # Brief pause to avoid connection pool exhaustion on serverless DBs
+  sleep 1
 done
 
-echo ">> Running prisma migrate deploy for pending migrations..."
+echo ">> Retrying prisma migrate deploy..."
 npx prisma migrate deploy
 
 echo "=== Migration complete ==="
