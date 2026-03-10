@@ -73,8 +73,14 @@ export default function LoginPage() {
             router.push(callbackUrl);
             return;
           }
+          if (!res.ok) {
+            // 2FA send failed (SMTP error) — redirect to verify page
+            // where user can retry with the "Renvoyer le code" button
+            console.warn("[login] 2FA send failed:", data.error);
+          }
         } catch {
-          // Continue even if 2FA send fails (dev mode without SMTP)
+          // Network error — still redirect to verify (user can resend)
+          console.warn("[login] 2FA send network error");
         }
         router.push("/login/verify");
       }
