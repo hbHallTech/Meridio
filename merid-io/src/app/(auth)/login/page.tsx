@@ -69,13 +69,13 @@ export default function LoginPage() {
         try {
           const res = await fetch("/api/auth/2fa/send", { method: "POST" });
           const data = await res.json();
-          if (data.skipped) {
+          if (data.skipped || data.smtpError) {
+            // No SMTP configured OR SMTP failed → skip 2FA, go directly to app
             router.push(callbackUrl);
             return;
           }
           if (!res.ok) {
-            // 2FA send failed (SMTP error) — redirect to verify page
-            // where user can retry with the "Renvoyer le code" button
+            // Other 2FA send error — still try verify page (user can resend)
             console.warn("[login] 2FA send failed:", data.error);
           }
         } catch {

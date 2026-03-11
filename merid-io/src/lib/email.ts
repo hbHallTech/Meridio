@@ -35,6 +35,7 @@ async function getSmtpConfig() {
       if (company.smtpPassEncrypted) {
         smtpPass = decryptOrFallback(company.smtpPassEncrypted, "SMTP password");
       }
+      console.log(`[email] SMTP config source: DATABASE (host=${company.smtpHost})`);
       return {
         host: company.smtpHost,
         port: company.smtpPort || 587,
@@ -43,14 +44,20 @@ async function getSmtpConfig() {
         pass: smtpPass,
         from: company.smtpFrom || company.smtpUser,
       };
+    } else {
+      console.log("[email] SMTP config: DB company has no smtpHost/smtpUser, falling back to env");
     }
-  } catch {
-    // DB not available — fall through to env
+  } catch (dbErr) {
+    console.warn(`[email] DB SMTP config fetch failed: ${dbErr instanceof Error ? dbErr.message : dbErr}, falling back to env`);
   }
 
   // Fallback to .env
   // Support both SMTP_PASS and SMTP_PASSWORD for backward compatibility
   const pass = process.env.SMTP_PASS || process.env.SMTP_PASSWORD || "";
+  console.log(
+    `[email] SMTP config source: ENV (host=${process.env.SMTP_HOST || "smtp.office365.com"} ` +
+    `user=${process.env.SMTP_USER ? "set" : "NOT SET"} pass=${pass ? "set" : "NOT SET"})`
+  );
   return {
     host: process.env.SMTP_HOST || "smtp.office365.com",
     port: Number(process.env.SMTP_PORT) || 587,
@@ -140,20 +147,33 @@ export async function sendEmail(
 
   console.log(`[email][${tag}] Preparing: to=${to} subject="${subject}" ${ctxStr}`.trim());
 
-  const config = await getSmtpConfig();
+  let config;
+  try {
+    config = await getSmtpConfig();
+  } catch (cfgErr) {
+    console.error(`[email][${tag}] SMTP config fetch FAILED: ${cfgErr instanceof Error ? cfgErr.message : cfgErr}`);
+    throw new Error(`SMTP config error: ${cfgErr instanceof Error ? cfgErr.message : cfgErr}`);
+  }
+
+  // Log config (mask password) for debugging SMTP issues in Vercel logs
+  console.log(
+    `[email][${tag}] SMTP config: host=${config.host} port=${config.port} ` +
+    `secure=${config.secure} user=${config.user ? config.user.substring(0, 5) + "***" : "(empty)"} ` +
+    `pass=${config.pass ? "***set***" : "(EMPTY)"} from=${config.from}`
+  );
 
   if (!config.user) {
     console.warn(
-      `[email][${tag}] SKIP — SMTP not configured (SMTP_USER is empty). ` +
-      `Check that SMTP_USER and SMTP_PASS (or SMTP_PASSWORD) env vars are set. to=${to}`
+      `[email][${tag}] SKIP — SMTP not configured (user is empty). ` +
+      `Check SMTP_USER env var or company SMTP settings in DB. to=${to}`
     );
     return;
   }
 
   if (!config.pass) {
     console.warn(
-      `[email][${tag}] WARNING — SMTP password is empty. ` +
-      `Check SMTP_PASS or SMTP_PASSWORD env var. host=${config.host} user=${config.user}`
+      `[email][${tag}] WARNING — SMTP password is EMPTY. ` +
+      `This will cause authentication failure. Check SMTP_PASS env var or company smtpPassEncrypted in DB.`
     );
   }
 
