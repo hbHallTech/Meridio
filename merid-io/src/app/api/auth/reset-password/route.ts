@@ -8,15 +8,10 @@ import {
 } from "@/lib/password";
 import { createAuditLog } from "@/lib/notifications";
 import { getRequestIp } from "@/lib/rate-limit";
-import { isBotRequest } from "@/lib/bot-protection";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 
 export async function POST(request: NextRequest) {
-  if (await isBotRequest()) {
-    return NextResponse.json({ error: "Access denied" }, { status: 403 });
-  }
-
   const ip = getRequestIp(request.headers);
   const userAgent = request.headers.get("user-agent") ?? "unknown";
 
