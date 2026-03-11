@@ -31,32 +31,37 @@ const RATE_LIMITED_ROUTES: Record<
 
 // Wrap auth middleware with rate limiting
 export default auth(function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+  try {
+    const { pathname } = request.nextUrl;
 
-  // Check rate limiting for specific routes
-  const routeConfig = RATE_LIMITED_ROUTES[pathname];
-  if (routeConfig && request.method === routeConfig.method) {
-    const ip = getRequestIp(request.headers);
-    const key = `${ip}:${pathname}`;
-    const result = checkRateLimit(key, routeConfig.limit);
+    // Check rate limiting for specific routes
+    const routeConfig = RATE_LIMITED_ROUTES[pathname];
+    if (routeConfig && request.method === routeConfig.method) {
+      const ip = getRequestIp(request.headers);
+      const key = `${ip}:${pathname}`;
+      const result = checkRateLimit(key, routeConfig.limit);
 
-    if (!result.allowed) {
-      return NextResponse.json(
-        { error: "Trop de requetes. Veuillez reessayer plus tard." },
-        {
-          status: 429,
-          headers: {
-            "Retry-After": String(
-              Math.ceil((result.resetAt - Date.now()) / 1000)
-            ),
-            "X-RateLimit-Remaining": "0",
-          },
-        }
-      );
+      if (!result.allowed) {
+        return NextResponse.json(
+          { error: "Trop de requetes. Veuillez reessayer plus tard." },
+          {
+            status: 429,
+            headers: {
+              "Retry-After": String(
+                Math.ceil((result.resetAt - Date.now()) / 1000)
+              ),
+              "X-RateLimit-Remaining": "0",
+            },
+          }
+        );
+      }
     }
-  }
 
-  return NextResponse.next();
+    return NextResponse.next();
+  } catch (err) {
+    console.error("[middleware] CRASH:", err instanceof Error ? err.message : err);
+    return NextResponse.next();
+  }
 });
 
 export const config = {
