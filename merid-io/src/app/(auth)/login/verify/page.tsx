@@ -30,8 +30,8 @@ export default function Verify2FAPage() {
       try {
         const res = await fetch("/api/auth/2fa/send", { method: "POST" });
         const data = await res.json();
-        if (data.skipped || data.smtpError) {
-          // SMTP not available — 2FA was bypassed, redirect to dashboard
+        if (data.skipped) {
+          // SMTP not configured — no 2FA needed, redirect to dashboard
           router.push("/dashboard");
           return;
         }
@@ -141,11 +141,6 @@ export default function Verify2FAPage() {
     try {
       const res = await fetch("/api/auth/2fa/send", { method: "POST" });
       const data = await res.json();
-      if (data.smtpError) {
-        // SMTP broken — 2FA was bypassed, go to dashboard
-        router.push("/dashboard");
-        return;
-      }
       if (!res.ok) {
         setSendFailed(true);
         setError(data.error || "Impossible de renvoyer le code. Vérifiez votre connexion.");

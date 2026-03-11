@@ -45,30 +45,15 @@ export async function POST() {
       const errMsg = error instanceof Error ? error.message : String(error);
       console.error(`[2fa/send] SMTP FAILED for ${user.email}: ${errMsg}`);
 
-      // CRITICAL FIX: When SMTP fails, bypass 2FA so user isn't stuck.
-      // Set twoFactorVerified=true so middleware allows access.
-      // The alternative (blocking the user) is worse for business.
-      await prisma.user.update({
-        where: { id: user.id },
-        data: {
-          twoFactorVerified: true,
-          twoFactorCode: null,
-          twoFactorExpiry: null,
-        },
-      });
-
-      console.warn(`[2fa/send] 2FA BYPASSED for ${user.email} due to SMTP failure`);
-
-      logAudit(session.user.id, "2FA_BYPASSED_SMTP_FAILURE", {
+      logAudit(session.user.id, "2FA_SEND_FAILED", {
         entityType: "User",
         entityId: session.user.id,
       });
 
-      // Return smtpError flag so client knows to redirect to dashboard
-      return NextResponse.json({
-        smtpError: true,
-        message: "Email non disponible — connexion sans vérification.",
-      });
+      return NextResponse.json(
+        { error: "Échec de l'envoi du code de vérification. Veuillez réessayer ou contacter le support." },
+        { status: 502 }
+      );
     }
 
     logAudit(session.user.id, "2FA_CODE_SENT", {
