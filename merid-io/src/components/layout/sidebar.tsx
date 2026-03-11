@@ -33,6 +33,8 @@ import {
   Wallet,
   FileText,
   Crown,
+  Star,
+  Target,
 } from "lucide-react";
 import { MeridioLogo, MeridioIcon } from "@/components/MeridioLogo";
 
@@ -112,6 +114,7 @@ export function Sidebar({
         { href: "/leaves", label: t("leaves"), icon: CalendarDays },
         { href: "/leaves/new", label: t("newLeave"), icon: PlusCircle },
         { href: "/profile", label: t("profile"), icon: User },
+        { href: "/entretien", label: t("review"), icon: Star },
         { href: "/mes-documents", label: t("documents"), icon: FileText },
       ],
     },
@@ -127,6 +130,7 @@ export function Sidebar({
           roles: ["MANAGER", "ADMIN"],
         },
         { href: "/manager/calendar", label: t("calendar"), icon: Calendar, roles: ["MANAGER", "ADMIN"] },
+        { href: "/manager/team", label: t("myTeam"), icon: Users, roles: ["MANAGER", "ADMIN"] },
         { href: "/manager/reports", label: t("reports"), icon: BarChart3, roles: ["MANAGER", "ADMIN"] },
         { href: "/manager/delegation", label: t("delegation"), icon: ArrowLeftRight, roles: ["MANAGER", "ADMIN"] },
       ],
