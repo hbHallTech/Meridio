@@ -34,10 +34,17 @@ const ROUTE_ROLE_MAP: { prefix: string; roles: UserRole[] }[] = [
 ];
 
 export function hasRequiredRole(pathname: string, userRoles: UserRole[]): boolean {
+  // Find the most specific (longest prefix) match to avoid order-dependency bugs
+  let bestMatch: (typeof ROUTE_ROLE_MAP)[number] | null = null;
   for (const route of ROUTE_ROLE_MAP) {
     if (pathname.startsWith(route.prefix)) {
-      return userRoles.some((r) => route.roles.includes(r));
+      if (!bestMatch || route.prefix.length > bestMatch.prefix.length) {
+        bestMatch = route;
+      }
     }
+  }
+  if (bestMatch) {
+    return userRoles.some((r) => bestMatch.roles.includes(r));
   }
   // No role restriction for this path
   return true;
