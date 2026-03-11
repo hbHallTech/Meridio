@@ -585,7 +585,7 @@ export default function HRDocumentsPage() {
   const handleManualImport = async () => {
     setImportRunning(true);
     try {
-      const res = await fetch("/api/admin/import-documents", { method: "POST" });
+      const res = await fetch("/api/hr/import-documents", { method: "POST" });
       const contentType = res.headers.get("content-type") || "";
       if (!contentType.includes("application/json")) throw new Error(`Server error (${res.status})`);
       const data = await res.json();

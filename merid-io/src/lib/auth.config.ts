@@ -23,8 +23,6 @@ const ROUTE_ROLE_MAP: { prefix: string; roles: UserRole[] }[] = [
   // HR can access user management pages and APIs
   { prefix: "/admin/users", roles: ["HR", "ADMIN", "SUPER_ADMIN"] },
   { prefix: "/api/admin/users", roles: ["HR", "ADMIN", "SUPER_ADMIN"] },
-  // HR can trigger document import
-  { prefix: "/api/admin/import-documents", roles: ["HR", "ADMIN", "SUPER_ADMIN"] },
   { prefix: "/admin", roles: ["ADMIN", "SUPER_ADMIN"] },
   { prefix: "/api/admin", roles: ["ADMIN", "SUPER_ADMIN"] },
   { prefix: "/manager", roles: ["MANAGER", "ADMIN", "SUPER_ADMIN"] },
