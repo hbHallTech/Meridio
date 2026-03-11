@@ -6,49 +6,64 @@ import { logAudit, getIp } from "@/lib/audit";
 import crypto from "crypto";
 
 export async function POST(request: NextRequest) {
-  const body = await request.json();
-  const parsed = forgotPasswordSchema.safeParse(body);
+  try {
+    const body = await request.json();
+    const parsed = forgotPasswordSchema.safeParse(body);
 
-  if (!parsed.success) {
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.issues[0].message },
+        { status: 400 }
+      );
+    }
+
+    // Always return success to prevent email enumeration
+    const successResponse = NextResponse.json({
+      message: "Si l'adresse existe, un email de réinitialisation a été envoyé.",
+    });
+
+    const user = await prisma.user.findUnique({
+      where: { email: parsed.data.email.toLowerCase().trim() },
+    });
+
+    if (!user || !user.isActive) {
+      return successResponse;
+    }
+
+    const token = crypto.randomBytes(32).toString("hex");
+    // H2: Store SHA-256 hash of token in DB, send raw token via email
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+    const expiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        resetPasswordToken: tokenHash,
+        resetPasswordExpiry: expiry,
+      },
+    });
+
+    // Email send: catch errors so the endpoint still returns success
+    // (token is in DB, user can retry; we log the error for debugging)
+    try {
+      await sendPasswordResetEmail(user.email, token, user.firstName);
+    } catch (err) {
+      console.error(`[forgot-password] SMTP error for ${user.email}:`, err instanceof Error ? err.message : err);
+      // Still return success to prevent email enumeration
+    }
+
+    logAudit(user.id, "PASSWORD_RESET_REQUESTED", {
+      entityType: "User",
+      entityId: user.id,
+      ip: getIp(request.headers),
+    });
+
+    return successResponse;
+  } catch (err) {
+    console.error("[forgot-password] Unhandled error:", err instanceof Error ? err.message : err);
     return NextResponse.json(
-      { error: parsed.error.issues[0].message },
-      { status: 400 }
+      { error: "Une erreur interne est survenue. Veuillez réessayer." },
+      { status: 500 }
     );
   }
-
-  // Always return success to prevent email enumeration
-  const successResponse = NextResponse.json({
-    message: "Si l'adresse existe, un email de réinitialisation a été envoyé.",
-  });
-
-  const user = await prisma.user.findUnique({
-    where: { email: parsed.data.email.toLowerCase().trim() },
-  });
-
-  if (!user || !user.isActive) {
-    return successResponse;
-  }
-
-  const token = crypto.randomBytes(32).toString("hex");
-  // H2: Store SHA-256 hash of token in DB, send raw token via email
-  const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
-  const expiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-
-  await prisma.user.update({
-    where: { id: user.id },
-    data: {
-      resetPasswordToken: tokenHash,
-      resetPasswordExpiry: expiry,
-    },
-  });
-
-  await sendPasswordResetEmail(user.email, token, user.firstName);
-
-  logAudit(user.id, "PASSWORD_RESET_REQUESTED", {
-    entityType: "User",
-    entityId: user.id,
-    ip: getIp(request.headers),
-  });
-
-  return successResponse;
 }
