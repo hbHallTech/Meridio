@@ -6,7 +6,7 @@ import { auth } from "@/lib/auth";
 export const maxDuration = 300;
 
 /**
- * POST /api/admin/import-documents
+ * POST /api/hr/import-documents
  *
  * Manual trigger for the email import pipeline.
  * Requires ADMIN or HR role (session-authenticated, for use from the settings UI).
@@ -29,7 +29,7 @@ export async function POST() {
     const t0 = Date.now();
     const result = await processIncomingEmails();
     const elapsed = Date.now() - t0;
-    console.log(`[admin/import-documents] Completed in ${elapsed}ms — processed: ${result.processed}, created: ${result.created}, errors: ${result.errors.length}`);
+    console.log(`[hr/import-documents] Completed in ${elapsed}ms — processed: ${result.processed}, created: ${result.created}, errors: ${result.errors.length}`);
 
     // Surface errors: if there are errors and no docs created, mark as failure
     const hasErrors = result.errors.length > 0;
@@ -42,7 +42,7 @@ export async function POST() {
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    console.error("[admin/import-documents] Error:", error);
+    console.error("[hr/import-documents] Error:", error);
     const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json(
       {
