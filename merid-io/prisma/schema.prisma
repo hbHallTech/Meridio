@@ -311,6 +311,8 @@ model User {
   skills            Skill[]
   objectives        Objective[]            @relation("UserObjectives")
   assignedObjectives Objective[]           @relation("ObjectivesAssignedBy")
+  entretiens        Entretien[]            @relation("UserEntretiens")
+  managedEntretiens Entretien[]            @relation("EntretienManager")
 
   @@index([resetPasswordToken])
   @@index([isActive])
@@ -850,4 +852,48 @@ model Objective {
   @@index([userId])
   @@index([userId, status])
   @@index([managerId])
+}
+
+// ── Entretien annuel (annual review) ────────────────────────────────
+
+enum EntretienStatus {
+  DRAFT_EMPLOYEE  // Employee is filling self-evaluation
+  DRAFT_MANAGER   // Manager is filling their evaluation
+  COMPLETED       // Both sides done, ready for review meeting
+  ARCHIVED        // After review meeting, final
+}
+
+model Entretien {
+  id                String           @id @default(cuid())
+  userId            String
+  managerId         String
+  year              Int              // ex: 2026
+  status            EntretienStatus  @default(DRAFT_EMPLOYEE)
+
+  // Employee self-evaluation (JSON arrays)
+  selfSkills        Json?            // [{ skillId, skillName, selfLevel, comment }]
+  selfObjectives    Json?            // [{ objectiveId, title, selfProgress, selfComment }]
+  selfStrengths     String?          // Points forts (texte libre)
+  selfImprovements  String?          // Axes d'amélioration (texte libre)
+
+  // Manager evaluation (JSON arrays)
+  managerSkills     Json?            // [{ skillId, skillName, managerLevel, comment }]
+  managerObjectives Json?            // [{ objectiveId, title, managerProgress, managerComment }]
+  managerStrengths  String?          // Points forts vus par le manager
+  managerImprovements String?        // Axes d'amélioration vus par le manager
+
+  // Final
+  summaryReport     String?          // Rapport comparatif (texte/markdown)
+  finalComment      String?          // Commentaire post-entretien physique
+
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  user              User             @relation("UserEntretiens", fields: [userId], references: [id], onDelete: Cascade)
+  manager           User             @relation("EntretienManager", fields: [managerId], references: [id])
+
+  @@unique([userId, year])           // Un seul entretien par user par an
+  @@index([userId])
+  @@index([managerId])
+  @@index([year])
 }
