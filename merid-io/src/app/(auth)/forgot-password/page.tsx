@@ -23,8 +23,12 @@ export default function ForgotPasswordPage() {
       });
 
       if (!res.ok) {
-        const data = await res.json();
-        setError(data.error || "Une erreur est survenue.");
+        try {
+          const data = await res.json();
+          setError(data.error || "Une erreur est survenue.");
+        } catch {
+          setError(`Erreur serveur (${res.status}). Veuillez réessayer.`);
+        }
       } else {
         setSent(true);
       }
