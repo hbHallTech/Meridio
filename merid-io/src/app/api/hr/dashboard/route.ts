@@ -6,7 +6,7 @@ import { LeaveStatus } from "@prisma/client";
 export async function GET() {
   const session = await auth();
   const roles = session?.user?.roles ?? [];
-  if (!roles.includes("HR") && !roles.includes("ADMIN")) {
+  if (!roles.includes("HR") && !roles.includes("ADMIN") && !roles.includes("SUPER_ADMIN")) {
     return NextResponse.json({ error: "Acces refuse" }, { status: 403 });
   }
 
@@ -14,6 +14,7 @@ export async function GET() {
   const year = now.getFullYear();
   const startOfYear = new Date(year, 0, 1);
   const endOfYear = new Date(year, 11, 31, 23, 59, 59);
+  const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
   // ── KPIs ──
   const [pendingHR, activeAbsences, totalEmployees] = await Promise.all([
@@ -117,6 +118,35 @@ export async function GET() {
     .filter((t) => t.value > 0)
     .sort((a, b) => b.value - a.value);
 
+  // ── Pulse KPIs (mood + shoutouts) ──
+  const moodValues: Record<string, number> = {
+    VERY_BAD: 1, BAD: 2, NEUTRAL: 3, GOOD: 4, VERY_GOOD: 5,
+  };
+
+  const [recentMoods, shoutoutsThisWeek, shoutoutsThisMonth] = await Promise.all([
+    prisma.moodCheckin.findMany({
+      where: { createdAt: { gte: oneWeekAgo } },
+      select: { mood: true },
+    }),
+    prisma.shoutout.count({
+      where: { createdAt: { gte: oneWeekAgo } },
+    }),
+    prisma.shoutout.count({
+      where: { createdAt: { gte: new Date(year, now.getMonth(), 1) } },
+    }),
+  ]);
+
+  const moodDistribution: Record<string, number> = {
+    VERY_BAD: 0, BAD: 0, NEUTRAL: 0, GOOD: 0, VERY_GOOD: 0,
+  };
+  for (const m of recentMoods) {
+    moodDistribution[m.mood] = (moodDistribution[m.mood] || 0) + 1;
+  }
+  const moodTotal = recentMoods.length;
+  const moodAverage = moodTotal > 0
+    ? Math.round((recentMoods.reduce((s, m) => s + moodValues[m.mood], 0) / moodTotal) * 100) / 100
+    : null;
+
   return NextResponse.json({
     kpis: {
       pendingHR,
@@ -126,6 +156,13 @@ export async function GET() {
       absenteeismRate: totalEmployees > 0
         ? Math.round(((approvedThisYear._sum.totalDays ?? 0) / (totalEmployees * 220)) * 100 * 10) / 10
         : 0,
+    },
+    pulse: {
+      moodAverage,
+      moodTotal,
+      moodDistribution,
+      shoutoutsThisWeek,
+      shoutoutsThisMonth,
     },
     byMonth,
     byOffice,

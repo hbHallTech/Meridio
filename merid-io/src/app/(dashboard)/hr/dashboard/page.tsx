@@ -10,6 +10,8 @@ import {
   CalendarDays,
   TrendingUp,
   AlertCircle,
+  Smile,
+  Heart,
 } from "lucide-react";
 import {
   PieChart,
@@ -55,8 +57,17 @@ interface TypeData {
   value: number;
 }
 
+interface PulseData {
+  moodAverage: number | null;
+  moodTotal: number;
+  moodDistribution: Record<string, number>;
+  shoutoutsThisWeek: number;
+  shoutoutsThisMonth: number;
+}
+
 interface DashboardData {
   kpis: KPIs;
+  pulse?: PulseData;
   byMonth: MonthData[];
   byOffice: OfficeData[];
   byType: TypeData[];
@@ -99,7 +110,30 @@ export default function HRDashboardPage() {
     );
   }
 
-  const { kpis, byMonth, byOffice, byType } = data;
+  const { kpis, pulse, byMonth, byOffice, byType } = data;
+
+  const MOOD_EMOJIS: Record<string, string> = {
+    VERY_BAD: "\uD83D\uDE29",
+    BAD: "\uD83D\uDE1E",
+    NEUTRAL: "\uD83D\uDE10",
+    GOOD: "\uD83D\uDE0A",
+    VERY_GOOD: "\uD83E\uDD29",
+  };
+
+  const moodLabel = (avg: number | null) => {
+    if (avg === null) return "—";
+    if (avg >= 4.5) return lang === "en" ? "Excellent" : "Excellent";
+    if (avg >= 3.5) return lang === "en" ? "Good" : "Bon";
+    if (avg >= 2.5) return lang === "en" ? "Average" : "Moyen";
+    return lang === "en" ? "Needs attention" : "A surveiller";
+  };
+
+  const moodColor = (avg: number | null) => {
+    if (avg === null) return "text-gray-400";
+    if (avg >= 4) return "text-green-600";
+    if (avg >= 3) return "text-amber-500";
+    return "text-red-500";
+  };
 
   return (
     <div className="space-y-6">
@@ -191,6 +225,77 @@ export default function HRDashboardPage() {
           </p>
         </div>
       </div>
+
+      {/* Pulse KPIs */}
+      {pulse && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-gray-500">
+                {lang === "en" ? "Mood score (7d)" : "Humeur (7j)"}
+              </p>
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-yellow-50">
+                <Smile className="h-5 w-5 text-yellow-500" />
+              </div>
+            </div>
+            <p className={`mt-3 text-3xl font-bold ${moodColor(pulse.moodAverage)}`}>
+              {pulse.moodAverage !== null ? pulse.moodAverage.toFixed(1) : "—"}<span className="text-lg text-gray-400">/5</span>
+            </p>
+            <p className="mt-1 text-xs text-gray-500">{moodLabel(pulse.moodAverage)}</p>
+          </div>
+
+          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-gray-500">
+                {lang === "en" ? "Check-ins (7d)" : "Check-ins (7j)"}
+              </p>
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50">
+                <CalendarDays className="h-5 w-5 text-blue-500" />
+              </div>
+            </div>
+            <p className="mt-3 text-3xl font-bold text-gray-900">{pulse.moodTotal}</p>
+            <p className="mt-1 text-xs text-gray-500">
+              {lang === "en" ? "mood responses" : "reponses humeur"}
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-gray-500">
+                {lang === "en" ? "Shoutouts (7d)" : "Shoutouts (7j)"}
+              </p>
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-pink-50">
+                <Heart className="h-5 w-5 text-pink-500" />
+              </div>
+            </div>
+            <p className="mt-3 text-3xl font-bold text-gray-900">{pulse.shoutoutsThisWeek}</p>
+            <p className="mt-1 text-xs text-gray-500">
+              {lang === "en" ? "peer recognitions" : "reconnaissances pair"}
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+            <p className="text-sm font-medium text-gray-500 mb-3">
+              {lang === "en" ? "Mood distribution (7d)" : "Distribution humeur (7j)"}
+            </p>
+            <div className="flex items-end gap-1 h-12">
+              {Object.entries(pulse.moodDistribution).map(([mood, count]) => {
+                const maxCount = Math.max(...Object.values(pulse.moodDistribution), 1);
+                const height = count > 0 ? Math.max((count / maxCount) * 100, 10) : 4;
+                const colors: Record<string, string> = {
+                  VERY_BAD: "bg-red-400", BAD: "bg-orange-400", NEUTRAL: "bg-yellow-400", GOOD: "bg-green-400", VERY_GOOD: "bg-emerald-500",
+                };
+                return (
+                  <div key={mood} className="flex flex-col items-center flex-1 gap-0.5">
+                    <div className={`w-full rounded-t ${colors[mood] || "bg-gray-300"}`} style={{ height: `${height}%` }} />
+                    <span className="text-xs" title={mood}>{MOOD_EMOJIS[mood]}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Charts Row 1: Line + Bar */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">

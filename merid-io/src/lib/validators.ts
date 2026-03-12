@@ -349,9 +349,19 @@ export const skillManagerUpdateSchema = z.object({
   managerLevel: z.enum(SKILL_LEVELS, { message: "Niveau invalide" }),
 });
 
+export const skillHrUpdateSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  type: z.enum(SKILL_TYPES).optional(),
+  selfLevel: z.enum(SKILL_LEVELS).optional().nullable(),
+  managerLevel: z.enum(SKILL_LEVELS).optional().nullable(),
+  description: z.string().max(500).optional().nullable().or(z.literal("")),
+  evidence: z.string().max(500).optional().nullable().or(z.literal("")),
+});
+
 export type SkillCreateInput = z.infer<typeof skillCreateSchema>;
 export type SkillSelfUpdateInput = z.infer<typeof skillSelfUpdateSchema>;
 export type SkillManagerUpdateInput = z.infer<typeof skillManagerUpdateSchema>;
+export type SkillHrUpdateInput = z.infer<typeof skillHrUpdateSchema>;
 
 // ─── Objectives ───
 

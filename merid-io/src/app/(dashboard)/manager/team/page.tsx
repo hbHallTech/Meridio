@@ -5,7 +5,7 @@ import { useSession } from "next-auth/react";
 import {
   Loader2, Users, Star, Target, ChevronRight, ChevronDown,
   Pencil, Plus, Trash2, Save, X, TrendingUp,
-  CheckCircle2, Clock, AlertTriangle, XCircle,
+  CheckCircle2, Clock, AlertTriangle, XCircle, Smile, Heart,
 } from "lucide-react";
 import { Dialog, ConfirmDialog } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
@@ -137,6 +137,13 @@ export default function ManagerTeamPage() {
   const [deleteObjId, setDeleteObjId] = useState<string>("");
   const [deleteObjMemberId, setDeleteObjMemberId] = useState<string>("");
 
+  // Pulse KPIs
+  const [pulseData, setPulseData] = useState<{
+    moodAverage: number | null;
+    moodTotal: number;
+    shoutoutsThisWeek: number;
+  } | null>(null);
+
   // ─── Fetch ───
   const fetchTeam = useCallback(async () => {
     try {
@@ -153,6 +160,21 @@ export default function ManagerTeamPage() {
   }, [addToast]);
 
   useEffect(() => { fetchTeam(); }, [fetchTeam]);
+
+  useEffect(() => {
+    fetch("/api/hr/mood-stats?period=week")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data) {
+          setPulseData({
+            moodAverage: data.average,
+            moodTotal: data.total,
+            shoutoutsThisWeek: 0,
+          });
+        }
+      })
+      .catch(() => { /* ignore */ });
+  }, []);
 
   // ─── Skill assessment ───
   const openSkillAssess = (member: TeamMember, skill: SkillData) => {
@@ -286,7 +308,7 @@ export default function ManagerTeamPage() {
       </div>
 
       {/* Team summary cards */}
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-lg border bg-white p-4">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50">
@@ -325,6 +347,21 @@ export default function ManagerTeamPage() {
             </div>
           </div>
         </div>
+        {pulseData && (
+          <div className="rounded-lg border bg-white p-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-yellow-50">
+                <Smile className="h-5 w-5 text-yellow-500" />
+              </div>
+              <div>
+                <p className={`text-2xl font-bold ${pulseData.moodAverage !== null ? (pulseData.moodAverage >= 4 ? "text-green-600" : pulseData.moodAverage >= 3 ? "text-amber-500" : "text-red-500") : "text-gray-400"}`}>
+                  {pulseData.moodAverage !== null ? `${pulseData.moodAverage.toFixed(1)}/5` : "—"}
+                </p>
+                <p className="text-xs text-gray-500">Humeur équipe (7j)</p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Members list */}
