@@ -98,6 +98,14 @@ enum EventType {
   OTHER
 }
 
+enum MoodLevel {
+  VERY_BAD
+  BAD
+  NEUTRAL
+  GOOD
+  VERY_GOOD
+}
+
 // ============================================================
 // COMPANY & OFFICES
 // ============================================================
@@ -323,6 +331,9 @@ model User {
   managedEntretiens Entretien[]            @relation("EntretienManager")
   createdEvents     Event[]                @relation("EventCreator")
   assignedEvents    Event[]                @relation("EventUsers")
+  moodCheckins      MoodCheckin[]
+  shoutoutsSent     Shoutout[]             @relation("ShoutoutsSent")
+  shoutoutsReceived Shoutout[]             @relation("ShoutoutsReceived")
 
   @@index([resetPasswordToken])
   @@index([isActive])
@@ -933,4 +944,36 @@ model Event {
   @@index([creatorId])
   @@index([startDate])
   @@index([type])
+}
+
+// ============================================================
+// EMPLOYEE EXPERIENCE PULSE (Mood & Shoutouts)
+// ============================================================
+
+model MoodCheckin {
+  id        String    @id @default(cuid())
+  userId    String
+  mood      MoodLevel
+  comment   String?   // max 280 chars
+  createdAt DateTime  @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model Shoutout {
+  id         String   @id @default(cuid())
+  fromUserId String
+  toUserId   String
+  message    String   // max 500 chars
+  createdAt  DateTime @default(now())
+
+  fromUser   User     @relation("ShoutoutsSent", fields: [fromUserId], references: [id])
+  toUser     User     @relation("ShoutoutsReceived", fields: [toUserId], references: [id])
+
+  @@index([fromUserId])
+  @@index([toUserId])
+  @@index([createdAt])
 }

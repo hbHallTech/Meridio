@@ -21,6 +21,8 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from "recharts";
+import { MoodWidget } from "@/components/pulse/MoodWidget";
+import { ShoutoutFeed } from "@/components/pulse/ShoutoutFeed";
 
 interface BalanceData {
   total: number;
@@ -449,6 +451,12 @@ export default function DashboardPage() {
             </ul>
           )}
         </div>
+      </div>
+
+      {/* Employee Pulse: Mood + Shoutouts */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <MoodWidget />
+        <ShoutoutFeed />
       </div>
 
       {/* Recent requests table */}

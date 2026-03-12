@@ -148,6 +148,7 @@ const NOTIF_TYPES = [
   { type: "ENTRETIEN_SELF_SUBMITTED", fr: "Auto-évaluation soumise", en: "Self-evaluation submitted" },
   { type: "ENTRETIEN_COMPLETED", fr: "Entretien finalisé", en: "Review completed" },
   { type: "EVENT_ASSIGNED", fr: "Événement assigné", en: "Event assigned" },
+  { type: "SHOUTOUT_RECEIVED", fr: "Shoutout reçu", en: "Shoutout received" },
   { type: "PASSWORD_EXPIRING", fr: "Expiration mot de passe", en: "Password expiring" },
   { type: "PASSWORD_CHANGED", fr: "Mot de passe modifié", en: "Password changed" },
   { type: "NEW_LOGIN", fr: "Nouvelle connexion", en: "New login detected" },

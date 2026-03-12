@@ -623,6 +623,57 @@ export async function notifyEventAssigned(
   }
 }
 
+// ─── Shoutout notification helper ───
+
+/**
+ * Notify a user that they received a shoutout.
+ */
+export async function notifyShoutoutReceived(
+  userId: string,
+  params: { shoutoutId: string; senderName: string; message: string }
+) {
+  const enabled = await isNotificationEnabled("SHOUTOUT_RECEIVED", userId);
+  if (!enabled) return;
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { email: true, firstName: true },
+  });
+  if (!user) return;
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const safeName = escapeHtml(user.firstName);
+  const safeSender = escapeHtml(params.senderName);
+  const safeMessage = escapeHtml(params.message);
+
+  const results = await Promise.allSettled([
+    createNotification({
+      userId,
+      type: "SHOUTOUT_RECEIVED",
+      title_fr: `Bravo ! ${params.senderName} vous felicite`,
+      title_en: `Kudos! ${params.senderName} gave you a shoutout`,
+      body_fr: `"${params.message}"`,
+      body_en: `"${params.message}"`,
+      data: { shoutoutId: params.shoutoutId },
+    }),
+    sendEmail({
+      to: user.email,
+      subject: `Meridio - ${params.senderName} vous felicite !`,
+      html: `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:'Segoe UI',Arial,sans-serif;background-color:#f4f6f8;margin:0;padding:20px;"><div style="max-width:600px;margin:0 auto;background:white;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);"><div style="background-color:#1B3A5C;padding:24px;text-align:center;"><h1 style="color:white;margin:0;font-size:24px;">Halley-Technologies</h1><p style="color:#00BCD4;margin:4px 0 0;font-size:14px;">Meridio - Reconnaissance</p></div><div style="padding:32px 24px;"><h2 style="color:#1B3A5C;margin-top:0;">Bonjour ${safeName},</h2><p><strong style="color:#1B3A5C;">${safeSender}</strong> vous a envoye un shoutout :</p><div style="background:#f0fdf4;border-left:4px solid #16a34a;padding:16px;margin:16px 0;border-radius:0 8px 8px 0;"><p style="margin:0;font-size:16px;color:#15803d;font-style:italic;">"${safeMessage}"</p></div><div style="text-align:center;margin:24px 0;"><a href="${appUrl}/profile" style="display:inline-block;background-color:#16a34a;color:white;padding:12px 32px;border-radius:6px;text-decoration:none;font-weight:600;">Voir mes shoutouts</a></div></div><div style="background-color:#f8f9fa;padding:16px 24px;text-align:center;font-size:12px;color:#6b7280;"><p style="margin:0;">Cet email a ete envoye automatiquement par Meridio.</p></div></div></body></html>`,
+    }),
+  ]);
+
+  const emailResult = results[1].status === "fulfilled" ? "success" : "fail";
+  console.log(`Email notif SHOUTOUT_RECEIVED envoye a ${user.email} : ${emailResult}`);
+
+  if (results[1].status === "fulfilled" && results[0].status === "fulfilled") {
+    await prisma.notification.update({
+      where: { id: results[0].value.id },
+      data: { sentByEmail: true },
+    }).catch(() => {});
+  }
+}
+
 /**
  * Create an audit log entry.
  * @deprecated Use logAudit() from @/lib/audit instead. Kept for backward compat.
