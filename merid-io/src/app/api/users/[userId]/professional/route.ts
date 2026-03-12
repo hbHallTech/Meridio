@@ -7,7 +7,7 @@ import { userProfessionalSchema } from "@/lib/validators";
 
 export async function GET(
   _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -20,7 +20,7 @@ export async function GET(
   );
 
   // Allow self-access or HR/ADMIN
-  const { id } = await params;
+  const { userId: id } = await params;
   if (id !== session.user.id && !isHrOrAdmin) {
     return NextResponse.json({ error: "Accès non autorisé" }, { status: 403 });
   }
@@ -49,7 +49,7 @@ export async function GET(
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -65,7 +65,7 @@ export async function PATCH(
     return NextResponse.json({ error: "Accès non autorisé" }, { status: 403 });
   }
 
-  const { id } = await params;
+  const { userId: id } = await params;
 
   try {
     const existingUser = await prisma.user.findUnique({ where: { id } });

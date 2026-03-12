@@ -7,7 +7,7 @@ import { userPersonalSchema } from "@/lib/validators";
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -23,7 +23,7 @@ export async function PATCH(
     return NextResponse.json({ error: "Accès non autorisé" }, { status: 403 });
   }
 
-  const { id } = await params;
+  const { userId: id } = await params;
 
   try {
     const existingUser = await prisma.user.findUnique({ where: { id } });
