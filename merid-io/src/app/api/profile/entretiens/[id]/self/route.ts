@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { notifyEntretienSelfSubmitted } from "@/lib/notifications";
 
 /**
  * PATCH /api/profile/entretiens/[id]/self
@@ -50,6 +51,25 @@ export async function PATCH(
       where: { id },
       data,
     });
+
+    // Notify manager when employee submits (non-blocking)
+    if (submit) {
+      const employee = await prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { firstName: true, lastName: true },
+      });
+      const employeeName = employee
+        ? `${employee.firstName} ${employee.lastName}`
+        : "Un employe";
+
+      void notifyEntretienSelfSubmitted(entretien.managerId, {
+        entretienId: id,
+        year: entretien.year,
+        employeeName,
+      }).catch((err) => {
+        console.error("[profile/entretiens/self] notification error:", err);
+      });
+    }
 
     return NextResponse.json(updated);
   } catch (err) {

@@ -36,6 +36,7 @@ import {
   Star,
   Target,
   ClipboardCheck,
+  CalendarCheck,
 } from "lucide-react";
 import { MeridioLogo, MeridioIcon } from "@/components/MeridioLogo";
 
@@ -147,6 +148,7 @@ export function Sidebar({
         { href: "/hr/balances", label: t("balances"), icon: Wallet, roles: ["HR", "ADMIN"] },
         { href: "/hr/reports", label: t("reports"), icon: BarChart3, roles: ["HR", "ADMIN"] },
         { href: "/hr/documents", label: t("hrDocuments"), icon: FileText, roles: ["HR", "ADMIN"] },
+        { href: "/hr/evenements", label: t("events"), icon: CalendarCheck, roles: ["HR", "ADMIN"] },
       ],
     },
     {

@@ -4,7 +4,8 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET() {
   const session = await auth();
-  if (!session?.user?.roles?.includes("ADMIN")) {
+  const roles = session?.user?.roles ?? [];
+  if (!roles.includes("ADMIN") && !roles.includes("HR")) {
     return NextResponse.json({ error: "Accès non autorisé" }, { status: 403 });
   }
 

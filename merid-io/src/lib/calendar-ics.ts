@@ -1,5 +1,5 @@
 /**
- * ICS (iCalendar) file generator for leave events.
+ * ICS (iCalendar) file generator for leave and entretien events.
  *
  * Generates RFC 5545 compliant .ics content that can be attached to emails.
  * Supported by Outlook, Google Calendar, Apple Calendar, Thunderbird, etc.
@@ -73,6 +73,48 @@ export function generateLeaveICS(params: LeaveICSParams): string {
     `SUMMARY:${escapeICSText(`${params.leaveType} - ${params.userName}`)}`,
     `DESCRIPTION:${escapeICSText(`Absence approuvee : ${params.leaveType} du ${params.startDate} au ${params.endDate}`)}`,
     "TRANSP:OPAQUE",
+    "STATUS:CONFIRMED",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ];
+
+  return lines.join("\r\n");
+}
+
+interface EntretienICSParams {
+  entretienId: string;
+  year: number;
+  employeeName: string;
+  managerName: string;
+}
+
+/**
+ * Generate an ICS calendar file for a scheduled entretien (performance review).
+ *
+ * Creates an all-day event for today (creation date) as a reminder.
+ */
+export function generateEntretienICS(params: EntretienICSParams): string {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  const uid = `entretien-${params.entretienId}@meridio.app`;
+
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Meridio//Entretiens//FR",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    "BEGIN:VEVENT",
+    `UID:${uid}`,
+    `DTSTAMP:${formatICSDateTime(now)}`,
+    `DTSTART;VALUE=DATE:${formatICSDate(today)}`,
+    `DTEND;VALUE=DATE:${formatICSDate(tomorrow)}`,
+    `SUMMARY:${escapeICSText(`Entretien annuel ${params.year} - ${params.employeeName}`)}`,
+    `DESCRIPTION:${escapeICSText(`Entretien annuel ${params.year} initie par ${params.managerName}. Veuillez completer votre auto-evaluation dans Meridio.`)}`,
+    "TRANSP:TRANSPARENT",
     "STATUS:CONFIRMED",
     "END:VEVENT",
     "END:VCALENDAR",
