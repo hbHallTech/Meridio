@@ -548,6 +548,81 @@ export async function notifyEntretienCompleted(
   }
 }
 
+// ─── Event notification helpers ───
+
+const EVENT_TYPE_LABELS: Record<string, { fr: string; en: string }> = {
+  SEMINAIRE: { fr: "Séminaire", en: "Seminar" },
+  FORMATION: { fr: "Formation", en: "Training" },
+  TEAM_BUILDING: { fr: "Team Building", en: "Team Building" },
+  CONFERENCE: { fr: "Conférence", en: "Conference" },
+  OTHER: { fr: "Événement", en: "Event" },
+};
+
+/**
+ * Notify users that they have been assigned to an event.
+ */
+export async function notifyEventAssigned(
+  userIds: string[],
+  params: {
+    eventId: string;
+    eventTitle: string;
+    eventType: string;
+    startDate: string;
+    location?: string;
+    creatorName: string;
+  }
+) {
+  const typeLabel = EVENT_TYPE_LABELS[params.eventType] || EVENT_TYPE_LABELS.OTHER;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
+  for (const userId of userIds) {
+    const enabled = await isNotificationEnabled("EVENT_ASSIGNED", userId);
+    if (!enabled) continue;
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, firstName: true },
+    });
+    if (!user) continue;
+
+    const safeName = escapeHtml(user.firstName);
+    const safeTitle = escapeHtml(params.eventTitle);
+    const safeCreator = escapeHtml(params.creatorName);
+    const safeLocation = params.location ? escapeHtml(params.location) : null;
+
+    const locationRow = safeLocation
+      ? `<tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Lieu</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${safeLocation}</td></tr>`
+      : "";
+
+    const results = await Promise.allSettled([
+      createNotification({
+        userId,
+        type: "EVENT_ASSIGNED",
+        title_fr: `${typeLabel.fr} : ${params.eventTitle}`,
+        title_en: `${typeLabel.en}: ${params.eventTitle}`,
+        body_fr: `Vous avez été inscrit(e) au ${typeLabel.fr.toLowerCase()} "${params.eventTitle}" le ${params.startDate}${params.location ? ` (${params.location})` : ""}.`,
+        body_en: `You have been assigned to the ${typeLabel.en.toLowerCase()} "${params.eventTitle}" on ${params.startDate}${params.location ? ` (${params.location})` : ""}.`,
+        data: { eventId: params.eventId },
+      }),
+      sendEmail({
+        to: user.email,
+        subject: `Meridio - ${typeLabel.fr} : ${params.eventTitle}`,
+        html: `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:'Segoe UI',Arial,sans-serif;background-color:#f4f6f8;margin:0;padding:20px;"><div style="max-width:600px;margin:0 auto;background:white;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);"><div style="background-color:#1B3A5C;padding:24px;text-align:center;"><h1 style="color:white;margin:0;font-size:24px;">Halley-Technologies</h1><p style="color:#00BCD4;margin:4px 0 0;font-size:14px;">Meridio - Evenements</p></div><div style="padding:32px 24px;"><h2 style="color:#1B3A5C;margin-top:0;">Bonjour ${safeName},</h2><p>Vous avez ete inscrit(e) a un evenement :</p><table style="width:100%;border-collapse:collapse;margin:16px 0;"><tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Type</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${escapeHtml(typeLabel.fr)}</td></tr><tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Titre</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${safeTitle}</td></tr><tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Date</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${escapeHtml(params.startDate)}</td></tr>${locationRow}<tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Organise par</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${safeCreator}</td></tr></table><div style="text-align:center;margin:24px 0;"><a href="${appUrl}/hr/evenements" style="display:inline-block;background-color:#1B3A5C;color:white;padding:12px 32px;border-radius:6px;text-decoration:none;font-weight:600;">Voir les evenements</a></div></div><div style="background-color:#f8f9fa;padding:16px 24px;text-align:center;font-size:12px;color:#6b7280;"><p style="margin:0;">Cet email a ete envoye automatiquement par Meridio.</p></div></div></body></html>`,
+      }),
+    ]);
+
+    const emailResult = results[1].status === "fulfilled" ? "success" : "fail";
+    console.log(`Email notif EVENT_ASSIGNED envoye a ${user.email} : ${emailResult}`);
+
+    if (results[1].status === "fulfilled" && results[0].status === "fulfilled") {
+      await prisma.notification.update({
+        where: { id: results[0].value.id },
+        data: { sentByEmail: true },
+      }).catch(() => {});
+    }
+  }
+}
+
 /**
  * Create an audit log entry.
  * @deprecated Use logAudit() from @/lib/audit instead. Kept for backward compat.

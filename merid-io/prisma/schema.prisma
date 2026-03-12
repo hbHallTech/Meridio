@@ -90,6 +90,14 @@ enum DocumentStatus {
   DELETED // Soft-delete, invisible pour l'employé
 }
 
+enum EventType {
+  SEMINAIRE
+  FORMATION
+  TEAM_BUILDING
+  CONFERENCE
+  OTHER
+}
+
 // ============================================================
 // COMPANY & OFFICES
 // ============================================================
@@ -313,6 +321,8 @@ model User {
   assignedObjectives Objective[]           @relation("ObjectivesAssignedBy")
   entretiens        Entretien[]            @relation("UserEntretiens")
   managedEntretiens Entretien[]            @relation("EntretienManager")
+  createdEvents     Event[]                @relation("EventCreator")
+  assignedEvents    Event[]                @relation("EventUsers")
 
   @@index([resetPasswordToken])
   @@index([isActive])
@@ -331,6 +341,7 @@ model Team {
   office    Office           @relation(fields: [officeId], references: [id])
   members   User[]           @relation("TeamMembers")
   workflows WorkflowConfig[] @relation("WorkflowTeams")
+  events    Event[]          @relation("EventTeams")
 }
 
 model EmergencyContact {
@@ -896,4 +907,30 @@ model Entretien {
   @@index([userId])
   @@index([managerId])
   @@index([year])
+}
+
+// ============================================================
+// EVENTS (séminaires, formations, team building, etc.)
+// ============================================================
+
+model Event {
+  id            String    @id @default(cuid())
+  title         String
+  description   String?
+  type          EventType
+  startDate     DateTime
+  endDate       DateTime?
+  location      String?
+  creatorId     String
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  creator       User      @relation("EventCreator", fields: [creatorId], references: [id])
+  assignedTeams Team[]    @relation("EventTeams")
+  assignedUsers User[]    @relation("EventUsers")
+
+  @@index([creatorId])
+  @@index([startDate])
+  @@index([type])
 }

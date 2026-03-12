@@ -81,7 +81,8 @@
     "noNewDocuments": "No new documents found",
     "superAdmin": "Super Admin",
     "signupRequests": "Signup Requests",
-    "tenants": "Tenants"
+    "tenants": "Tenants",
+    "events": "Events"
   },
   "leaves": {
     "title": "My Leave Requests",

@@ -81,7 +81,8 @@
     "noNewDocuments": "Aucun nouveau document trouvé",
     "superAdmin": "Super Admin",
     "signupRequests": "Demandes d'inscription",
-    "tenants": "Tenants"
+    "tenants": "Tenants",
+    "events": "Événements"
   },
   "leaves": {
     "title": "Mes demandes de congé",
