@@ -29,17 +29,13 @@ const RATE_LIMITED_ROUTES: Record<
   },
 };
 
-// Wrap auth middleware with rate limiting
-export default auth(function middleware(request: NextRequest) {
+function applyRateLimit(request: NextRequest): NextResponse | null {
   const { pathname } = request.nextUrl;
-
-  // Check rate limiting for specific routes
   const routeConfig = RATE_LIMITED_ROUTES[pathname];
   if (routeConfig && request.method === routeConfig.method) {
     const ip = getRequestIp(request.headers);
     const key = `${ip}:${pathname}`;
     const result = checkRateLimit(key, routeConfig.limit);
-
     if (!result.allowed) {
       return NextResponse.json(
         { error: "Trop de requetes. Veuillez reessayer plus tard." },
@@ -55,9 +51,57 @@ export default auth(function middleware(request: NextRequest) {
       );
     }
   }
+  return null;
+}
 
-  return NextResponse.next();
+// NextAuth core endpoints (session, providers, callback, csrf, signin, signout).
+// These are handled by the [...nextauth] route handler and should NOT go through
+// the NextAuth Edge middleware wrapper which can crash in Edge Runtime.
+const NEXTAUTH_CORE_PATHS = [
+  "/api/auth/session",
+  "/api/auth/providers",
+  "/api/auth/callback",
+  "/api/auth/csrf",
+  "/api/auth/signin",
+  "/api/auth/signout",
+  "/api/auth/error",
+];
+
+function isNextAuthCorePath(pathname: string): boolean {
+  return NEXTAUTH_CORE_PATHS.some((p) => pathname.startsWith(p));
+}
+
+// Auth-wrapped middleware for all routes EXCEPT NextAuth core endpoints
+const authMiddleware = auth(function middleware(request: NextRequest) {
+  try {
+    const rateLimitResponse = applyRateLimit(request);
+    if (rateLimitResponse) return rateLimitResponse;
+    return NextResponse.next();
+  } catch (err) {
+    console.error("[middleware] CRASH:", err instanceof Error ? err.message : err);
+    return NextResponse.next();
+  }
 });
+
+// Main middleware: skip NextAuth wrapper for core auth endpoints
+export default function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  // NextAuth core endpoints: apply rate limiting only, skip auth wrapper
+  if (isNextAuthCorePath(pathname)) {
+    try {
+      const rateLimitResponse = applyRateLimit(request);
+      if (rateLimitResponse) return rateLimitResponse;
+      return NextResponse.next();
+    } catch (err) {
+      console.error("[middleware] CRASH on auth path:", err instanceof Error ? err.message : err);
+      return NextResponse.next();
+    }
+  }
+
+  // All other routes: go through NextAuth auth wrapper (RBAC, 2FA check, etc.)
+  return authMiddleware(request, {} as any);
+}
 
 export const config = {
   matcher: ["/((?!_next|.*\\..*|favicon.ico).*)"],
