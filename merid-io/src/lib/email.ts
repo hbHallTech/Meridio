@@ -119,10 +119,17 @@ function htmlToPlainText(html: string): string {
     .trim();
 }
 
+interface EmailAttachment {
+  filename: string;
+  content: string | Buffer;
+  contentType?: string;
+}
+
 interface SendEmailOptions {
   to: string;
   subject: string;
   html: string;
+  attachments?: EmailAttachment[];
 }
 
 export interface SendEmailContext {
@@ -133,7 +140,7 @@ export interface SendEmailContext {
 }
 
 export async function sendEmail(
-  { to, subject, html }: SendEmailOptions,
+  { to, subject, html, attachments }: SendEmailOptions,
   context: SendEmailContext = {}
 ) {
   const tag = context.emailType || "GENERIC";
@@ -191,6 +198,13 @@ export async function sendEmail(
       headers: {
         "X-Mailer": "Meridio HR Platform",
       },
+      ...(attachments?.length && {
+        attachments: attachments.map((a) => ({
+          filename: a.filename,
+          content: a.content,
+          contentType: a.contentType,
+        })),
+      }),
     });
     console.log(
       `[email][${tag}] Sent OK: to=${to} messageId=${info.messageId} ${ctxStr}`.trim()
