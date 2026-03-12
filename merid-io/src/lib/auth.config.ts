@@ -29,6 +29,8 @@ const ROUTE_ROLE_MAP: { prefix: string; roles: UserRole[] }[] = [
   { prefix: "/api/admin", roles: ["ADMIN", "SUPER_ADMIN"] },
   { prefix: "/manager", roles: ["MANAGER", "ADMIN", "SUPER_ADMIN"] },
   { prefix: "/api/manager", roles: ["MANAGER", "ADMIN", "SUPER_ADMIN"] },
+  // Mood stats accessible by managers (for team pulse KPIs)
+  { prefix: "/api/hr/mood-stats", roles: ["HR", "MANAGER", "ADMIN", "SUPER_ADMIN"] },
   { prefix: "/hr", roles: ["HR", "ADMIN", "SUPER_ADMIN"] },
   { prefix: "/api/hr", roles: ["HR", "ADMIN", "SUPER_ADMIN"] },
 ];

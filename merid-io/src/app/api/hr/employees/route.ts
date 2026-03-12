@@ -12,7 +12,7 @@ import { prisma } from "@/lib/prisma";
 export async function GET() {
   const session = await auth();
   const roles = session?.user?.roles ?? [];
-  const isAdmin = roles.includes("ADMIN");
+  const isAdmin = roles.includes("ADMIN") || roles.includes("SUPER_ADMIN");
   const isHR = roles.includes("HR");
 
   if (!isHR && !isAdmin) {
