@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 import { sendEmail, sendLeaveRequestNotification } from "@/lib/email";
-import { generateLeaveICS } from "@/lib/calendar-ics";
+import { generateLeaveICS, generateEntretienICS } from "@/lib/calendar-ics";
 
 /** M13: Escape HTML special characters to prevent injection in email templates */
 function escapeHtml(str: string): string {
@@ -379,6 +379,166 @@ export async function notifyLeaveNeedsRevision(
   const emailResult = results[1].status === "fulfilled" ? "success" : "fail";
   const emailError = results[1].status === "rejected" ? ` ${results[1].reason}` : "";
   console.log(`Email notif RETURNED envoyé à ${employee.email} : ${emailResult}${emailError}`);
+
+  if (results[1].status === "fulfilled" && results[0].status === "fulfilled") {
+    await prisma.notification.update({
+      where: { id: results[0].value.id },
+      data: { sentByEmail: true },
+    }).catch(() => {});
+  }
+}
+
+// ─── Entretien notification helpers (in-app + email via Promise.allSettled) ───
+
+/**
+ * Notify employee that an entretien has been created for them (with ICS).
+ */
+export async function notifyEntretienCreated(
+  employeeId: string,
+  params: { entretienId: string; year: number; managerName: string }
+) {
+  const enabled = await isNotificationEnabled("ENTRETIEN_CREATED", employeeId);
+  if (!enabled) return;
+
+  const employee = await prisma.user.findUnique({
+    where: { id: employeeId },
+    select: { email: true, firstName: true, lastName: true },
+  });
+  if (!employee) return;
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const safeName = escapeHtml(employee.firstName);
+  const safeManager = escapeHtml(params.managerName);
+
+  const icsContent = generateEntretienICS({
+    entretienId: params.entretienId,
+    year: params.year,
+    employeeName: `${employee.firstName} ${employee.lastName}`,
+    managerName: params.managerName,
+  });
+
+  const results = await Promise.allSettled([
+    createNotification({
+      userId: employeeId,
+      type: "ENTRETIEN_CREATED",
+      title_fr: `Entretien annuel ${params.year} planifie`,
+      title_en: `Annual review ${params.year} scheduled`,
+      body_fr: `${params.managerName} a initie votre entretien annuel ${params.year}. Veuillez completer votre auto-evaluation.`,
+      body_en: `${params.managerName} has initiated your ${params.year} annual review. Please complete your self-evaluation.`,
+      data: { entretienId: params.entretienId },
+    }),
+    sendEmail({
+      to: employee.email,
+      subject: `Meridio - Entretien annuel ${params.year} planifie`,
+      html: `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:'Segoe UI',Arial,sans-serif;background-color:#f4f6f8;margin:0;padding:20px;"><div style="max-width:600px;margin:0 auto;background:white;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);"><div style="background-color:#1B3A5C;padding:24px;text-align:center;"><h1 style="color:white;margin:0;font-size:24px;">Halley-Technologies</h1><p style="color:#00BCD4;margin:4px 0 0;font-size:14px;">Meridio - Entretiens annuels</p></div><div style="padding:32px 24px;"><h2 style="color:#1B3A5C;margin-top:0;">Bonjour ${safeName},</h2><p>Votre <strong style="color:#1B3A5C;">entretien annuel ${params.year}</strong> a ete initie par <strong>${safeManager}</strong>.</p><p>Veuillez completer votre auto-evaluation (competences, objectifs, points forts et axes d'amelioration) dans Meridio.</p><p style="color:#6b7280;font-size:13px;margin-top:16px;">Un fichier calendrier (.ics) est joint a cet email pour vous rappeler de completer votre auto-evaluation.</p><div style="text-align:center;margin:24px 0;"><a href="${appUrl}/profile" style="display:inline-block;background-color:#1B3A5C;color:white;padding:12px 32px;border-radius:6px;text-decoration:none;font-weight:600;">Completer mon auto-evaluation</a></div></div><div style="background-color:#f8f9fa;padding:16px 24px;text-align:center;font-size:12px;color:#6b7280;"><p style="margin:0;">Cet email a ete envoye automatiquement par Meridio.</p></div></div></body></html>`,
+      attachments: [
+        {
+          filename: "entretien.ics",
+          content: icsContent,
+          contentType: "text/calendar; method=PUBLISH",
+        },
+      ],
+    }),
+  ]);
+
+  const emailResult = results[1].status === "fulfilled" ? "success" : "fail";
+  console.log(`Email notif ENTRETIEN_CREATED envoye a ${employee.email} : ${emailResult}`);
+
+  if (results[1].status === "fulfilled" && results[0].status === "fulfilled") {
+    await prisma.notification.update({
+      where: { id: results[0].value.id },
+      data: { sentByEmail: true },
+    }).catch(() => {});
+  }
+}
+
+/**
+ * Notify manager that an employee has submitted their self-evaluation.
+ */
+export async function notifyEntretienSelfSubmitted(
+  managerId: string,
+  params: { entretienId: string; year: number; employeeName: string }
+) {
+  const enabled = await isNotificationEnabled("ENTRETIEN_SELF_SUBMITTED", managerId);
+  if (!enabled) return;
+
+  const manager = await prisma.user.findUnique({
+    where: { id: managerId },
+    select: { email: true, firstName: true },
+  });
+  if (!manager) return;
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const safeName = escapeHtml(manager.firstName);
+  const safeEmployee = escapeHtml(params.employeeName);
+
+  const results = await Promise.allSettled([
+    createNotification({
+      userId: managerId,
+      type: "ENTRETIEN_SELF_SUBMITTED",
+      title_fr: "Auto-evaluation soumise",
+      title_en: "Self-evaluation submitted",
+      body_fr: `${params.employeeName} a soumis son auto-evaluation pour l'entretien annuel ${params.year}.`,
+      body_en: `${params.employeeName} has submitted their self-evaluation for the ${params.year} annual review.`,
+      data: { entretienId: params.entretienId },
+    }),
+    sendEmail({
+      to: manager.email,
+      subject: `Meridio - ${params.employeeName} a soumis son auto-evaluation`,
+      html: `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:'Segoe UI',Arial,sans-serif;background-color:#f4f6f8;margin:0;padding:20px;"><div style="max-width:600px;margin:0 auto;background:white;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);"><div style="background-color:#1B3A5C;padding:24px;text-align:center;"><h1 style="color:white;margin:0;font-size:24px;">Halley-Technologies</h1><p style="color:#00BCD4;margin:4px 0 0;font-size:14px;">Meridio - Entretiens annuels</p></div><div style="padding:32px 24px;"><h2 style="color:#1B3A5C;margin-top:0;">Bonjour ${safeName},</h2><p><strong style="color:#1B3A5C;">${safeEmployee}</strong> a soumis son auto-evaluation pour l'entretien annuel <strong>${params.year}</strong>.</p><p>Vous pouvez maintenant proceder a votre evaluation manageriale.</p><div style="text-align:center;margin:24px 0;"><a href="${appUrl}/manager/entretiens" style="display:inline-block;background-color:#1B3A5C;color:white;padding:12px 32px;border-radius:6px;text-decoration:none;font-weight:600;">Evaluer maintenant</a></div></div><div style="background-color:#f8f9fa;padding:16px 24px;text-align:center;font-size:12px;color:#6b7280;"><p style="margin:0;">Cet email a ete envoye automatiquement par Meridio.</p></div></div></body></html>`,
+    }),
+  ]);
+
+  const emailResult = results[1].status === "fulfilled" ? "success" : "fail";
+  console.log(`Email notif ENTRETIEN_SELF_SUBMITTED envoye a ${manager.email} : ${emailResult}`);
+
+  if (results[1].status === "fulfilled" && results[0].status === "fulfilled") {
+    await prisma.notification.update({
+      where: { id: results[0].value.id },
+      data: { sentByEmail: true },
+    }).catch(() => {});
+  }
+}
+
+/**
+ * Notify employee that their entretien has been completed by the manager.
+ */
+export async function notifyEntretienCompleted(
+  employeeId: string,
+  params: { entretienId: string; year: number; managerName: string }
+) {
+  const enabled = await isNotificationEnabled("ENTRETIEN_COMPLETED", employeeId);
+  if (!enabled) return;
+
+  const employee = await prisma.user.findUnique({
+    where: { id: employeeId },
+    select: { email: true, firstName: true },
+  });
+  if (!employee) return;
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const safeName = escapeHtml(employee.firstName);
+  const safeManager = escapeHtml(params.managerName);
+
+  const results = await Promise.allSettled([
+    createNotification({
+      userId: employeeId,
+      type: "ENTRETIEN_COMPLETED",
+      title_fr: `Entretien annuel ${params.year} termine`,
+      title_en: `Annual review ${params.year} completed`,
+      body_fr: `Votre entretien annuel ${params.year} a ete finalise par ${params.managerName}.`,
+      body_en: `Your ${params.year} annual review has been completed by ${params.managerName}.`,
+      data: { entretienId: params.entretienId },
+    }),
+    sendEmail({
+      to: employee.email,
+      subject: `Meridio - Votre entretien annuel ${params.year} est termine`,
+      html: `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:'Segoe UI',Arial,sans-serif;background-color:#f4f6f8;margin:0;padding:20px;"><div style="max-width:600px;margin:0 auto;background:white;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);"><div style="background-color:#1B3A5C;padding:24px;text-align:center;"><h1 style="color:white;margin:0;font-size:24px;">Halley-Technologies</h1><p style="color:#00BCD4;margin:4px 0 0;font-size:14px;">Meridio - Entretiens annuels</p></div><div style="padding:32px 24px;"><h2 style="color:#1B3A5C;margin-top:0;">Bonjour ${safeName},</h2><p>Votre entretien annuel <strong style="color:#16a34a;">${params.year}</strong> a ete <strong style="color:#16a34a;">finalise</strong> par <strong>${safeManager}</strong>.</p><p>Vous pouvez consulter le bilan dans votre espace.</p><div style="text-align:center;margin:24px 0;"><a href="${appUrl}/profile" style="display:inline-block;background-color:#16a34a;color:white;padding:12px 32px;border-radius:6px;text-decoration:none;font-weight:600;">Voir mon entretien</a></div></div><div style="background-color:#f8f9fa;padding:16px 24px;text-align:center;font-size:12px;color:#6b7280;"><p style="margin:0;">Cet email a ete envoye automatiquement par Meridio.</p></div></div></body></html>`,
+    }),
+  ]);
+
+  const emailResult = results[1].status === "fulfilled" ? "success" : "fail";
+  console.log(`Email notif ENTRETIEN_COMPLETED envoye a ${employee.email} : ${emailResult}`);
 
   if (results[1].status === "fulfilled" && results[0].status === "fulfilled") {
     await prisma.notification.update({

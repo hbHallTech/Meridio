@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { notifyEntretienCompleted } from "@/lib/notifications";
 
 /**
  * POST /api/manager/entretiens/[id]/complete
@@ -42,6 +43,23 @@ export async function POST(
         status: "COMPLETED",
         ...(finalComment ? { finalComment } : {}),
       },
+    });
+
+    // Notify employee (non-blocking)
+    const manager = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { firstName: true, lastName: true },
+    });
+    const managerName = manager
+      ? `${manager.firstName} ${manager.lastName}`
+      : "Votre manager";
+
+    void notifyEntretienCompleted(entretien.userId, {
+      entretienId: id,
+      year: entretien.year,
+      managerName,
+    }).catch((err) => {
+      console.error("[manager/entretiens/complete] notification error:", err);
     });
 
     return NextResponse.json(updated);

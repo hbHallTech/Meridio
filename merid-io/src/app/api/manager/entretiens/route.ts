@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { notifyEntretienCreated } from "@/lib/notifications";
 
 /**
  * GET /api/manager/entretiens?year=2026
@@ -122,6 +123,23 @@ export async function POST(request: NextRequest) {
       include: {
         user: { select: { id: true, firstName: true, lastName: true, email: true } },
       },
+    });
+
+    // Notify employee (non-blocking)
+    const managerUser = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { firstName: true, lastName: true },
+    });
+    const managerName = managerUser
+      ? `${managerUser.firstName} ${managerUser.lastName}`
+      : "Votre manager";
+
+    void notifyEntretienCreated(userId, {
+      entretienId: entretien.id,
+      year,
+      managerName,
+    }).catch((err) => {
+      console.error("[manager/entretiens] notification error:", err);
     });
 
     return NextResponse.json(entretien, { status: 201 });
