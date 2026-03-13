@@ -83,7 +83,8 @@
     "superAdmin": "Super Admin",
     "signupRequests": "Demandes d'inscription",
     "tenants": "Tenants",
-    "events": "Événements"
+    "events": "Événements",
+    "analytics": "People Analytics"
   },
   "leaves": {
     "title": "Mes demandes de congé",

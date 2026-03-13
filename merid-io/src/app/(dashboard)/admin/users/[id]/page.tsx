@@ -241,6 +241,18 @@ export default function AdminUserEditPage({ params }: { params: Promise<{ id: st
   const [skillDialogOpen, setSkillDialogOpen] = useState(false);
   const [assessingSkill, setAssessingSkill] = useState<SkillData | null>(null);
 
+  // Risk score
+  const [riskScore, setRiskScore] = useState<{
+    overall: number;
+    label: string;
+    seniority: number;
+    mood: number;
+    objectives: number;
+    leaveUsage: number;
+    recognition: number;
+    contractRisk: number;
+  } | null>(null);
+
   // Resolve params
   useEffect(() => { params.then((p) => setUserId(p.id)); }, [params]);
 
@@ -342,6 +354,15 @@ export default function AdminUserEditPage({ params }: { params: Promise<{ id: st
   }, [userId, addToast, identityForm, personalForm, professionalForm]);
 
   useEffect(() => { fetchUser(); }, [fetchUser]);
+
+  // Fetch risk score when user loads
+  useEffect(() => {
+    if (!userId) return;
+    fetch(`/api/users/${userId}/risk-score`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (data) setRiskScore(data); })
+      .catch(() => {});
+  }, [userId]);
 
   // ─── Save identity ───
   const saveIdentity = async (data: IdentityForm) => {
@@ -594,6 +615,66 @@ export default function AdminUserEditPage({ params }: { params: Promise<{ id: st
           </span>
         </div>
       </div>
+
+      {/* Risk Score Widget */}
+      {riskScore && user?.isActive && (
+        <div className={`rounded-xl border p-4 flex flex-col sm:flex-row sm:items-center gap-4 ${
+          riskScore.overall >= 70
+            ? "border-red-200 bg-red-50"
+            : riskScore.overall >= 50
+              ? "border-orange-200 bg-orange-50"
+              : riskScore.overall >= 30
+                ? "border-amber-200 bg-amber-50"
+                : "border-green-200 bg-green-50"
+        }`}>
+          <div className="flex items-center gap-3 shrink-0">
+            <div className={`flex h-12 w-12 items-center justify-center rounded-full text-lg font-bold ${
+              riskScore.overall >= 70 ? "bg-red-100 text-red-700"
+              : riskScore.overall >= 50 ? "bg-orange-100 text-orange-700"
+              : riskScore.overall >= 30 ? "bg-amber-100 text-amber-700"
+              : "bg-green-100 text-green-700"
+            }`}>
+              {riskScore.overall}
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-900">Risque de départ</p>
+              <p className={`text-xs font-medium ${
+                riskScore.label === "critical" ? "text-red-600"
+                : riskScore.label === "high" ? "text-orange-600"
+                : riskScore.label === "moderate" ? "text-amber-600"
+                : "text-green-600"
+              }`}>
+                {riskScore.label === "critical" ? "Critique"
+                 : riskScore.label === "high" ? "Élevé"
+                 : riskScore.label === "moderate" ? "Modéré"
+                 : "Faible"}
+              </p>
+            </div>
+          </div>
+          <div className="flex-1 grid grid-cols-3 sm:grid-cols-6 gap-2 text-center text-xs">
+            {[
+              { label: "Ancienneté", value: riskScore.seniority },
+              { label: "Humeur", value: riskScore.mood },
+              { label: "Objectifs", value: riskScore.objectives },
+              { label: "Congés", value: riskScore.leaveUsage },
+              { label: "Reconnaissance", value: riskScore.recognition },
+              { label: "Contrat", value: riskScore.contractRisk },
+            ].map((item) => (
+              <div key={item.label}>
+                <div className="h-1.5 w-full rounded-full bg-gray-200 mb-1">
+                  <div
+                    className={`h-1.5 rounded-full ${
+                      item.value >= 70 ? "bg-red-500" : item.value >= 50 ? "bg-orange-500" : item.value >= 30 ? "bg-amber-400" : "bg-green-500"
+                    }`}
+                    style={{ width: `${item.value}%` }}
+                  />
+                </div>
+                <span className="text-gray-500">{item.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="overflow-x-auto border-b border-gray-200">

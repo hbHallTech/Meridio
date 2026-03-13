@@ -83,7 +83,8 @@
     "superAdmin": "Super Admin",
     "signupRequests": "Signup Requests",
     "tenants": "Tenants",
-    "events": "Events"
+    "events": "Events",
+    "analytics": "People Analytics"
   },
   "leaves": {
     "title": "My Leave Requests",
